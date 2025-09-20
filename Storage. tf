@@ -1,0 +1,30 @@
+# Creates a Storage Account in the same resource group
+resource "azurerm_storage_account" "sa" {
+  name                     = var.storage_account_name
+  resource_group_name      = azurerm_resource_group.example.name
+  location                 = azurerm_resource_group.example.location
+  account_tier             = "Standard"
+  account_replication_type = "LRS"
+  allow_blob_public_access = false
+}variable "location" {
+  type    = string
+  default = "East US"
+}
+
+# Storage account names must be 3 to 24 lowercase letters or numbers, and unique
+variable "storage_account_name" {
+  type    = string
+  default = "practice${random_integer.suffix.result}"
+}
+
+# Helper to make the name unique
+resource "random_integer" "suffix" {
+  min = 10000
+  max = 99999
+}output "storage_account_name" {
+  value = azurerm_storage_account.sa.name
+}
+
+output "storage_primary_blob_endpoint" {
+  value = azurerm_storage_account.sa.primary_blob_endpoint
+}
