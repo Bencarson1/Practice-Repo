@@ -6,11 +6,12 @@
 let aiQuestion = "Which orders are late?";
 
 function businessTotals() {
-  const orderRevenue = db.payments.reduce((total, p) => total + p.amount, 0);
-  const shopRevenue = db.rtw_sales.reduce((total, s) => total + s.price, 0);
+  // Only confirmed money counts
+  const orderRevenue = db.payments.filter(isConfirmed).reduce((total, p) => total + p.amount, 0);
+  const shopRevenue = db.rtw_sales.filter(isConfirmed).reduce((total, s) => total + s.price, 0);
   // Estimated profit = order value minus fabric and delivery costs, plus ready-to-wear margin
   const orderProfit = db.orders.reduce((total, o) => total + o.quote_total - o.fabric_cost - DELIVERY_FEE, 0);
-  const shopProfit = db.rtw_sales.reduce((total, s) => total + s.price - s.cost, 0);
+  const shopProfit = db.rtw_sales.filter(isConfirmed).reduce((total, s) => total + s.price - s.cost, 0);
   const pending = db.orders.reduce((total, o) => total + Math.max(balanceOwed(o), 0), 0);
   return { revenue: orderRevenue + shopRevenue, profit: orderProfit + shopProfit, pending };
 }
@@ -22,6 +23,7 @@ function renderDashboard() {
   const lowStock = activeFabrics().filter(f => f.status === "approved" && f.metres_available < LOW_STOCK_METRES);
   const waitingFabrics = activeFabrics().filter(f => f.status === "pending");
   const awaitingReview = db.orders.filter(o => o.stage === "delivered" && !o.review_rating);
+  const waitingPayments = paymentsAwaiting();
 
   const dueSoon = open.slice().sort((a, b) => a.due_date.localeCompare(b.due_date)).slice(0, 6);
   const rows = dueSoon.map(o => {
@@ -42,7 +44,8 @@ function renderDashboard() {
       <div class="stat"><div class="l">Pending Payments</div><div class="n">${money(totals.pending)}</div><div class="l">balances owed</div></div>
     </div>
 
-    ${late.length || lowStock.length || awaitingReview.length || waitingFabrics.length ? `<div class="alerts">
+    ${late.length || lowStock.length || awaitingReview.length || waitingFabrics.length || waitingPayments.length ? `<div class="alerts">
+      ${waitingPayments.length ? `<a class="alert" href="#/biz/payments">💷 ${waitingPayments.length} payment${waitingPayments.length > 1 ? "s" : ""} to confirm</a>` : ""}
       ${waitingFabrics.length ? `<a class="alert" href="#/biz/sellers">🧶 ${waitingFabrics.length} seller fabric${waitingFabrics.length > 1 ? "s" : ""} to approve</a>` : ""}
       ${late.length ? `<a class="alert" href="#/biz/orders">⚠ ${late.length} late order${late.length > 1 ? "s" : ""}</a>` : ""}
       ${lowStock.length ? `<a class="alert" href="#/biz/fabrics">⚠ Low stock: ${lowStock.map(f => escapeHtml(f.name)).join(", ")}</a>` : ""}

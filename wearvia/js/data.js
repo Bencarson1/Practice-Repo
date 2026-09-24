@@ -85,6 +85,9 @@ const EMBROIDERY = [
 const SLEEVES = ["Wide", "Fitted"];
 const NECKS = ["Round", "V-neck"];
 const PAYMENT_METHODS = ["Card", "Apple Pay", "Bank transfer", "Cash"];
+// Checkout is a demo: payments made in the customer app wait until the
+// Nebeda Threads team confirms them (Business → Payments)
+const PAYMENT_STATUS_LABELS = { awaiting_confirmation: "Awaiting confirmation", confirmed: "Confirmed", rejected: "Rejected" };
 const DELIVERY_STATUSES = ["Order ready", "Picked up", "In transit", "Out for delivery", "Delivered"];
 
 // Measurements are in inches. The first six are the ones the spec requires.
@@ -175,6 +178,14 @@ function randomDigits(count) {
   let text = "";
   for (let i = 0; i < count; i++) text += Math.floor(Math.random() * 10);
   return text;
+}
+
+// A new id for a record. Demo data uses short ids ("C7", "F21");
+// live data uses the same kind of id as the database (a uuid).
+function newId(prefix, list, skip) {
+  if (Cloud.live) return Cloud.newId();
+  const highest = (list || []).reduce((max, item) => Math.max(max, Number(String(item.id).slice(skip || prefix.length)) || 0), 0);
+  return prefix + (highest + 1);
 }
 
 function trackingNumber(courier) {
@@ -280,8 +291,8 @@ function buildSampleData() {
       { id: "R4", name: "Senator Set", price: 65, cost: 32, stock: 4, color: "#20304a" }
     ],
     rtw_sales: [
-      { id: "RS1", item_id: "R1", customer_id: "C4", price: 75, cost: 38, date: addDays(-12) },
-      { id: "RS2", item_id: "R3", customer_id: "C1", price: 40, cost: 18, date: addDays(-5) }
+      { id: "RS1", item_id: "R1", customer_id: "C4", price: 75, cost: 38, date: addDays(-12), status: "confirmed" },
+      { id: "RS2", item_id: "R3", customer_id: "C1", price: 40, cost: 18, date: addDays(-5), status: "confirmed" }
     ],
 
     // What the customer app is doing right now
@@ -334,10 +345,10 @@ function buildSampleData() {
     };
     data.orders.push(order);
 
-    data.payments.push({ id: "P" + (++data.counters.payment), order_id: order.id, amount: deposit, method: s.method, kind: "Deposit", date: created });
+    data.payments.push({ id: "P" + (++data.counters.payment), order_id: order.id, amount: deposit, method: s.method, kind: "Deposit", date: created, status: "confirmed" });
     if (s.paidInFull) {
       const balanceDate = addDays(s.due - 3);
-      data.payments.push({ id: "P" + (++data.counters.payment), order_id: order.id, amount: quote.total - deposit, method: s.method, kind: "Balance", date: balanceDate });
+      data.payments.push({ id: "P" + (++data.counters.payment), order_id: order.id, amount: quote.total - deposit, method: s.method, kind: "Balance", date: balanceDate, status: "confirmed" });
       order.balance_paid_at = balanceDate;
     }
     data.invoices.push({ id: "INV-" + order.id.split("-")[1], order_id: order.id, line_items: quote.lines, total: quote.total, created_at: created });
@@ -358,7 +369,9 @@ function buildSampleData() {
   return data;
 }
 
-// ---- Load and save (uses the browser's localStorage) ----
+// ---- Load and save ----
+// Demo mode keeps everything in this browser's localStorage.
+// Live mode sends changes to Supabase (cloud.js).
 
 // "db" holds all the app's data while it runs. app.js loads it once every script is ready.
 let db = null;
@@ -376,6 +389,10 @@ function loadData() {
 }
 
 function saveData() {
+  if (Cloud.live) {
+    Cloud.save();
+    return;
+  }
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
   } catch (error) {
@@ -385,6 +402,7 @@ function saveData() {
 }
 
 function resetSampleData() {
+  if (Cloud.live) return;
   if (confirm("This will erase your changes and restore the sample data. Continue?")) {
     db = upgradeData(buildSampleData());
     PhotoStore.clear();
@@ -432,8 +450,7 @@ function findProfile(profileId) {
 function findOrCreateCustomer(name, phone, email) {
   let customer = db.customers.find(c => c.name.toLowerCase() === name.toLowerCase());
   if (!customer) {
-    const highest = db.customers.reduce((max, c) => Math.max(max, Number(c.id.slice(1))), 0);
-    customer = { id: "C" + (highest + 1), name, email: email || "", phone: phone || "", created_at: today(), notes: "", measurement_profiles: [] };
+    customer = { id: newId("C", db.customers), name, email: email || "", phone: phone || "", created_at: today(), notes: "", measurement_profiles: [] };
     db.customers.push(customer);
   } else {
     if (phone) customer.phone = phone;
@@ -447,8 +464,7 @@ function saveMeasurementProfile(customer, values) {
   const label = thisYear();
   let profile = customer.measurement_profiles.find(p => p.label === label);
   if (!profile) {
-    const highest = db.customers.flatMap(c => c.measurement_profiles).reduce((max, p) => Math.max(max, Number(p.id.slice(1))), 0);
-    profile = { id: "M" + (highest + 1), label };
+    profile = { id: newId("M", db.customers.flatMap(c => c.measurement_profiles)), label };
     customer.measurement_profiles.push(profile);
   }
   MEASUREMENT_FIELDS.forEach(field => {
@@ -459,9 +475,23 @@ function saveMeasurementProfile(customer, values) {
 }
 
 // ---- Money on orders ----
+// Only confirmed payments count as paid.
+
+function isConfirmed(payment) {
+  return !payment.status || payment.status === "confirmed";
+}
 
 function amountPaid(orderId) {
-  return db.payments.filter(p => p.order_id === orderId).reduce((total, p) => total + p.amount, 0);
+  return db.payments.filter(p => p.order_id === orderId && isConfirmed(p)).reduce((total, p) => total + p.amount, 0);
+}
+
+// Paid in the customer app but not confirmed by the team yet
+function amountAwaiting(orderId) {
+  return db.payments.filter(p => p.order_id === orderId && p.status === "awaiting_confirmation").reduce((total, p) => total + p.amount, 0);
+}
+
+function paymentsAwaiting() {
+  return db.payments.filter(p => p.status === "awaiting_confirmation");
 }
 
 function balanceOwed(order) {
@@ -469,22 +499,49 @@ function balanceOwed(order) {
 }
 
 function nextPaymentId() {
+  if (Cloud.live) return Cloud.newId();
   db.counters.payment += 1;
   return "P" + db.counters.payment;
 }
 
-// Records a payment and moves the order on if it clears the balance after quality control
-function recordOrderPayment(order, amount, method, date) {
-  const before = balanceOwed(order);
+// Records a payment. The team's own entries (e.g. cash in the shop) count
+// straight away; a customer's payment waits for the team to confirm it.
+function recordOrderPayment(order, amount, method, date, byTeam) {
+  const before = balanceOwed(order) - amountAwaiting(order.id);
   db.payments.push({
     id: nextPaymentId(), order_id: order.id, amount, method,
-    kind: amount >= before ? "Balance" : "Part payment", date: date || today()
+    kind: amount >= before ? "Balance" : "Part payment", date: date || today(),
+    status: byTeam ? "confirmed" : "awaiting_confirmation"
   });
-  if (balanceOwed(order) <= 0) {
-    order.balance_paid_at = date || today();
-    if (order.stage === "quality_control") {
-      order.stage = "balance_paid"; // step 14
-    }
+  refreshOrderPayments(order);
+}
+
+// The team confirms (or rejects) a payment
+function confirmPayment(paymentId, accept) {
+  const payment = db.payments.find(p => p.id === paymentId);
+  if (!payment) return null;
+  payment.status = accept ? "confirmed" : "rejected";
+  payment.confirmed_at = today();
+  const order = findOrder(payment.order_id);
+  if (order) refreshOrderPayments(order);
+  return payment;
+}
+
+// Works out the deposit and balance from confirmed payments, and moves the
+// order on if the balance is cleared after quality control (step 14).
+// The database does the same in live mode (supabase/setup.sql).
+function refreshOrderPayments(order) {
+  const paid = amountPaid(order.id);
+  if (paid > 0 && paid >= Math.min(order.deposit_amount, order.quote_total) - 0.005) {
+    order.deposit_paid_at = order.deposit_paid_at || today();
+  } else if (stageIndex(order) <= 0) {
+    order.deposit_paid_at = null;
+  }
+  if (paid > 0 && paid >= order.quote_total - 0.005) {
+    order.balance_paid_at = order.balance_paid_at || today();
+    if (order.stage === "quality_control") order.stage = "balance_paid";
+  } else {
+    order.balance_paid_at = null;
   }
   order.updated_at = today();
 }
@@ -495,13 +552,20 @@ function stageIndex(order) {
   return STAGES.findIndex(s => s.key === order.stage);
 }
 
+// True while the deposit is paid but not yet confirmed by the team
+function depositAwaiting(order) {
+  return !order.deposit_paid_at;
+}
+
 // How many of the 16 lifecycle steps are complete
 function stepsDone(order) {
+  if (depositAwaiting(order)) return FIRST_STEP_OF_STAGES - 1; // steps 1–6; the deposit (step 7) isn't confirmed yet
   return FIRST_STEP_OF_STAGES + stageIndex(order) + 1 + (order.review_rating ? 1 : 0);
 }
 
 // The step being worked on now, e.g. "Sewing" — or "Complete"
 function currentStepLabel(order) {
+  if (depositAwaiting(order)) return "Deposit awaiting confirmation";
   const done = stepsDone(order);
   return done >= LIFECYCLE.length ? "Complete" : LIFECYCLE[done];
 }
@@ -539,8 +603,12 @@ function nextOrderId() {
   return "NT-" + (highest + 1);
 }
 
-// Creates an order once the deposit is paid (step 7) and assigns a tailor (step 8)
+// Creates an order once the deposit is paid (step 7) and assigns a tailor (step 8).
+// details.confirmed is true when the team takes the deposit itself (a walk-in order);
+// a deposit paid in the customer app waits for the team to confirm it.
+// In live mode the database creates the order, so this returns a Promise.
 function createPaidOrder(details) {
+  if (Cloud.live) return Cloud.placeOrder(details);
   const id = nextOrderId();
   const order = {
     id, customer_id: details.customerId, designer_id: designer().id,
@@ -552,17 +620,20 @@ function createPaidOrder(details) {
     fabric_id: details.fabric.id, fabric_supplier_id: details.fabric.supplier_id,
     fabric_metres: details.metres, fabric_cost: details.quote.fabricCost,
     line_items: details.quote.lines, quote_total: details.quote.total,
-    deposit_amount: details.deposit, deposit_paid_at: today(), balance_paid_at: null,
+    deposit_amount: details.deposit, deposit_paid_at: null, balance_paid_at: null,
     stage: "tailor_assigned",
     assigned_staff: autoAssignStaff(),
     review_rating: null, review_text: "",
     due_date: details.dueDate || addDays(14), created_at: today(), updated_at: today()
   };
   db.orders.push(order);
-  db.payments.push({ id: nextPaymentId(), order_id: id, amount: details.deposit, method: details.method, kind: "Deposit", date: today() });
+  db.payments.push({
+    id: nextPaymentId(), order_id: id, amount: details.deposit, method: details.method, kind: "Deposit", date: today(),
+    status: details.confirmed ? "confirmed" : "awaiting_confirmation"
+  });
   db.invoices.push({ id: "INV-" + id.split("-")[1], order_id: id, line_items: order.line_items, total: order.quote_total, created_at: today() });
   recordFabricOrder(order); // the fabric seller sees it in their orders
-  if (details.deposit >= order.quote_total) order.balance_paid_at = today();
+  refreshOrderPayments(order);
   return order;
 }
 
@@ -571,6 +642,7 @@ function advanceOrder(order) {
   const index = stageIndex(order);
   const next = STAGES[index + 1];
   if (!next) return "This order has been delivered.";
+  if (depositAwaiting(order)) return `The deposit for ${order.id} hasn't been confirmed yet. Confirm it under Payments first.`;
   if (next.key === "balance_paid") {
     if (balanceOwed(order) > 0) return `Waiting for the balance of ${money(balanceOwed(order))} before this can move on.`;
     order.balance_paid_at = order.balance_paid_at || today();
@@ -601,7 +673,7 @@ function moveOrderBack(order) {
 function dispatchOrder(order, courier) {
   let delivery = findDelivery(order.id);
   if (!delivery) {
-    delivery = { id: "DL-" + order.id.split("-")[1], order_id: order.id, courier, tracking_number: trackingNumber(courier), status: "Order ready", eta: addDays(3), updated: today() };
+    delivery = { id: Cloud.live ? Cloud.newId() : "DL-" + order.id.split("-")[1], order_id: order.id, courier, tracking_number: trackingNumber(courier), status: "Order ready", eta: addDays(3), updated: today() };
     db.deliveries.push(delivery);
   }
   return delivery;
@@ -625,6 +697,12 @@ function advanceDelivery(delivery) {
 // Designer rating including reviews left in the app
 function designerRating() {
   const d = designer();
+  if (db.reviews) {
+    // Live mode: every review on Wearvia (customers can only see their own orders)
+    const count = db.reviews.length;
+    const rating = count ? db.reviews.reduce((t, r) => t + r.rating, 0) / count : d.rating;
+    return { rating: Number(rating).toFixed(1), count };
+  }
   const reviews = db.orders.filter(o => o.review_rating);
   const count = d.review_count + reviews.length;
   const sum = d.rating * d.review_count + reviews.reduce((total, o) => total + o.review_rating, 0);
@@ -637,9 +715,21 @@ function customerOrders(customerId) {
   return db.orders.filter(o => o.customer_id === customerId);
 }
 
+// The latest reviews, for the designer's page
+function recentReviews(count) {
+  if (db.reviews) {
+    return db.reviews.slice(-count).reverse().map(r => {
+      const order = r.order_id ? findOrder(r.order_id) : null;
+      return { rating: r.rating, text: r.review_text, who: order ? customerName(order.customer_id).split(" ")[0] : "A customer", outfit: order ? order.outfit_type : "" };
+    });
+  }
+  return db.orders.filter(o => o.review_rating).slice(-count).reverse().map(o =>
+    ({ rating: o.review_rating, text: o.review_text, who: customerName(o.customer_id).split(" ")[0], outfit: o.outfit_type }));
+}
+
 function customerSpend(customerId) {
   const orderPayments = customerOrders(customerId).reduce((total, o) => total + amountPaid(o.id), 0);
-  const shopSales = db.rtw_sales.filter(s => s.customer_id === customerId).reduce((total, s) => total + s.price, 0);
+  const shopSales = db.rtw_sales.filter(s => s.customer_id === customerId && isConfirmed(s)).reduce((total, s) => total + s.price, 0);
   return orderPayments + shopSales;
 }
 

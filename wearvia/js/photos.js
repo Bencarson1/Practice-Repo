@@ -6,14 +6,13 @@
 //   "ph_style_…"      a customer's style photo (see inspiration.js)
 //   "pattern:…"       a drawn sample fabric (used by the sample sellers)
 //   "logo:…"          a drawn logo made from the shop's initials
+//   "sb:<bucket>/…"   a photo in Supabase Storage (live mode)
 //   "data:…"/"https:" a full image address, used as it is
 //
-// Uploaded photos live in the browser's IndexedDB (it holds far more
-// than localStorage). Moving to Supabase: upload to a Storage bucket
-// in PhotoStore.put and return the file path as the ref, then make
-// photoUrl() build the public URL. Nothing else needs to change.
-// The folder given to put() says which bucket a photo belongs in:
-// none → "fabric-photos"/"logos", "style" → "style-photos".
+// Demo mode keeps uploaded photos in the browser's IndexedDB (it holds far
+// more than localStorage). Live mode uploads them to Supabase Storage
+// (cloud.js). The folder given to put() says which bucket a photo belongs
+// in: none → "fabric-photos", "logo" → "seller-logos", "style" → "style-photos".
 // ============================================================
 
 const MAX_PHOTOS_PER_FABRIC = 5;
@@ -84,6 +83,7 @@ const PhotoStore = (() => {
 
   // Saves an image (a data URL) and returns its ref. Rejects if the browser is out of space.
   function put(dataUrl, folder) {
+    if (Cloud.live) return Cloud.uploadPhoto(dataUrl, folder);
     const ref = newRef(folder);
     cache.set(ref, dataUrl);
     const saving = idb
@@ -96,6 +96,7 @@ const PhotoStore = (() => {
   }
 
   function remove(ref) {
+    if (Cloud.live) return Cloud.removePhoto(ref);
     if (!ref || !cache.has(ref)) return;
     cache.delete(ref);
     try {
@@ -121,6 +122,7 @@ const PhotoStore = (() => {
 const drawnImages = new Map();
 function photoUrl(ref) {
   if (!ref) return "";
+  if (ref.startsWith("sb:")) return Cloud.photoUrl(ref);
   if (ref.startsWith("ph_")) return PhotoStore.get(ref);
   if (ref.startsWith("pattern:") || ref.startsWith("logo:")) {
     if (!drawnImages.has(ref)) {

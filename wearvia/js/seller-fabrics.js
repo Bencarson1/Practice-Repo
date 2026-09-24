@@ -7,7 +7,8 @@
 let sellerFabricFilter = "Waiting";
 
 function renderSellerFabrics() {
-  const all = activeFabrics().slice().sort((a, b) => Number(b.id.slice(1)) - Number(a.id.slice(1)));
+  const all = activeFabrics().slice().sort((a, b) =>
+    String(b.created_at || "").localeCompare(String(a.created_at || "")) || (Number(b.id.slice(1)) || 0) - (Number(a.id.slice(1)) || 0));
   const waiting = all.filter(f => f.status === "pending");
   const tests = {
     Waiting: f => f.status === "pending",

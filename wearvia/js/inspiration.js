@@ -6,9 +6,9 @@
 //   inspiration: { photos: ["ph_style_…", …], link: "https://…", note: "…" }
 //
 // Photos are shrunk before saving and kept in PhotoStore under the
-// "style" folder. Moving to Supabase: PhotoStore.put uploads them to the
-// "style-photos" bucket, and the link and note go in the
-// order_inspiration table (see supabase/schema.sql).
+// "style" folder: the private "style-photos" bucket in live mode, the
+// browser in demo mode. On the order they are orders.inspiration_photos,
+// inspiration_link and inspiration_note (see supabase/setup.sql).
 // ============================================================
 
 const MAX_STYLE_PHOTOS = 5;
@@ -86,7 +86,7 @@ function styleThumbs(key, insp, limit) {
   return photos.map((ref, i) => {
     const url = photoUrl(ref);
     return `<button type="button" class="style-thumb" onclick="openStyleViewer('${key}', ${i})" aria-label="Enlarge style photo ${i + 1} of ${insp.photos.length}">
-      ${url ? `<img src="${url}" alt="" loading="lazy">` : `<span class="style-missing">Photo not on this device</span>`}</button>`;
+      ${url ? `<img src="${url}" alt="" loading="lazy">` : `<span class="style-missing">${Cloud.live ? "Loading photo…" : "Photo not on this device"}</span>`}</button>`;
   }).join("");
 }
 

@@ -21,11 +21,15 @@
       <a id="mode-seller" href="#/seller">Fabric seller<span class="wide-only">s</span></a>
       <a id="mode-business" href="#/biz/dashboard">Business<span class="wide-only"> dashboard</span></a>
     </nav>
+    <div id="account" class="account"></div>
   </header>
 
   <main>
+    <!-- Sign in / create an account (live mode) -->
+    <div id="auth-view" class="auth-view" hidden></div>
+
     <!-- Customer app: phone-sized, follows the order steps one screen at a time -->
-    <div id="customer-view" class="customer-view">
+    <div id="customer-view" class="customer-view" hidden>
       <div id="customer-app" class="capp"></div>
     </div>
 
@@ -42,15 +46,16 @@
     </div>
   </main>
 
-  <footer class="footer">
-    Your data is saved in this browser.
-    <button class="link-button" onclick="resetSampleData()">Reset to sample data</button>
-  </footer>
+  <footer class="footer"><span id="footer-text"></span></footer>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-  <!-- Scripts: data first, then the screens, then app.js starts everything -->
+  <!-- Scripts: Supabase and its settings, then data, then the screens, then app.js starts everything -->
+  <script src="js/vendor/supabase.js"></script>
+  <script src="js/config.js"></script>
   <script src="js/data.js"></script>
+  <script src="js/cloud.js"></script>
+  <script src="js/auth.js"></script>
   <script src="js/photos.js"></script>
   <script src="js/sellers-data.js"></script>
   <script src="js/concept.js"></script>
