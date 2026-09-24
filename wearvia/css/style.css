@@ -1,0 +1,377 @@
+/* ============================================================
+   Wearvia styles
+   Colors are defined once here so they are easy to change.
+   ============================================================ */
+
+:root {
+  --brand: #6b2d5c;        /* plum */
+  --brand-dark: #4a1f40;
+  --accent: #c9a227;       /* gold */
+  --bg: #f7f4f0;
+  --card: #ffffff;
+  --text: #2b2b2b;
+  --muted: #777777;
+  --border: #e5e0da;
+  --owed: #b3261e;
+  --paid: #2e7d32;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+h1 { margin: 0 0 16px; }
+h2 { margin: 0 0 12px; font-size: 1.15rem; }
+h3 { margin: 0 0 4px; }
+
+/* ---------- Top bar ---------- */
+
+.topbar {
+  background: var(--brand);
+  color: white;
+  padding: 12px 20px 0;
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.shop-name {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.powered-by {
+  font-size: 0.8rem;
+  opacity: 0.75;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin-top: 10px;
+  overflow-x: auto;
+}
+
+.tab {
+  background: transparent;
+  color: white;
+  border: none;
+  padding: 10px 14px;
+  border-radius: 8px 8px 0 0;
+  cursor: pointer;
+  font-size: 0.95rem;
+  white-space: nowrap;
+  opacity: 0.8;
+}
+
+.tab:hover { opacity: 1; }
+
+.tab.active {
+  background: var(--bg);
+  color: var(--brand);
+  font-weight: 600;
+  opacity: 1;
+}
+
+/* ---------- Layout ---------- */
+
+main {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px 16px;
+}
+
+.section { display: none; }
+.section.active { display: block; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px;
+  margin-bottom: 20px;
+  overflow-x: auto;
+}
+
+.footer {
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding: 20px;
+}
+
+.empty, .hint { color: var(--muted); }
+
+/* ---------- Home ---------- */
+
+.welcome {
+  background: linear-gradient(135deg, var(--brand), var(--brand-dark));
+  color: white;
+  border-radius: 12px;
+  padding: 28px;
+  margin-bottom: 20px;
+}
+
+.welcome h1 { font-size: 2rem; margin-bottom: 6px; }
+.welcome p { margin: 0; opacity: 0.9; }
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.stat-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.stat-number { font-size: 1.6rem; font-weight: 700; color: var(--brand); }
+.stat-label { color: var(--muted); font-size: 0.9rem; }
+
+/* ---------- Tables ---------- */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+th, td {
+  text-align: left;
+  padding: 9px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+th { color: var(--muted); font-weight: 600; }
+
+.owed { color: var(--owed); font-weight: 600; }
+.paid { color: var(--paid); font-weight: 600; }
+
+.total {
+  float: right;
+  font-size: 0.95rem;
+  color: var(--owed);
+}
+
+/* ---------- Forms & buttons ---------- */
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.form-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.form-grid .wide { grid-column: 1 / -1; }
+
+.form-actions {
+  display: flex;
+  align-items: flex-end;
+}
+
+input, select {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.95rem;
+  color: var(--text);
+  background: white;
+}
+
+button {
+  background: var(--brand);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 9px 16px;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+button:hover { background: var(--brand-dark); }
+button:disabled { background: #cccccc; cursor: not-allowed; }
+
+button.small { padding: 5px 10px; font-size: 0.8rem; }
+button.danger { background: transparent; color: var(--owed); border: 1px solid var(--owed); }
+button.danger:hover { background: var(--owed); color: white; }
+
+.link-button {
+  background: none;
+  color: var(--brand);
+  text-decoration: underline;
+  padding: 0 4px;
+  font-size: inherit;
+}
+
+.link-button:hover { background: none; color: var(--brand-dark); }
+
+/* ---------- Stage badges ---------- */
+
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.stage-cutting   { background: #fdecea; color: #a1361f; }
+.stage-sewing    { background: #fff4d6; color: #8a6200; }
+.stage-finishing { background: #e3effd; color: #1c5aa6; }
+.stage-ready     { background: #e3f5e5; color: #2e7d32; }
+
+/* ---------- Measurements ---------- */
+
+.measure-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.measure-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.measure-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+
+.measure-head small { color: var(--muted); }
+
+.measure-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 16px;
+  font-size: 0.9rem;
+}
+
+.measure-list div {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px dotted var(--border);
+}
+
+.measure-list span { color: var(--muted); }
+
+.notes {
+  margin: 10px 0 0;
+  font-style: italic;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+/* ---------- Fabric marketplace ---------- */
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.chip {
+  background: white;
+  color: var(--brand);
+  border: 1px solid var(--brand);
+  border-radius: 999px;
+  padding: 6px 14px;
+}
+
+.chip:hover, .chip.active { background: var(--brand); color: white; }
+
+.fabric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.fabric-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.swatch {
+  height: 110px;
+  border-bottom: 1px solid var(--border);
+}
+
+.fabric-info { padding: 14px; }
+.fabric-info p { margin: 4px 0; font-size: 0.9rem; }
+.fabric-info button { margin-top: 8px; width: 100%; }
+
+/* ---------- Production board ---------- */
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+
+.stage-column {
+  background: #efe9e2;
+  border-radius: 10px;
+  padding: 12px;
+  min-height: 200px;
+}
+
+.stage-column h2 small { color: var(--muted); font-weight: normal; }
+
+.job-card {
+  background: var(--card);
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 10px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  font-size: 0.9rem;
+}
+
+.job-card small { color: var(--muted); }
+
+.job-buttons {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+
+/* ---------- Small screens (phones) ---------- */
+
+@media (max-width: 800px) {
+  .board { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 500px) {
+  .board { grid-template-columns: 1fr; }
+  .welcome h1 { font-size: 1.5rem; }
+}
