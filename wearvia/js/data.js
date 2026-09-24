@@ -4,7 +4,7 @@
 
 // ---- Settings you can change ----
 const SHOP_NAME = "Nebeda Threads";
-const CURRENCY = "$";
+const CURRENCY = "£";
 const STAGES = ["cutting", "sewing", "finishing", "ready"];
 const STORAGE_KEY = "wearvia-data";
 
@@ -25,30 +25,30 @@ const SAMPLE_DATA = {
     { customerId: "C4", neck: 15, chest: 40, waist: 34, hips: 39, shoulder: 17.5, sleeve: 25, length: 29, inseam: 32, notes: "Short sleeves on shirts", updated: "2026-09-15" }
   ],
 
-  // Price is per yard; stock is in yards
+  // Price is per yard in pounds (£); stock is in yards
   fabrics: [
-    { id: "F1", name: "Sunburst Ankara", type: "Cotton", color: "#e8871e", price: 12, stock: 40, supplier: "Lagos Prints Co." },
-    { id: "F2", name: "Midnight Navy Wool", type: "Wool", color: "#1f2a44", price: 35, stock: 25, supplier: "Highland Mills" },
+    { id: "F1", name: "Sunburst Ankara", type: "Cotton", color: "#e8871e", price: 9, stock: 40, supplier: "Lagos Prints Co." },
+    { id: "F2", name: "Midnight Navy Wool", type: "Wool", color: "#1f2a44", price: 40, stock: 25, supplier: "Highland Mills" },
     { id: "F3", name: "Royal Gold Aso Oke", type: "Handwoven", color: "#c9a227", price: 45, stock: 18, supplier: "Iseyin Weavers" },
-    { id: "F4", name: "Classic White Linen", type: "Linen", color: "#f4f1ea", price: 18, stock: 60, supplier: "Riverside Linens" },
-    { id: "F5", name: "Emerald Silk", type: "Silk", color: "#1d7a5a", price: 40, stock: 12, supplier: "Silk Road Traders" },
-    { id: "F6", name: "Champagne Lace", type: "Lace", color: "#e9d8b4", price: 30, stock: 20, supplier: "Lace House" }
+    { id: "F4", name: "Classic White Linen", type: "Linen", color: "#f4f1ea", price: 16, stock: 60, supplier: "Riverside Linens" },
+    { id: "F5", name: "Emerald Silk", type: "Silk", color: "#1d7a5a", price: 35, stock: 12, supplier: "Silk Road Traders" },
+    { id: "F6", name: "Champagne Lace", type: "Lace", color: "#e9d8b4", price: 28, stock: 20, supplier: "Lace House" }
   ],
 
-  // "price" is what the customer pays for the finished garment
+  // "price" is what the customer pays for the finished, made-to-measure garment
   orders: [
-    { id: "NT-1001", customerId: "C1", item: "Ankara wrap dress", fabricId: "F1", yards: 4, price: 120, dueDate: "2026-10-02", stage: "sewing", created: "2026-09-10" },
-    { id: "NT-1002", customerId: "C2", item: "Two-piece suit", fabricId: "F2", yards: 5, price: 450, dueDate: "2026-10-10", stage: "cutting", created: "2026-09-12" },
-    { id: "NT-1003", customerId: "C3", item: "Agbada set", fabricId: "F3", yards: 8, price: 600, dueDate: "2026-09-30", stage: "finishing", created: "2026-09-05" },
-    { id: "NT-1004", customerId: "C4", item: "Linen shirt", fabricId: "F4", yards: 2.5, price: 80, dueDate: "2026-09-26", stage: "ready", created: "2026-09-15" },
-    { id: "NT-1005", customerId: "C1", item: "Silk blouse", fabricId: "F5", yards: 2, price: 150, dueDate: "2026-10-15", stage: "cutting", created: "2026-09-20" }
+    { id: "NT-1001", customerId: "C1", item: "Ankara wrap dress", fabricId: "F1", yards: 4, price: 180, dueDate: "2026-10-02", stage: "sewing", created: "2026-09-10" },
+    { id: "NT-1002", customerId: "C2", item: "Two-piece suit", fabricId: "F2", yards: 5, price: 850, dueDate: "2026-10-10", stage: "cutting", created: "2026-09-12" },
+    { id: "NT-1003", customerId: "C3", item: "Agbada set", fabricId: "F3", yards: 8, price: 650, dueDate: "2026-09-30", stage: "finishing", created: "2026-09-05" },
+    { id: "NT-1004", customerId: "C4", item: "Linen shirt", fabricId: "F4", yards: 2.5, price: 120, dueDate: "2026-09-26", stage: "ready", created: "2026-09-15" },
+    { id: "NT-1005", customerId: "C1", item: "Silk blouse", fabricId: "F5", yards: 2, price: 220, dueDate: "2026-10-15", stage: "cutting", created: "2026-09-20" }
   ],
 
   payments: [
-    { id: "P1", orderId: "NT-1001", amount: 60, method: "Cash", date: "2026-09-10" },
-    { id: "P2", orderId: "NT-1002", amount: 200, method: "Bank transfer", date: "2026-09-12" },
-    { id: "P3", orderId: "NT-1003", amount: 600, method: "Bank transfer", date: "2026-09-05" },
-    { id: "P4", orderId: "NT-1004", amount: 40, method: "Card", date: "2026-09-15" }
+    { id: "P1", orderId: "NT-1001", amount: 90, method: "Cash", date: "2026-09-10" },
+    { id: "P2", orderId: "NT-1002", amount: 425, method: "Bank transfer", date: "2026-09-12" },
+    { id: "P3", orderId: "NT-1003", amount: 650, method: "Bank transfer", date: "2026-09-05" },
+    { id: "P4", orderId: "NT-1004", amount: 60, method: "Card", date: "2026-09-15" }
   ]
 };
 

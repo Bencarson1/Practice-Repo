@@ -79,10 +79,12 @@ Open `js/data.js` and change the settings at the top:
 
 ```js
 const SHOP_NAME = "Nebeda Threads"; // the name shown on the home screen
-const CURRENCY = "$";               // e.g. "₦", "£", "€"
+const CURRENCY = "£";               // e.g. "$", "₦", "€"
 ```
 
 To change the colors, edit the variables at the top of `css/style.css` (for example `--brand`).
+
+Sample prices are in pounds and based on typical UK made-to-measure tailoring prices.
 
 If you change the sample data in `data.js`, click **Reset to sample data** in the app to load it.
 
