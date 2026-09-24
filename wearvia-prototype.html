@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Nebeda Threads — Interactive App</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --navy:#0c1220; --gold:#c9a24a; --cream:#faf6ec; --card:#ffffff; --line:#e7e0cf; --ink:#1c1811; --muted:#8b8371;
+  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--cream);color:var(--ink);font-family:'Inter',Arial,sans-serif;display:flex;flex-direction:column;align-items:center;padding:30px 12px 50px;min-height:100%;}
+h1{font-family:'Cormorant Garamond',serif;font-size:22px;margin:0 0 4px;}
+.sub{font-size:12.5px;opacity:.6;margin:0 0 18px;text-align:center;max-width:40ch;}
+.phone{width:300px;height:620px;border-radius:34px;border:1px solid var(--line);background:var(--card);box-shadow:0 24px 44px -20px rgba(0,0,0,.3);overflow:hidden;position:relative;display:flex;flex-direction:column;}
+.status{display:flex;justify-content:space-between;align-items:center;padding:10px 18px 2px;font-size:11px;font-weight:600;flex:0 0 auto;}
+.status .dots{display:flex;gap:3px;align-items:center;}
+.status .dots span{width:3px;height:7px;background:currentColor;border-radius:1px;}
+.topbar{display:flex;align-items:center;gap:10px;padding:6px 16px 10px;font-family:'Cormorant Garamond',serif;font-weight:600;font-size:17px;flex:0 0 auto;}
+.topbar .back{cursor:pointer;font-family:Arial,sans-serif;font-size:16px;color:var(--ink);}
+.content{flex:1;overflow-y:auto;padding:0 16px 12px;display:flex;flex-direction:column;gap:11px;}
+.bottomnav{display:flex;justify-content:space-around;align-items:center;padding:10px 4px;border-top:1px solid var(--line);font-size:9px;color:var(--muted);flex:0 0 auto;}
+.bottomnav .item{cursor:pointer;text-align:center;}
+.bottomnav .plus{width:26px;height:26px;border-radius:50%;background:var(--gold);color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;margin:0 auto 2px;cursor:pointer;}
+
+.hero{background:linear-gradient(180deg,var(--navy),#1a2338);color:#f3ead1;height:100%;padding:26px 20px;display:flex;flex-direction:column;justify-content:flex-end;gap:6px;}
+.hero .brand{font-family:'Cormorant Garamond',serif;font-size:20px;letter-spacing:.05em;color:var(--gold);}
+.hero .tag{font-size:10px;opacity:.6;margin-bottom:16px;}
+.hero h2{font-family:'Cormorant Garamond',serif;font-size:27px;line-height:1.1;margin:0;}
+button{font-family:inherit;cursor:pointer;border:none;}
+.btn{margin-top:16px;background:var(--gold);color:#1a1608;text-align:center;padding:11px;border-radius:9px;font-size:12.5px;font-weight:700;width:100%;}
+.btn2{background:transparent;border:1px solid #f3ead1;color:#f3ead1;text-align:center;padding:11px;border-radius:9px;font-size:12.5px;margin-top:9px;width:100%;}
+
+.chip-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;}
+.chip{border:1px solid var(--line);border-radius:11px;padding:18px 6px;font-size:12px;text-align:center;background:#fbf8f1;width:100%;}
+.chip.sel{background:var(--navy);color:#f3ead1;border-color:var(--navy);}
+
+.swatches{display:flex;gap:7px;}
+.sw{width:20px;height:20px;border-radius:50%;border:2px solid var(--line);cursor:pointer;padding:0;}
+.sw.sel{border-color:var(--navy);box-shadow:0 0 0 2px var(--navy);}
+.selopt{display:flex;justify-content:space-between;align-items:center;border:1px solid var(--line);border-radius:9px;padding:10px 12px;font-size:12px;background:#fff;width:100%;}
+.selopt .fl{color:var(--muted);}
+.optbtns{display:flex;gap:6px;flex-wrap:wrap;}
+.optbtn{border:1px solid var(--line);border-radius:20px;padding:6px 12px;font-size:11px;background:#fff;}
+.optbtn.sel{background:var(--gold);color:#1a1608;border-color:var(--gold);}
+
+.mrow{display:flex;justify-content:space-between;font-size:12.5px;padding:7px 0;border-bottom:1px dashed var(--line);align-items:center;}
+.mrow input{width:70px;text-align:right;border:none;border-bottom:1px solid var(--line);font-family:inherit;font-size:12.5px;padding:2px;background:transparent;color:var(--ink);}
+
+.fab-card{border:1px solid var(--line);border-radius:11px;padding:9px 11px;background:#fbf8f1;width:100%;text-align:left;}
+.fab-card.sel{outline:2px solid var(--gold);}
+.fab-card .swatch{height:38px;border-radius:7px;margin-bottom:7px;}
+.fab-card .name{font-size:12px;font-weight:600;}
+.fab-card .price{font-size:11px;color:var(--gold);font-weight:700;}
+.fab-card .meta{font-size:10px;color:var(--muted);}
+
+.qline{display:flex;justify-content:space-between;font-size:12.5px;padding:6px 0;border-bottom:1px dashed var(--line);}
+.qtotal{display:flex;justify-content:space-between;font-family:'Cormorant Garamond',serif;font-weight:700;font-size:18px;padding-top:9px;border-top:1px solid var(--ink);}
+
+.track{list-style:none;padding:0;margin:0;font-size:12px;}
+.track li{display:flex;gap:9px;padding:7px 0;align-items:center;}
+.tdot{width:9px;height:9px;border-radius:50%;border:1.5px solid var(--gold);flex:0 0 9px;}
+.tdot.done{background:var(--gold);}
+.tdot.now{background:var(--navy);border-color:var(--navy);}
+.done-t{opacity:.4;text-decoration:line-through;}
+.now-t{font-weight:700;color:var(--navy);}
+
+.statgrid{display:grid;grid-template-columns:1fr 1fr;gap:9px;}
+.stat{border:1px solid var(--line);border-radius:11px;padding:10px 12px;background:#fbf8f1;}
+.stat .n{font-family:'Cormorant Garamond',serif;font-size:21px;font-weight:700;}
+.stat .l{font-size:10px;color:var(--muted);}
+
+.aiwrap{background:var(--navy);height:100%;padding:16px;display:flex;flex-direction:column;gap:9px;}
+.bubble-u{align-self:flex-end;background:var(--gold);color:#1a1608;font-size:11.5px;padding:9px 11px;border-radius:11px 11px 2px 11px;max-width:80%;}
+.bubble-a{background:#1a2338;color:#f3ead1;font-size:11.5px;padding:9px 11px;border-radius:11px 11px 11px 2px;max-width:88%;line-height:1.4;}
+.aiask{margin-top:auto;display:flex;gap:6px;}
+.aiask input{flex:1;border-radius:20px;border:1px solid #3a4463;background:#141b2e;color:#f3ead1;padding:8px 12px;font-size:11px;font-family:inherit;}
+.aiask button{background:var(--gold);color:#1a1608;border-radius:20px;padding:8px 12px;font-size:11px;font-weight:700;}
+
+.cta{background:var(--gold);color:#1a1608;text-align:center;padding:11px;border-radius:9px;font-size:12.5px;font-weight:700;margin-top:auto;width:100%;}
+</style>
+</head>
+<body>
+<h1>Nebeda Threads</h1>
+<p class="sub">A real, clickable prototype — tap through the actual flow instead of looking at a still picture.</p>
+<div class="phone" id="phone"></div>
+
+<script>
+const state = {
+  screen: "home",
+  history: [],
+  outfit: "Agbada",
+  colour: "#1e2a44",
+  embroidery: "Gold",
+  sleeve: "Wide",
+  neck: "Round",
+  measurements: {chest:42, waist:34, shoulder:18, sleeve:25, trouser:40, neck:16},
+  fabric: "Italian Cashmere",
+  fabricPrice: 45,
+  fabricSupplier: "ABC Fabrics, Lagos",
+  fabricFilter: "All",
+  stage: 3
+};
+
+let dbApi = null;
+let orderDoc = null;
+let syncStatus = "local";
+
+function getOrderId(){
+  let id = localStorage.getItem("nebeda_order_id");
+  if(!id){ id = "order_" + Math.random().toString(36).slice(2,10); localStorage.setItem("nebeda_order_id", id); }
+  return id;
+}
+
+async function initDb(){
+  try{ dbApi = await claude.use("db"); }catch(e){ dbApi = null; }
+  if(!dbApi){ syncStatus="local"; updateSyncPill(); return; }
+  orderDoc = dbApi.collection("orders").doc(getOrderId());
+  orderDoc.onSnapshot((snap)=>{
+    const data = snap.data();
+    if(data){ Object.assign(state, data); }
+    else { persistOrder(); }
+    syncStatus = "live";
+    updateSyncPill();
+    render();
+  }, ()=>{ syncStatus="error"; updateSyncPill(); });
+}
+
+function persistOrder(){
+  if(!orderDoc) return;
+  const {screen, history, ...shared} = state;
+  shared.orderId = getOrderId();
+  shared.updatedAt = Date.now();
+  orderDoc.set(shared).catch(()=>{ syncStatus="error"; updateSyncPill(); });
+}
+
+function updateSyncPill(){
+  const el = document.getElementById("syncPill");
+  if(el) el.textContent = syncStatus==="live" ? "● synced live" : (syncStatus==="error" ? "● sync unavailable" : "○ local only");
+}
+initDb();
+
+const FABRIC_STOCK_SEED = {"Italian Cashmere":74,"Ankara Print":120,"Aso Oke":40,"Gold Lace":7,"Navy Senator":120};
+let fabricStock = {};
+
+async function loadFabricStock(){
+  if(!dbApi){ fabricStock = {...FABRIC_STOCK_SEED}; render(); return; }
+  try{
+    const col = dbApi.collection("fabricStock");
+    const snap = await col.get();
+    const found = {};
+    snap.docs.forEach(d => { found[d.id] = d.data().metres; });
+    for(const name of Object.keys(FABRIC_STOCK_SEED)){
+      if(found[name] === undefined){
+        await col.doc(name).set({metres: FABRIC_STOCK_SEED[name]});
+        found[name] = FABRIC_STOCK_SEED[name];
+      }
+    }
+    fabricStock = found;
+  }catch(e){ fabricStock = {...FABRIC_STOCK_SEED}; }
+  render();
+}
+
+async function buyFabric(){
+  const metresNeeded = 7;
+  const current = fabricStock[state.fabric] ?? FABRIC_STOCK_SEED[state.fabric] ?? 0;
+  const remaining = Math.max(0, current - metresNeeded);
+  fabricStock[state.fabric] = remaining;
+  if(dbApi){
+    try{ await dbApi.collection("fabricStock").doc(state.fabric).set({metres: remaining}); }catch(e){}
+  }
+  persistOrder();
+  go('fabricPurchase');
+}
+
+function go(screen, push=true){
+  if(push) state.history.push(state.screen);
+  state.screen = screen;
+  render();
+  if(screen === "allOrders") loadAllOrders();
+  if(screen === "fabric") loadFabricStock();
+  if(screen === "inventory") loadFabricStock();
+}
+async function loadAllOrders(){
+  const el = document.getElementById("allOrdersList");
+  if(!el) return;
+  if(!dbApi){ el.innerHTML = `<div class="meta" style="text-align:center;padding:30px 0">No live database connected in this view — showing your own order only.</div>` + renderOrderRow(state); return; }
+  try{
+    const snap = await dbApi.collection("orders").orderBy("updatedAt","desc").limit(20).get();
+    const docs = snap.docs.map(d=>d.data());
+    el.innerHTML = docs.length ? docs.map(renderOrderRow).join("") : `<div class="meta" style="text-align:center;padding:30px 0">No orders placed yet.</div>`;
+  }catch(e){
+    el.innerHTML = `<div class="meta" style="text-align:center;padding:30px 0">Couldn't load live orders.</div>`;
+  }
+}
+function renderOrderRow(o){
+  const steps = ["Tailor assigned","Cutting","Sewing","Embroidery","Fitting","Quality control","Balance paid","Delivery"];
+  return `<div class="selopt"><span><b>${o.outfit||'Order'}</b> · ${o.orderId ? o.orderId.slice(-5) : ''}<br><span class="fl">${steps[o.stage] || 'In progress'}</span></span><span>›</span></div>`;
+}
+function back(){
+  state.screen = state.history.pop() || "home";
+  render();
+}
+
+const nav = (active) => `
+  <div class="bottomnav">
+    <div class="item" onclick="go('home')">🏠<br>Home</div>
+    <div class="item" onclick="go('tracking')">📦<br>Orders</div>
+    <div class="plus" onclick="go('outfit')">+</div>
+    <div class="item" onclick="go('marketplace')">🧵<br>Shop</div>
+    <div class="item" onclick="go('profile')">👤<br>Profile</div>
+  </div>`;
+
+const statusbar = `<div class="status"><span>9:41</span><span class="dots"><span></span><span></span><span></span></span><span id="syncPill" style="font-size:8px;font-weight:400;">○ local only</span></div>`;
+
+function topbar(title, showBack=true){
+  return `<div class="topbar">${showBack? `<span class="back" onclick="back()">‹</span>`:''}${title}</div>`;
+}
+
+const SCREENS = {
+  home: () => `
+    <div class="hero">
+      <div class="brand">NEBEDA<br>THREADS</div>
+      <div class="tag">Bespoke · Ready to Wear · African Luxury</div>
+      <h2>Your Style.<br>Our Craft.<br>Timeless You.</h2>
+      <button class="btn" onclick="go('outfit')">Start an Order</button>
+      <button class="btn2" onclick="go('marketplace')">Explore Marketplace</button>
+      <button class="btn2" onclick="go('dashboard')">Business Dashboard</button>
+    </div>`,
+
+  outfit: () => `
+    ${statusbar}${topbar("What do you want made?", state.history.length>0)}
+    <div class="content">
+      <div class="chip-grid">
+        ${["Agbada","Kaftan","Senator","Bubu","Two Piece","Dress","Wedding","Suit"].map(o=>
+          `<button class="chip ${state.outfit===o?'sel':''}" onclick="selectOutfit('${o}')">${o}</button>`).join("")}
+      </div>
+      <button class="cta" onclick="go('design')">Design &amp; Customise →</button>
+    </div>
+    ${nav()}`,
+
+  design: () => `
+    ${statusbar}${topbar("Design Your Outfit")}
+    <div class="content">
+      <div class="selopt"><span class="fl">Colour</span>
+        <span class="swatches">
+          ${["#1e2a44","#c9a24a","#7c1f2e","#2d4f3a"].map(c=>`<button class="sw ${state.colour===c?'sel':''}" style="background:${c}" onclick="setField('colour','${c}')"></button>`).join("")}
+        </span>
+      </div>
+      <div class="selopt"><span class="fl">Embroidery</span>
+        <span class="optbtns">${["Gold","Silver","None"].map(e=>`<button class="optbtn ${state.embroidery===e?'sel':''}" onclick="setField('embroidery','${e}')">${e}</button>`).join("")}</span>
+      </div>
+      <div class="selopt"><span class="fl">Sleeve</span>
+        <span class="optbtns">${["Wide","Fitted"].map(e=>`<button class="optbtn ${state.sleeve===e?'sel':''}" onclick="setField('sleeve','${e}')">${e}</button>`).join("")}</span>
+      </div>
+      <div class="selopt"><span class="fl">Neck</span>
+        <span class="optbtns">${["Round","V-neck"].map(e=>`<button class="optbtn ${state.neck===e?'sel':''}" onclick="setField('neck','${e}')">${e}</button>`).join("")}</span>
+      </div>
+      <button class="cta" onclick="go('concept')">Generate AI Concept →</button>
+    </div>`,
+
+  concept: () => `
+    ${statusbar}${topbar("AI Design Concept")}
+    <div class="content">
+      <div class="fab-card" style="text-align:center;padding:26px 10px">
+        <div style="height:120px;border-radius:9px;margin-bottom:10px;background:linear-gradient(135deg,${state.colour},#c9a24a)"></div>
+        <div class="name">${state.outfit} · ${state.embroidery} embroidery · ${state.sleeve} sleeve</div>
+        <div class="meta">AI-generated concept based on your choices</div>
+      </div>
+      <div class="optbtns">
+        <button class="optbtn" onclick="go('design')">Regenerate</button>
+        <button class="optbtn sel" onclick="go('measurements')">Approve Concept</button>
+      </div>
+    </div>`,
+
+  measurements: () => `
+    ${statusbar}${topbar("My Measurements")}
+    <div class="content">
+      ${Object.entries({chest:"Chest",waist:"Waist",shoulder:"Shoulder",sleeve:"Sleeve",trouser:"Trouser Length",neck:"Neck"}).map(([k,l])=>
+        `<div class="mrow"><span>${l}</span><input value="${state.measurements[k]}" oninput="state.measurements['${k}']=this.value; persistOrder();"> in</div>`).join("")}
+      <button class="cta" onclick="go('fabric')">Choose Fabric →</button>
+    </div>
+    ${nav()}`,
+
+  fabric: () => {
+    const FABRICS = [
+      ["Italian Cashmere",45,"#1e3a5f","ABC Fabrics, Lagos","Cashmere","1–3 days"],
+      ["Ankara Print",8,"#c9a24a","Lagos Wax Prints","Ankara","2–4 days"],
+      ["Aso Oke",25,"#7c1f2e","Oyo Heritage Weavers","Aso Oke","2–3 days"],
+      ["Gold Lace",22,"#8a6d1f","Bella Lace Co, Kano","Lace","3–5 days"],
+      ["Navy Senator",9,"#20304a","Manchester Textiles","Senator","Next day"],
+    ];
+    const cats = ["All","Cashmere","Ankara","Aso Oke","Lace","Senator"];
+    const shown = state.fabricFilter==="All" ? FABRICS : FABRICS.filter(f=>f[4]===state.fabricFilter);
+    return `
+    ${statusbar}${topbar("Fabric Marketplace")}
+    <div class="content">
+      <div class="optbtns">${cats.map(c=>`<button class="optbtn ${state.fabricFilter===c?'sel':''}" onclick="setField('fabricFilter','${c}')">${c}</button>`).join("")}</div>
+      ${shown.map(([n,p,c,supplier,cat,delivery])=>{
+        const stock = fabricStock[n];
+        const stockLabel = stock===undefined ? "Checking stock…" : `${stock}m left${stock<10?' · low stock':''}`;
+        return `<button class="fab-card ${state.fabric===n?'sel':''}" onclick="selectFabric('${n}',${p},'${supplier}')">
+          <div class="swatch" style="background:${c}"></div>
+          <div class="name">${n}</div><div class="price">£${p} / metre</div><div class="meta">Sold by ${supplier} · ${delivery}</div>
+          <div class="meta" style="color:${stock<10?'#a33':'var(--gold)'}">${stockLabel}</div>
+        </button>`;}).join("")}
+      <button class="cta" onclick="buyFabric()">Buy Fabric →</button>
+    </div>
+    ${nav()}`;
+  },
+
+  fabricPurchase: () => `
+    ${statusbar}${topbar("Fabric Purchased")}
+    <div class="content">
+      <div class="stat" style="text-align:center;padding:20px 10px">
+        <div class="l">✓ Purchase confirmed</div>
+        <div class="n">${state.fabric}</div>
+        <div class="l">from ${state.fabricSupplier}</div>
+      </div>
+      <div class="qline"><span>7 metres × £${state.fabricPrice}</span><span>£${state.fabricPrice*7}</span></div>
+      <div class="meta">Remaining stock: ${fabricStock[state.fabric]!==undefined ? fabricStock[state.fabric]+'m' : '—'}</div>
+      <button class="cta" onclick="go('quote')">Continue to Quotation →</button>
+    </div>`,
+
+  marketplace: () => {
+    const DESIGNERS = [
+      ["Nebeda Threads","Gillingham, Kent","4.9","Agbada, Wedding, Bespoke",true],
+      ["Aduke Couture","Manchester","4.7","Aso Ebi, Dresses",false],
+      ["Royal Kaftan House","London","4.8","Kaftan, Senator",false],
+      ["Ìlẹ́ Fashion Studio","Birmingham","4.6","Wedding, Two Piece",false],
+    ];
+    return `
+    ${statusbar}${topbar("Designers Near You")}
+    <div class="content">
+      ${DESIGNERS.map(([n,loc,rating,tags,you])=>
+        `<button class="fab-card" onclick="go('designerProfile')">
+          <div class="name">${n} ${you?'· <span style="color:var(--gold)">You</span>':''}</div>
+          <div class="meta">${loc} · ⭐ ${rating}</div>
+          <div class="meta">${tags}</div>
+        </button>`).join("")}
+    </div>
+    ${nav()}`;
+  },
+
+  designerProfile: () => `
+    ${statusbar}${topbar("Nebeda Threads")}
+    <div class="content">
+      <div class="stat"><div class="l">Rating</div><div class="n">⭐ 4.9 (128 reviews)</div></div>
+      <div class="mrow"><span>Location</span><span>Gillingham, Kent</span></div>
+      <div class="mrow"><span>Delivery time</span><span>7–14 days</span></div>
+      <div class="mrow"><span>Speciality</span><span>Agbada, Wedding, Bespoke</span></div>
+      <button class="cta" onclick="go('outfit')">Request Custom Outfit</button>
+      <button class="btn2" onclick="go('shop')">View Ready to Wear</button>
+    </div>
+    ${nav()}`,
+
+  quote: () => {
+    const tailoring=70, embroidery = state.embroidery==="None"?0:25, delivery=15;
+    const total = state.fabricPrice + tailoring + embroidery + delivery;
+    return `
+    ${statusbar}${topbar("Quotation")}
+    <div class="content">
+      <div class="qline"><span>Fabric (${state.fabric})</span><span>£${state.fabricPrice}</span></div>
+      <div class="qline"><span>Tailoring</span><span>£${tailoring}</span></div>
+      <div class="qline"><span>Embroidery (${state.embroidery})</span><span>£${embroidery}</span></div>
+      <div class="qline"><span>Delivery</span><span>£${delivery}</span></div>
+      <div class="qtotal"><span>Total</span><span>£${total}</span></div>
+      <button class="cta" onclick="go('payment')">Proceed to Payment →</button>
+    </div>`;
+  },
+
+  payment: () => {
+    const tailoring=70, embroidery = state.embroidery==="None"?0:25, delivery=15;
+    const total = state.fabricPrice + tailoring + embroidery + delivery;
+    const deposit = Math.round(total*0.6);
+    return `
+    ${statusbar}${topbar("Payment")}
+    <div class="content">
+      <div class="qline"><span>Order Total</span><span>£${total}</span></div>
+      <div class="qline"><span>Deposit Required</span><span>£${deposit}</span></div>
+      <div class="selopt"><span class="fl">Method</span>
+        <span class="optbtns">${["Card","Apple Pay","Bank Transfer"].map(m=>`<button class="optbtn ${state.payMethod===m||(!state.payMethod&&m==='Card')?'sel':''}" onclick="setField('payMethod','${m}')">${m}</button>`).join("")}</span>
+      </div>
+      <button class="cta" onclick="go('tracking')">Pay £${deposit} Deposit</button>
+    </div>`;
+  },
+
+  tracking: () => {
+    const steps = ["Tailor assigned","Cutting","Sewing","Embroidery","Fitting","Quality control","Balance paid","Delivery"];
+    return `
+    ${statusbar}${topbar("Order #NEB1042")}
+    <div class="content">
+      <ul class="track">
+        ${steps.map((s,i)=>`<li><span class="tdot ${i<state.stage?'done':(i===state.stage?'now':'')}"></span><span class="${i<state.stage?'done-t':(i===state.stage?'now-t':'')}">${s}</span></li>`).join("")}
+      </ul>
+      ${state.stage>=steps.length-1
+        ? `<button class="cta" onclick="go('review')">Leave a Review →</button>`
+        : `<button class="cta" onclick="advanceStage()">Mark Next Stage Complete</button>`}
+    </div>
+    ${nav()}`;
+  },
+
+  review: () => `
+    ${statusbar}${topbar("Rate Your Order")}
+    <div class="content">
+      <div class="fab-card" style="text-align:center;padding:22px 10px">
+        <div class="name">${state.outfit} — delivered</div>
+        <div style="font-size:22px;letter-spacing:4px;margin:10px 0;">${[1,2,3,4,5].map(n=>`<span onclick="setField('rating',${n})" style="cursor:pointer;color:${(state.rating||5)>=n?'var(--gold)':'var(--line)'}">★</span>`).join("")}</div>
+        <div class="meta">Tap to rate</div>
+      </div>
+      <button class="cta" onclick="go('home')">Submit Review</button>
+    </div>`,
+
+  dashboard: () => `
+    ${statusbar}${topbar("Business Dashboard", true)}
+    <div class="content">
+      <div class="statgrid">
+        <div class="stat"><div class="l">Total Orders</div><div class="n">28</div></div>
+        <div class="stat"><div class="l">Revenue</div><div class="n">£4,820</div></div>
+        <div class="stat"><div class="l">Profit</div><div class="n">£1,860</div></div>
+        <div class="stat"><div class="l">Pending</div><div class="n">£620</div></div>
+      </div>
+      <div class="optbtns">
+        <button class="optbtn" onclick="go('allOrders')">All Orders (live)</button>
+        <button class="optbtn" onclick="go('tailors')">Tailor Team</button>
+        <button class="optbtn" onclick="go('inventory')">Inventory</button>
+        <button class="optbtn" onclick="go('customerProfile')">Customer</button>
+        <button class="optbtn" onclick="go('wedding')">Wedding Order</button>
+        <button class="optbtn" onclick="go('shop')">Ready to Wear</button>
+        <button class="optbtn" onclick="go('invoice')">Invoice</button>
+        <button class="optbtn" onclick="go('delivery')">Delivery</button>
+      </div>
+      <button class="cta" onclick="go('ai')">Ask Nebeda AI →</button>
+    </div>
+    ${nav()}`,
+
+  allOrders: () => `
+    ${statusbar}${topbar("All Orders — Live")}
+    <div class="content" id="allOrdersList">
+      <div class="meta" style="text-align:center;padding:30px 0">Loading real orders…</div>
+    </div>
+    ${nav()}`,
+
+  tailors: () => `
+    ${statusbar}${topbar("Production Team")}
+    <div class="content">
+      ${[["Samuel Ade","Cutting"],["Grace Johnson","Sewing — in progress"],["Ibrahim Musa","Embroidery"],["Mary Adebayo","Finishing"],["Ben Oyekan","Quality Control"]].map(([n,r])=>
+        `<div class="selopt"><span><b>${n}</b><br><span class="fl">${r}</span></span><span>📞</span></div>`).join("")}
+      <button class="cta" onclick="go('dashboard')">Reassign Task</button>
+    </div>
+    ${nav()}`,
+
+  inventory: () => `
+    ${statusbar}${topbar("Fabric Inventory — Live")}
+    <div class="content">
+      ${Object.entries(fabricStock).length ? Object.entries(fabricStock).map(([n,m])=>
+        `<div class="selopt"><span><b>${n}</b><br><span class="fl" style="${m<10?'color:#a33':''}">${m} metres${m<10?' — low stock!':''}</span></span><span>›</span></div>`).join("")
+        : `<div class="meta" style="text-align:center;padding:20px 0">Loading stock…</div>`}
+    </div>
+    ${nav()}`,
+
+  customerProfile: () => `
+    ${statusbar}${topbar("Sister Tosin")}
+    <div class="content">
+      <div class="stat"><div class="l">Customer since</div><div class="n">2025</div></div>
+      <div class="mrow"><span>Total orders</span><span>5</span></div>
+      <div class="mrow"><span>Total spent</span><span>£840</span></div>
+      <div class="mrow"><span>Favourite colour</span><span>Navy</span></div>
+      <div class="mrow"><span>Notes</span><span>Prefers elegant, modest styles</span></div>
+      <button class="cta" onclick="go('measurements')">View Measurements</button>
+    </div>
+    ${nav()}`,
+
+  wedding: () => `
+    ${statusbar}${topbar("Johnson Wedding — 14 Aug")}
+    <div class="content">
+      ${[["Groom","1 outfit","In progress"],["Bride","2 outfits","Not started"],["Groomsmen (6)","6 outfits","In progress"],["Bridesmaids (5)","5 outfits","Not started"]].map(([r,o,s])=>
+        `<div class="selopt"><span><b>${r}</b><br><span class="fl">${o}</span></span><span>${s}</span></div>`).join("")}
+      <button class="cta" onclick="go('dashboard')">+ Add Member</button>
+    </div>
+    ${nav()}`,
+
+  shop: () => `
+    ${statusbar}${topbar("Ready to Wear")}
+    <div class="content">
+      <div class="chip-grid">
+        ${[["Men's Kaftan","£75"],["Women's Two Piece","£55"],["Ankara Dress","£40"],["Senator Set","£65"]].map(([n,p])=>
+          `<button class="chip">${n}<br><span class="fl" style="color:var(--gold);font-weight:700">${p}</span></button>`).join("")}
+      </div>
+      <button class="cta" onclick="go('dashboard')">Manage Shop</button>
+    </div>
+    ${nav()}`,
+
+  invoice: () => `
+    ${statusbar}${topbar("Invoice #NEB1042")}
+    <div class="content">
+      <div class="qline"><span>Italian Cashmere ×7m</span><span>£45</span></div>
+      <div class="qline"><span>Tailoring (Agbada)</span><span>£70</span></div>
+      <div class="qline"><span>Embroidery</span><span>£25</span></div>
+      <div class="qline"><span>Delivery</span><span>£15</span></div>
+      <div class="qtotal"><span>Total</span><span>£155</span></div>
+      <div class="optbtns"><button class="optbtn">Download PDF</button><button class="optbtn">Share</button></div>
+    </div>
+    ${nav()}`,
+
+  delivery: () => `
+    ${statusbar}${topbar("Delivery")}
+    <div class="content">
+      <div class="selopt"><span class="fl">Tracking Number</span><span>DHL123456789</span></div>
+      <ul class="track">
+        <li><span class="tdot done"></span><span class="done-t">Order ready</span></li>
+        <li><span class="tdot done"></span><span class="done-t">Picked up</span></li>
+        <li><span class="tdot now"></span><span class="now-t">In transit</span></li>
+        <li><span class="tdot"></span><span>Out for delivery</span></li>
+        <li><span class="tdot"></span><span>Delivered</span></li>
+      </ul>
+      <button class="cta" onclick="go('dashboard')">Track on DHL</button>
+    </div>
+    ${nav()}`,
+
+  ai: () => `
+    <div class="aiwrap">
+      ${topbar("Nebeda AI")}
+      <div class="bubble-u">Which orders are late?</div>
+      <div class="bubble-a" id="aiReply">3 late orders: #1041 (2 days), #1038 (5 days), #1035 (1 day). Want reminders sent?</div>
+      <div class="aiask"><input id="aiInput" placeholder="Ask anything about your business…"><button onclick="askAI()">Ask</button></div>
+    </div>`,
+
+  profile: () => `
+    ${statusbar}${topbar("Profile")}
+    <div class="content">
+      <div class="stat"><div class="l">Customer</div><div class="n">Benjamen Oyekan</div></div>
+      <div class="mrow"><span>Orders</span><span>5</span></div>
+      <div class="mrow"><span>Total spent</span><span>£840</span></div>
+      <div class="mrow"><span>Favourite colour</span><span>Navy</span></div>
+      <button class="cta" onclick="go('measurements')">Edit Measurements</button>
+    </div>
+    ${nav()}`
+};
+
+function selectOutfit(o){ state.outfit=o; persistOrder(); render(); }
+function setField(k,v){ state[k]=v; persistOrder(); render(); }
+function selectFabric(n,p,supplier){ state.fabric=n; state.fabricPrice=p; state.fabricSupplier=supplier; persistOrder(); render(); }
+function advanceStage(){ if(state.stage<7) state.stage++; persistOrder(); render(); }
+function askAI(){
+  const val = document.getElementById("aiInput").value.trim();
+  if(!val) return;
+  const reply = document.getElementById("aiReply");
+  reply.textContent = "That would connect to your real order data in the full build — for now this reply is scripted.";
+  document.getElementById("aiInput").value="";
+}
+
+function render(){
+  document.getElementById("phone").innerHTML = SCREENS[state.screen]();
+  updateSyncPill();
+}
+render();
+</script>
+</body>
+</html>
