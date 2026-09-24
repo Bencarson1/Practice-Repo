@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wearvia</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- Top bar: shop name + navigation tabs -->
+  <header class="topbar">
+    <div class="brand">
+      <span id="shop-name" class="shop-name"></span>
+      <span class="powered-by">powered by Wearvia</span>
+    </div>
+    <nav class="tabs">
+      <button class="tab active" data-section="home">Home</button>
+      <button class="tab" data-section="orders">Orders</button>
+      <button class="tab" data-section="measurements">Measurements</button>
+      <button class="tab" data-section="fabrics">Fabric Marketplace</button>
+      <button class="tab" data-section="production">Production</button>
+      <button class="tab" data-section="payments">Payments</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- Each section is shown or hidden when you click a tab -->
+    <section id="home" class="section active"></section>
+    <section id="orders" class="section"></section>
+    <section id="measurements" class="section"></section>
+    <section id="fabrics" class="section"></section>
+    <section id="production" class="section"></section>
+    <section id="payments" class="section"></section>
+  </main>
+
+  <footer class="footer">
+    Your data is saved in this browser.
+    <button class="link-button" onclick="resetSampleData()">Reset to sample data</button>
+  </footer>
+
+  <!-- Scripts: data first, then one file per section, then app.js starts everything -->
+  <script src="js/data.js"></script>
+  <script src="js/home.js"></script>
+  <script src="js/orders.js"></script>
+  <script src="js/measurements.js"></script>
+  <script src="js/fabrics.js"></script>
+  <script src="js/production.js"></script>
+  <script src="js/payments.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
