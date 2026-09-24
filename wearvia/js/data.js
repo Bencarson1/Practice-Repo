@@ -3,7 +3,7 @@
 // ============================================================
 
 // ---- Settings you can change ----
-const SHOP_NAME = "Nebeda Threads";
+const SHOP_NAME = "Wearvia";
 const CURRENCY = "£";
 const STAGES = ["cutting", "sewing", "finishing", "ready"];
 const STORAGE_KEY = "wearvia-data";
