@@ -31,7 +31,7 @@ function renderOrdersTab(orderId) {
     </tr>`;
   }).join("");
 
-  const fabricOptions = db.fabrics.map(f =>
+  const fabricOptions = activeFabrics().filter(f => !isSoldOut(f) || f.id === pendingFabricId).map(f =>
     `<option value="${f.id}" ${f.id === pendingFabricId ? "selected" : ""}>${escapeHtml(f.name)} — ${money(f.price_per_metre)}/m (${f.metres_available} m left)</option>`).join("");
   const select = (name, items) => `<select name="${name}">${items.map(i => `<option value="${escapeHtml(i.value)}">${escapeHtml(i.label)}</option>`).join("")}</select>`;
 
@@ -78,6 +78,10 @@ function createWalkInOrder(event) {
   const fabric = findFabric(form.fabric.value);
   const metres = Number(form.metres.value);
 
+  if (isSoldOut(fabric)) {
+    alert(`${fabric.name} is sold out.`);
+    return false;
+  }
   if (metres > fabric.metres_available) {
     alert(`Only ${fabric.metres_available} m of ${fabric.name} left in stock.`);
     return false;
@@ -116,6 +120,7 @@ function deleteOrder(orderId) {
   db.invoices = db.invoices.filter(i => i.order_id !== orderId);
   db.deliveries = db.deliveries.filter(d => d.order_id !== orderId);
   db.wedding_orders.forEach(w => w.members.forEach(m => { if (m.order_id === orderId) m.order_id = ""; }));
+  cancelFabricOrder(orderId); // the fabric seller sees it as cancelled
   saveData();
   go("biz/orders");
 }
@@ -129,6 +134,7 @@ function renderOrderDetail(orderId) {
   const customer = findCustomer(order.customer_id);
   const fabric = findFabric(order.fabric_id);
   const supplier = findSupplier(order.fabric_supplier_id);
+  const fabricOrderRow = db.fabric_orders.find(o => o.order_id === order.id);
   const profile = findProfile(order.measurement_profile_id);
   const delivery = findDelivery(order.id);
   const balance = balanceOwed(order);
@@ -189,6 +195,7 @@ function renderOrderDetail(orderId) {
               <div class="kv"><span>Neck</span><b>${escapeHtml(order.neck_style)}</b></div>
               <div class="kv"><span>Fabric</span><b>${escapeHtml(fabric ? fabric.name : "—")}, ${order.fabric_metres} m</b></div>
               <div class="kv"><span>Supplier</span><b>${escapeHtml(supplier ? supplier.name : "—")}</b></div>
+              ${fabricOrderRow ? `<div class="kv"><span>Fabric from seller</span><b>${fabricOrderRow.status === "sent" ? "Sent " + formatDate(fabricOrderRow.sent_at) : fabricOrderRow.status === "new" ? "Not sent yet" : "Cancelled"}</b></div>` : ""}
             </div>
           </div>
         </div>

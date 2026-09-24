@@ -17,8 +17,9 @@
     <a class="wordmark" href="#/home"><span id="app-name">Wearvia</span></a>
     <span class="shop-pill">First shop: <b id="shop-name">Nebeda Threads</b></span>
     <nav class="modes" aria-label="Switch view">
-      <a id="mode-customer" href="#/home">Customer app</a>
-      <a id="mode-business" href="#/biz/dashboard">Business dashboard</a>
+      <a id="mode-customer" href="#/home">Customer<span class="wide-only"> app</span></a>
+      <a id="mode-seller" href="#/seller">Fabric seller<span class="wide-only">s</span></a>
+      <a id="mode-business" href="#/biz/dashboard">Business<span class="wide-only"> dashboard</span></a>
     </nav>
   </header>
 
@@ -33,6 +34,12 @@
       <nav id="biz-tabs" class="biz-tabs" aria-label="Dashboard sections"></nav>
       <section id="biz-content" class="biz"></section>
     </div>
+
+    <!-- Fabric seller area: sellers run their market stall of fabrics -->
+    <div id="seller-view" class="seller-view" hidden>
+      <nav id="seller-tabs" class="biz-tabs" aria-label="Seller sections"></nav>
+      <section id="seller-content" class="biz seller"></section>
+    </div>
   </main>
 
   <footer class="footer">
@@ -44,8 +51,13 @@
 
   <!-- Scripts: data first, then the screens, then app.js starts everything -->
   <script src="js/data.js"></script>
+  <script src="js/photos.js"></script>
+  <script src="js/sellers-data.js"></script>
   <script src="js/concept.js"></script>
+  <script src="js/marketplace.js"></script>
   <script src="js/customer.js"></script>
+  <script src="js/seller.js"></script>
+  <script src="js/seller-fabrics.js"></script>
   <script src="js/dashboard.js"></script>
   <script src="js/orders.js"></script>
   <script src="js/production.js"></script>

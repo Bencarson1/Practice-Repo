@@ -3,6 +3,7 @@
 Wearvia is one web app for bespoke and ready-to-wear fashion:
 
 - **Customers** design an outfit, see a design concept, save their measurements, buy fabric, get an instant quote, pay a deposit, track production and leave a review.
+- **Fabric sellers** run a market stall of fabrics: photos, prices, stock, and the orders that use their fabric.
 - **The designer** runs orders, production, the tailor team, fabric inventory, payments, weddings, ready-to-wear, deliveries and invoices from the same data.
 
 The first shop using Wearvia is **Nebeda Threads** (Gillingham, Kent). Prices are in **£ (GBP)**.
@@ -27,7 +28,7 @@ python3 -m http.server 8000
 
 Then go to <http://localhost:8000>. Press `Ctrl + C` in the terminal to stop the server.
 
-Use the switch at the top right to move between the **Customer app** and the **Business dashboard**.
+Use the switch at the top right to move between the **Customer app**, the **Fabric sellers** area and the **Business dashboard**.
 
 ## The order steps
 
@@ -38,7 +39,7 @@ Every order follows these 16 steps, in this order (from the spec):
 | 1 | Customer chooses outfit type and design options | Customer app → outfit picker, then Design |
 | 2 | AI design concept — approve or regenerate | Customer app → AI Design Concept |
 | 3 | Measurements saved to the customer's profile | Customer app → My Measurements (saved as this year's profile) |
-| 4 | Fabric selected from the marketplace | Customer app → Fabric Marketplace (several suppliers, live stock) |
+| 4 | Fabric selected from the marketplace | Customer app → Fabric Marketplace (photo grid from independent sellers, live stock) |
 | 5 | Fabric purchased — stock goes down | Customer app → Buy Fabric |
 | 6 | Instant quotation | Customer app → Quotation (fabric + tailoring + embroidery + delivery) |
 | 7 | Deposit paid (60%) | Customer app → Payment. This creates the order and its invoice |
@@ -60,7 +61,7 @@ The app won't let anyone skip a step: for example, opening the payment page befo
 | Outfit picker & Design | Agbada, Kaftan, Senator, Bubu, Two Piece, Dress, Wedding, Suit, Aso Ebi, Custom; colour, embroidery, sleeve, neck |
 | AI Design Concept | A drawing made from the customer's choices. *Regenerate* makes a new version |
 | Measurements | Chest, waist, shoulder, sleeve, trouser length, neck (plus hips and length), saved per year |
-| Fabric Marketplace & Purchase | Filter by type; supplier, price per metre, live stock and delivery time |
+| Fabric Marketplace & Purchase | Photo grid of approved fabrics from every seller. Search, and filter by type, colour, price, seller and in-stock. Each fabric has a page with all its photos, description and seller |
 | Quotation & Payment | Itemised quote; deposit by card, Apple Pay or bank transfer (demo, no real money) |
 | My Orders & Tracking | All 16 steps, who is working on it, balance due, invoice and delivery tracking |
 | Designers, Ready to Wear, Profile | Nebeda Threads' profile and reviews, the ready-to-wear shop, and the customer's details |
@@ -76,13 +77,26 @@ The app won't let anyone skip a step: for example, opening the payment page befo
 | Customers | Order history, spend, favourite colour, notes and measurement profiles |
 | Measurements | Save and edit any customer's measurements |
 | Fabric Inventory | Live stock, low-stock warnings, restocking, new fabrics and suppliers |
+| Fabric Sellers | Approve sellers' fabrics or hide them (with a reason the seller sees), and see every seller's shop, fabrics and sales |
 | Payments | Record payments, see balances and payment history |
 | Wedding Orders | One event with many people, each with their own outfit and status |
 | Ready to Wear | Items, stock and sales |
 | Deliveries | Dispatch orders and update courier tracking |
 | Invoices | Made automatically for every order; download (print to PDF) or share |
 
-Sample customers, fabrics, orders and payments load automatically so you can try everything straight away.
+**Fabric sellers** (the *Fabric sellers* switch at the top)
+
+| Tab | What it does |
+|-----|--------------|
+| Sell on Wearvia | Create a seller profile, or sign in as an existing shop (demo — no passwords yet) |
+| My fabrics | The seller's stall: every fabric with its status (*Live*, *Waiting for approval*, *Hidden*, *Sold out*). Edit, mark sold out / back in stock, or delete |
+| Add a fabric | Up to 5 photos (the first is the cover), name, type, colour, price per metre in £, metres in stock, smallest order and a description |
+| Orders | Every order that used the seller's fabric: metres, price, who it's for (first name only) and where to send it. *Mark as sent* when it's posted |
+| Shop profile | Shop name, location, phone, delivery time and logo |
+
+How approval works: new fabrics wait for Nebeda Threads to approve them before customers see them. Changing a live fabric's photos, name, type, colour or description sends it back for a quick check; price and stock changes go live straight away. If Nebeda Threads hides a fabric, the seller sees the reason on their stall.
+
+Sample customers, fabrics, orders, payments and fabric sellers load automatically so you can try everything straight away. Twelve sample sellers are included — four with full market stalls (Mama Titi Wax Prints, Kente Corner, Indigo Adire Studio and Lace Lounge), with one fabric waiting for approval, one hidden and one sold out. Their photos are drawn patterns, so you can replace them with real ones.
 
 ## Try it out
 
@@ -91,25 +105,34 @@ Sample customers, fabrics, orders and payments load automatically so you can try
 - **Pay the balance:** back in the Customer app, open the order and click *Pay balance*.
 - **Deliver it:** in the order page, click *Dispatch order*, then move the parcel along until it's *Delivered*.
 - **Review it:** in the Customer app, open the order and click *Leave a Review*.
+- **Sell fabric:** Fabric sellers → *Create your seller profile* → add a fabric with some photos. Then Business dashboard → *Fabric Sellers* → *Approve*. It now shows in the customer app's Fabric Marketplace (🧶 Fabrics). When a customer orders an outfit in it, the order appears in the seller's *Orders* tab.
 
 ## Where is my data saved?
 
-Everything is saved in your browser's **localStorage**:
+Everything is saved in your browser: the data in **localStorage**, and uploaded photos and logos in **IndexedDB** (it holds far more than localStorage). Photos are shrunk to at most 1200 pixels before saving.
 
 - Your changes are still there when you refresh or come back later.
 - Data stays on your computer and browser only. It isn't shared with other devices or people.
-- Click **Reset to sample data** at the bottom of the page to start over.
+- Click **Reset to sample data** at the bottom of the page to start over (this also removes uploaded photos).
+- If you saved data with an earlier version, it's upgraded automatically: your own orders and fabrics are kept, and the sample sellers are added.
 
 ## Project files
 
 ```
 wearvia/
 ├── index.html           The page layout
+├── supabase/
+│   └── schema.sql       Tables, photo buckets and access rules for when the data moves to Supabase
 ├── css/
 │   └── style.css        Colours, fonts and layout
 └── js/
     ├── data.js          Settings, the 16 order steps, sample data, saving/loading, helpers
+    ├── photos.js        Saves uploaded photos and logos, resizes them, draws the sample fabric photos
+    ├── sellers-data.js  Every read and write for fabric sellers, their fabrics and orders; sample sellers
     ├── concept.js       Draws the design concept
+    ├── marketplace.js   The customer Fabric Marketplace: photo grid, filters, fabric page
+    ├── seller.js        The Fabric Seller area
+    ├── seller-fabrics.js Business tab: approve or hide sellers' fabrics
     ├── customer.js      Every customer app screen
     ├── dashboard.js     Business dashboard and Ask AI
     ├── orders.js        All orders, walk-in orders, the order page
@@ -151,6 +174,7 @@ These parts work in the app but need real services before going live (see sectio
 - **AI design concept:** drawn in the browser from the customer's choices. Swap `conceptSVG()` in `concept.js` for an image-generation API.
 - **Payments:** a demo checkout. No money is taken. Stripe goes here.
 - **Ask Wearvia AI:** answers a set of common questions from your data. It isn't a language model.
-- **Data:** saved in one browser. Move it to Supabase or Firebase so staff and customers share it, and add logins. The profile page's "sign in as" menu is only for trying the demo.
+- **Data:** saved in one browser. Move it to Supabase or Firebase so staff and customers share it, and add logins. The profile page's "sign in as" menu and the sellers' "choose your shop" list are only for trying the demo.
+- **Fabric sellers on Supabase:** `supabase/schema.sql` has the tables (`fabric_sellers`, `fabrics`, `fabric_photos`, `fabric_orders`), two Storage buckets and access rules. All seller reads and writes are in `js/sellers-data.js`, and all photo saving is in `PhotoStore` in `js/photos.js`, so those two files are the only ones to change. Seller payouts need Stripe Connect.
 - **Delivery tracking:** tracking numbers are made up. Connect Royal Mail, DHL or Shippo.
 - **Designers:** Nebeda Threads is the only designer for now, as the spec says for version 1.
