@@ -117,6 +117,7 @@ window.addEventListener("hashchange", () => {
   } else {
     navDepth += 1;
   }
+  closeStyleViewer();
   renderAll();
   window.scrollTo(0, 0);
   const inner = document.querySelector("#customer-app .content");

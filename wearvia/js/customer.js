@@ -36,7 +36,7 @@ function newDraft() {
     outfit: "Agbada", colour: "#1e2a44", embroidery: "Gold", sleeve: "Wide", neck: "Round",
     variation: 1, designDone: false, conceptApproved: false, profileId: null,
     fabricId: null, metres: 7, purchased: false, quoteReady: false,
-    payMethod: "Card", fabricFilter: "All"
+    payMethod: "Card", fabricFilter: "All", inspiration: null
   };
 }
 
@@ -130,6 +130,7 @@ function setDesign(key, value) {
 function startOver() {
   if (!confirm("Start a new order? Your current choices will be cleared.")) return;
   returnDraftFabric();
+  clearDraftInspiration();
   db.draft = newDraft();
   saveData();
   go("outfit");
@@ -161,6 +162,7 @@ function screenHome() {
 
 function screenOutfit() {
   const d = draft();
+  const photos = hasInspiration(d.inspiration) ? d.inspiration.photos.length : 0;
   return `
     ${cTop("What do you want made?", "home")}
     <div class="content">
@@ -169,8 +171,14 @@ function screenOutfit() {
         ${OUTFITS.map(o => `<button class="chip ${d.outfit === o.name ? "sel" : ""}" onclick="setDesign('outfit','${o.name}')">
           ${o.name}<span class="chip-sub">from ${money(o.tailoring)}</span></button>`).join("")}
       </div>
+      <button class="style-cta" onclick="go('inspiration')">
+        <span class="style-cta-icon" aria-hidden="true">📷</span>
+        <span>${photos ? `<b>Your style photos (${photos})</b><small>Tap to add, change or remove</small>`
+          : `<b>I have a photo of the style I want</b><small>Upload screenshots from Instagram, TikTok, Pinterest or your camera</small>`}</span>
+        <span aria-hidden="true">›</span>
+      </button>
       <button class="cta" onclick="go('design')">Design &amp; Customise →</button>
-      ${d.designDone ? `<button class="linkish" onclick="startOver()">Start over</button>` : ""}
+      ${d.designDone || photos ? `<button class="linkish" onclick="startOver()">Start over</button>` : ""}
     </div>
     ${cNav("outfit")}`;
 }
@@ -185,6 +193,12 @@ function screenDesign() {
     ${cTop("Design Your " + escapeHtml(d.outfit), "outfit")}
     <div class="content">
       ${flowBar("design")}
+      ${hasInspiration(d.inspiration) ? `
+        <button class="insp-strip" onclick="go('inspiration')">
+          <span class="insp-strip-photos">${d.inspiration.photos.slice(0, 3).map(ref => `<img src="${photoUrl(ref)}" alt="">`).join("")}</span>
+          <span><b>${d.inspiration.photos.length} style photo${d.inspiration.photos.length === 1 ? "" : "s"} attached</b><small>Edit photos, link or note</small></span><span aria-hidden="true">›</span>
+        </button>
+        <div class="meta">Pick the options closest to your photos — they set your price. Anything different goes in your note.</div>` : ""}
       <div class="selopt"><span class="fl">Colour <b>${escapeHtml(colourName(d.colour))}</b></span>
         <span class="swatches">
           ${COLOURS.map(c => `<button class="sw ${d.colour === c.hex ? "sel" : ""}" style="background:${c.hex}" title="${c.name}" aria-label="${c.name}" onclick="setDesign('colour','${c.hex}')"></button>`).join("")}
@@ -215,6 +229,8 @@ function screenConcept() {
     ${cTop("AI Design Concept", "design")}
     <div class="content">
       ${flowBar("concept")}
+      ${inspirationBlock("draft", d.inspiration)}
+      ${hasInspiration(d.inspiration) ? `<b class="insp-title">Our concept</b>` : ""}
       <div class="fab-card concept">
         <div class="concept-art ${busy ? "generating" : ""}" aria-busy="${busy}">
           ${conceptSVG(d, d.variation)}
@@ -483,7 +499,10 @@ function payDeposit() {
     outfit: d.outfit, colour: d.colour, embroidery: d.embroidery, sleeve: d.sleeve, neck: d.neck,
     variation: d.variation, profileId: d.profileId,
     fabric: findFabric(d.fabricId), metres: d.metres, quote,
-    deposit: depositFor(quote.total), method: d.payMethod
+    deposit: depositFor(quote.total), method: d.payMethod,
+    inspiration: hasInspiration(d.inspiration)
+      ? { photos: d.inspiration.photos.slice(), link: cleanStyleLink(d.inspiration.link) || "", note: d.inspiration.note || "" }
+      : null
   });
   db.draft = null;
   saveData();
@@ -553,6 +572,7 @@ function screenTracking(orderId) {
         </div>
       </div>
       ${action}
+      ${inspirationBlock(order.id, order.inspiration)}
       ${lifecycleList(order)}
       ${order.review_rating ? `<div class="meta">Your review: ${"★".repeat(order.review_rating)} ${escapeHtml(order.review_text)}</div>` : ""}
       <div class="optbtns">
@@ -834,6 +854,7 @@ function screenNotFound() {
 const CUSTOMER_SCREENS = {
   home: screenHome,
   outfit: screenOutfit,
+  inspiration: screenInspiration,
   design: screenDesign,
   concept: screenConcept,
   measurements: screenMeasurements,

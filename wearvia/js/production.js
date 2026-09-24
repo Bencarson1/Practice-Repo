@@ -25,6 +25,7 @@ function renderProduction() {
           <a href="#/biz/orders/${order.id}"><strong>${order.id}</strong></a>
           <div>${escapeHtml(order.outfit_type)} · ${escapeHtml(colourName(order.colour))}</div>
           <small>${escapeHtml(customerName(order.customer_id))} · due ${formatDate(order.due_date)}${isLate(order) ? " · late" : ""}</small>
+          ${styleJobStrip(order)}
           ${next && next.role ? `<small>Next: ${escapeHtml(next.label)}${staff ? " · " + escapeHtml(staff.name) : ""}</small>` : ""}
           <div class="job-buttons">
             <button class="small" onclick="moveStage('${order.id}', -1)" ${canMoveBack(order) ? "" : "disabled"}>◀ Back</button>
