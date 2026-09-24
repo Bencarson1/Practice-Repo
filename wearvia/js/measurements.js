@@ -1,118 +1,79 @@
 // ============================================================
-// measurements.js — save each customer's body measurements
+// measurements.js — save each customer's body measurements (inches)
+// Measurements are versioned by year: saving in 2026 updates the
+// "2026" profile and keeps earlier years.
 // ============================================================
 
-// The measurements we record (all in inches)
-const MEASUREMENT_FIELDS = [
-  { key: "neck", label: "Neck" },
-  { key: "chest", label: "Chest / Bust" },
-  { key: "waist", label: "Waist" },
-  { key: "hips", label: "Hips" },
-  { key: "shoulder", label: "Shoulder" },
-  { key: "sleeve", label: "Sleeve" },
-  { key: "length", label: "Top / Dress length" },
-  { key: "inseam", label: "Inseam" }
-];
-
 function renderMeasurements() {
-  let customerSuggestions = "";
-  db.customers.forEach(customer => {
-    customerSuggestions += `<option value="${escapeHtml(customer.name)}"></option>`;
-  });
-
-  let inputs = "";
-  MEASUREMENT_FIELDS.forEach(field => {
-    inputs += `
-      <label>${field.label} (in)
-        <input name="${field.key}" type="number" min="0" step="0.25">
-      </label>`;
-  });
+  const inputs = MEASUREMENT_FIELDS.map(field => `
+    <label>${field.label} (in)
+      <input name="${field.key}" type="number" min="1" max="120" step="0.25" ${field.required ? "required" : ""}>
+    </label>`).join("");
 
   // One card per customer that has measurements saved
-  let cards = "";
-  db.measurements.forEach(m => {
-    const customer = findCustomer(m.customerId);
-    if (!customer) return;
-
-    let list = "";
-    MEASUREMENT_FIELDS.forEach(field => {
-      const value = m[field.key];
-      list += `<div><span>${field.label}</span><strong>${value ? value + '"' : "—"}</strong></div>`;
-    });
-
-    cards += `
+  const cards = db.customers.filter(c => c.measurement_profiles.length).map(customer => {
+    const m = latestProfile(customer);
+    const years = customer.measurement_profiles.map(p => p.label).sort().join(", ");
+    return `
       <div class="measure-card">
         <div class="measure-head">
           <div>
-            <h3>${escapeHtml(customer.name)}</h3>
-            <small>${escapeHtml(customer.phone)} · Updated ${escapeHtml(m.updated)}</small>
+            <h3><a href="#/biz/customers/${customer.id}">${escapeHtml(customer.name)}</a></h3>
+            <small>${escapeHtml(customer.phone)} · ${escapeHtml(m.label)} profile · updated ${formatDate(m.updated)}</small>
           </div>
           <button class="small" onclick="editMeasurements('${customer.id}')">Edit</button>
         </div>
-        <div class="measure-list">${list}</div>
-        ${m.notes ? `<p class="notes">${escapeHtml(m.notes)}</p>` : ""}
+        <div class="measure-list">${MEASUREMENT_FIELDS.map(f => `<div><span>${f.label}</span><strong>${m[f.key] != null ? m[f.key] + '"' : "—"}</strong></div>`).join("")}</div>
+        ${customer.notes ? `<p class="notes">${escapeHtml(customer.notes)}</p>` : ""}
+        ${customer.measurement_profiles.length > 1 ? `<p class="muted small-text">Profiles on file: ${escapeHtml(years)}</p>` : ""}
       </div>`;
-  });
+  }).join("");
 
-  document.getElementById("measurements").innerHTML = `
-    <h1>Measurements</h1>
+  return `
+    ${bizHeader("Measurements", `All in inches. Saving updates the customer's ${thisYear()} profile; earlier years are kept.`)}
 
     <div class="card">
       <h2>Save measurements</h2>
       <p class="hint">Type an existing customer's name to update them, or a new name to add a customer.</p>
-      <form id="measure-form" class="form-grid">
+      <form id="measure-form" class="form-grid" onsubmit="return saveMeasurements(event)">
         <label>Customer name
           <input name="customer" list="measure-customer-list" required>
-          <datalist id="measure-customer-list">${customerSuggestions}</datalist>
+          <datalist id="measure-customer-list">${db.customers.map(c => `<option value="${escapeHtml(c.name)}"></option>`).join("")}</datalist>
         </label>
-        <label>Phone
-          <input name="phone" placeholder="Optional">
-        </label>
+        <label>Phone<input name="phone" placeholder="Optional"></label>
         ${inputs}
-        <label class="wide">Notes
-          <input name="notes" placeholder="e.g. prefers loose fit">
-        </label>
-        <div class="form-actions">
-          <button type="submit">Save measurements</button>
-        </div>
+        <label class="wide">Notes<input name="notes" placeholder="e.g. prefers loose fit"></label>
+        <div class="form-actions"><button type="submit">Save measurements</button></div>
       </form>
     </div>
 
     <div class="measure-grid">${cards || "<p class='empty'>No measurements saved yet.</p>"}</div>
   `;
-
-  document.getElementById("measure-form").addEventListener("submit", saveMeasurements);
 }
 
 function saveMeasurements(event) {
   event.preventDefault();
   const form = event.target;
   const customer = findOrCreateCustomer(form.customer.value.trim(), form.phone.value.trim());
-
-  const record = { customerId: customer.id, notes: form.notes.value.trim(), updated: today() };
-  MEASUREMENT_FIELDS.forEach(field => {
-    record[field.key] = form[field.key].value ? Number(form[field.key].value) : null;
-  });
-
-  // Replace the old record for this customer (if any) with the new one
-  db.measurements = db.measurements.filter(m => m.customerId !== customer.id);
-  db.measurements.push(record);
-
+  const values = {};
+  MEASUREMENT_FIELDS.forEach(field => { values[field.key] = form[field.key].value; });
+  saveMeasurementProfile(customer, values);
+  if (form.notes.value.trim()) customer.notes = form.notes.value.trim();
   saveData();
+  toast(`Saved ${customer.name}'s ${thisYear()} measurements.`);
   renderAll();
+  return false;
 }
 
-// Fill the form with a customer's saved measurements so they can be changed
+// Fill the form with a customer's latest measurements so they can be changed
 function editMeasurements(customerId) {
   const customer = findCustomer(customerId);
-  const m = db.measurements.find(x => x.customerId === customerId);
+  const m = latestProfile(customer);
   const form = document.getElementById("measure-form");
-
+  if (!form) return;
   form.customer.value = customer.name;
   form.phone.value = customer.phone;
-  form.notes.value = m.notes || "";
-  MEASUREMENT_FIELDS.forEach(field => {
-    form[field.key].value = m[field.key] || "";
-  });
+  form.notes.value = customer.notes || "";
+  MEASUREMENT_FIELDS.forEach(field => { form[field.key].value = m && m[field.key] != null ? m[field.key] : ""; });
   form.scrollIntoView({ behavior: "smooth" });
 }

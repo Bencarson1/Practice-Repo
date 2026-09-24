@@ -1,134 +1,275 @@
 // ============================================================
-// orders.js — create and track customer orders
+// orders.js — screen 13: every order (live), walk-in orders,
+// and the full detail page for one order
 // ============================================================
 
-function renderOrders() {
-  // Options for the fabric dropdown
-  let fabricOptions = "";
-  db.fabrics.forEach(fabric => {
-    fabricOptions += `<option value="${fabric.id}">${escapeHtml(fabric.name)} — ${money(fabric.price)}/yd (${fabric.stock} yd left)</option>`;
-  });
+let pendingFabricId = null; // set when "Use in an order" is clicked in Fabric Inventory
+let orderFilter = "All";
 
-  // Suggestions for the customer name box
-  let customerSuggestions = "";
-  db.customers.forEach(customer => {
-    customerSuggestions += `<option value="${escapeHtml(customer.name)}"></option>`;
-  });
+function renderOrdersTab(orderId) {
+  if (orderId) return renderOrderDetail(orderId);
 
-  // One table row per order, newest first
-  let rows = "";
-  db.orders.slice().reverse().forEach(order => {
-    const customer = findCustomer(order.customerId);
-    const fabric = findFabric(order.fabricId);
-    const balance = balanceOwed(order);
-    rows += `
-      <tr>
-        <td>${escapeHtml(order.id)}</td>
-        <td>${escapeHtml(customer ? customer.name : "Unknown")}</td>
-        <td>${escapeHtml(order.item)}</td>
-        <td>${escapeHtml(fabric ? fabric.name : "—")} (${order.yards} yd)</td>
-        <td>${escapeHtml(order.dueDate)}</td>
-        <td><span class="badge stage-${order.stage}">${capitalize(order.stage)}</span></td>
-        <td>${money(order.price)}</td>
-        <td class="${balance > 0 ? "owed" : "paid"}">${balance > 0 ? money(balance) : "Paid"}</td>
-        <td><button class="small danger" onclick="deleteOrder('${order.id}')">Delete</button></td>
-      </tr>`;
-  });
+  const filters = ["All", "In progress", "Late", "Delivered"];
+  const shown = db.orders.slice().reverse().filter(o =>
+    orderFilter === "All" || (orderFilter === "In progress" && isOpen(o)) ||
+    (orderFilter === "Late" && isLate(o)) || (orderFilter === "Delivered" && !isOpen(o)));
 
-  document.getElementById("orders").innerHTML = `
-    <h1>Orders</h1>
+  const rows = shown.map(o => {
+    const fabric = findFabric(o.fabric_id);
+    const balance = balanceOwed(o);
+    return `<tr>
+      <td><a href="#/biz/orders/${o.id}">${o.id}</a></td>
+      <td>${escapeHtml(customerName(o.customer_id))}</td>
+      <td>${escapeHtml(o.outfit_type)}</td>
+      <td>${escapeHtml(fabric ? fabric.name : "—")} (${o.fabric_metres} m)</td>
+      <td class="${isLate(o) ? "owed" : ""}">${formatDate(o.due_date)}</td>
+      <td>${stageBadge(o)}</td>
+      <td>${money(o.quote_total)}</td>
+      <td class="${balance > 0 ? "owed" : "paid"}">${balance > 0 ? money(balance) : "Paid"}</td>
+      <td class="nowrap"><a class="button small" href="#/biz/orders/${o.id}">Open</a>
+        <button class="small danger" onclick="deleteOrder('${o.id}')">Delete</button></td>
+    </tr>`;
+  }).join("");
+
+  const fabricOptions = db.fabrics.map(f =>
+    `<option value="${f.id}" ${f.id === pendingFabricId ? "selected" : ""}>${escapeHtml(f.name)} — ${money(f.price_per_metre)}/m (${f.metres_available} m left)</option>`).join("");
+  const select = (name, items) => `<select name="${name}">${items.map(i => `<option value="${escapeHtml(i.value)}">${escapeHtml(i.label)}</option>`).join("")}</select>`;
+
+  return `
+    ${bizHeader("All Orders — Live", "Every order across every customer, with the step it's on now.")}
 
     <div class="card">
-      <h2>New order</h2>
-      <form id="order-form" class="form-grid">
+      <h2>New walk-in order</h2>
+      <p class="hint">For orders taken in the shop or by phone. Online customers order through the customer app. The price is quoted the same way (fabric + tailoring + embroidery + delivery) and the order starts once a deposit is paid.</p>
+      <form id="order-form" class="form-grid" onsubmit="return createWalkInOrder(event)">
         <label>Customer name
           <input name="customer" list="customer-list" required placeholder="Type a name">
-          <datalist id="customer-list">${customerSuggestions}</datalist>
+          <datalist id="customer-list">${db.customers.map(c => `<option value="${escapeHtml(c.name)}"></option>`).join("")}</datalist>
         </label>
-        <label>Phone (for new customers)
-          <input name="phone" placeholder="Optional">
-        </label>
-        <label>Item
-          <input name="item" required placeholder="e.g. Kaftan, suit, gown">
-        </label>
-        <label>Fabric
-          <select name="fabric" id="order-fabric" required>${fabricOptions}</select>
-        </label>
-        <label>Yards needed
-          <input name="yards" type="number" min="0.5" step="0.5" value="3" required>
-        </label>
-        <label>Price for customer (${CURRENCY})
-          <input name="price" type="number" min="0" step="0.01" required>
-        </label>
-        <label>Due date
-          <input name="dueDate" type="date" required>
-        </label>
-        <div class="form-actions">
-          <button type="submit">Create order</button>
-        </div>
+        <label>Phone (for new customers)<input name="phone" placeholder="Optional"></label>
+        <label>Outfit${select("outfit", OUTFITS.map(o => ({ value: o.name, label: o.name })))}</label>
+        <label>Colour${select("colour", COLOURS.map(c => ({ value: c.hex, label: c.name })))}</label>
+        <label>Embroidery${select("embroidery", EMBROIDERY.map(e => ({ value: e.name, label: `${e.name} (${money(e.price)})` })))}</label>
+        <label>Sleeve${select("sleeve", SLEEVES.map(s => ({ value: s, label: s })))}</label>
+        <label>Neck${select("neck", NECKS.map(s => ({ value: s, label: s })))}</label>
+        <label>Fabric<select name="fabric" id="order-fabric" required>${fabricOptions}</select></label>
+        <label>Metres needed<input name="metres" type="number" min="0.5" step="0.5" value="5" required></label>
+        <label>Due date<input name="dueDate" type="date" value="${addDays(14)}" required></label>
+        <label>Deposit paid now (${CURRENCY})<input name="deposit" type="number" min="0.01" step="0.01" placeholder="Blank = ${Math.round(DEPOSIT_RATE * 100)}% of quote"></label>
+        <label>Paid by${select("method", PAYMENT_METHODS.map(m => ({ value: m, label: m })))}</label>
+        <div class="form-actions"><button type="submit">Create order</button></div>
       </form>
     </div>
 
     <div class="card">
       <h2>All orders</h2>
-      <table>
-        <thead>
-          <tr><th>Order</th><th>Customer</th><th>Item</th><th>Fabric</th><th>Due</th><th>Stage</th><th>Price</th><th>Balance</th><th></th></tr>
-        </thead>
-        <tbody>${rows || "<tr><td colspan='9' class='empty'>No orders yet.</td></tr>"}</tbody>
-      </table>
+      <div class="chips">${filters.map(f => `<button class="chip ${f === orderFilter ? "active" : ""}" onclick="orderFilter='${f}';renderAll()">${f}</button>`).join("")}</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Order</th><th>Customer</th><th>Outfit</th><th>Fabric</th><th>Due</th><th>Now</th><th>Total</th><th>Balance</th><th></th></tr></thead>
+        <tbody>${rows || "<tr><td colspan='9' class='empty'>No orders here.</td></tr>"}</tbody>
+      </table></div>
     </div>
   `;
-
-  document.getElementById("order-form").addEventListener("submit", createOrder);
 }
 
-function createOrder(event) {
-  event.preventDefault(); // stop the page from reloading
+function createWalkInOrder(event) {
+  event.preventDefault();
   const form = event.target;
-
   const fabric = findFabric(form.fabric.value);
-  const yards = Number(form.yards.value);
+  const metres = Number(form.metres.value);
 
-  if (yards > fabric.stock) {
-    alert(`Only ${fabric.stock} yards of ${fabric.name} left in stock.`);
-    return;
+  if (metres > fabric.metres_available) {
+    alert(`Only ${fabric.metres_available} m of ${fabric.name} left in stock.`);
+    return false;
+  }
+
+  const quote = computeQuote(form.outfit.value, form.embroidery.value, fabric, metres);
+  const deposit = form.deposit.value ? Number(form.deposit.value) : depositFor(quote.total);
+  if (deposit > quote.total) {
+    alert(`The deposit can't be more than the quote of ${money(quote.total)}.`);
+    return false;
   }
 
   const customer = findOrCreateCustomer(form.customer.value.trim(), form.phone.value.trim());
+  const profile = latestProfile(customer);
+  fabric.metres_available = Math.round((fabric.metres_available - metres) * 10) / 10; // fabric purchased: stock goes down
 
-  // Order numbers continue from the highest existing one, e.g. NT-1006
-  const highest = db.orders.reduce((max, o) => Math.max(max, Number(o.id.split("-")[1])), 1000);
-
-  db.orders.push({
-    id: "NT-" + (highest + 1),
-    customerId: customer.id,
-    item: form.item.value.trim(),
-    fabricId: fabric.id,
-    yards: yards,
-    price: Number(form.price.value),
-    dueDate: form.dueDate.value,
-    stage: "cutting", // every new order starts at the first stage
-    created: today()
+  const order = createPaidOrder({
+    customerId: customer.id, outfit: form.outfit.value, colour: form.colour.value, embroidery: form.embroidery.value,
+    sleeve: form.sleeve.value, neck: form.neck.value, profileId: profile ? profile.id : null,
+    fabric, metres, quote, deposit, method: form.method.value, dueDate: form.dueDate.value
   });
+  pendingFabricId = null;
+  saveData();
+  toast(`Order ${order.id} created — quote ${money(quote.total)}, deposit ${money(deposit)}.${profile ? "" : " Add measurements for this customer."}`);
+  go("biz/orders/" + order.id);
+  return false;
+}
 
-  fabric.stock -= yards; // take the fabric out of stock
+function deleteOrder(orderId) {
+  if (!confirm(`Delete order ${orderId} and its payments? Its fabric goes back into stock.`)) return;
+  const order = findOrder(orderId);
+  const fabric = findFabric(order.fabric_id);
+  if (fabric) fabric.metres_available = Math.round((fabric.metres_available + order.fabric_metres) * 10) / 10;
+  db.orders = db.orders.filter(o => o.id !== orderId);
+  db.payments = db.payments.filter(p => p.order_id !== orderId);
+  db.invoices = db.invoices.filter(i => i.order_id !== orderId);
+  db.deliveries = db.deliveries.filter(d => d.order_id !== orderId);
+  db.wedding_orders.forEach(w => w.members.forEach(m => { if (m.order_id === orderId) m.order_id = ""; }));
+  saveData();
+  go("biz/orders");
+}
 
+// ---- One order, in full ----
+
+function renderOrderDetail(orderId) {
+  const order = findOrder(orderId);
+  if (!order) return `${bizHeader("Order not found")}<p><a href="#/biz/orders">← All orders</a></p>`;
+
+  const customer = findCustomer(order.customer_id);
+  const fabric = findFabric(order.fabric_id);
+  const supplier = findSupplier(order.fabric_supplier_id);
+  const profile = findProfile(order.measurement_profile_id);
+  const delivery = findDelivery(order.id);
+  const balance = balanceOwed(order);
+  const index = stageIndex(order);
+  const next = STAGES[index + 1];
+
+  // What the "next" button does depends on the step
+  let nextAction = "";
+  if (!next) {
+    nextAction = `<span class="paid">✓ Delivered${order.review_rating ? " and reviewed" : " — waiting for the customer's review"}</span>`;
+  } else if (next.key === "balance_paid" && balance > 0) {
+    nextAction = `<span class="owed">Waiting for the balance of ${money(balance)}.</span> Record it under Payments below.`;
+  } else if (next.key === "delivered" && !delivery) {
+    nextAction = `<form class="inline-form" onsubmit="return dispatchFromDetail(event, '${order.id}')">
+      <select name="courier"><option>DHL</option><option>Royal Mail</option></select>
+      <button type="submit">Dispatch order</button></form>`;
+  } else if (next.key === "delivered") {
+    nextAction = `<button onclick="advanceDeliveryFor('${order.id}')">Parcel: ${escapeHtml(delivery.status)} → ${escapeHtml(DELIVERY_STATUSES[DELIVERY_STATUSES.indexOf(delivery.status) + 1])} ▶</button>`;
+  } else {
+    nextAction = `<button onclick="advanceFromDetail('${order.id}')">Mark ${escapeHtml(next.label.toLowerCase())} done ▶</button>`;
+  }
+
+  const staffSelects = STAFF_ROLES.map(role => `
+    <label>${role.label}
+      <select onchange="assignStaff('${order.id}', '${role.key}', this.value)">
+        <option value="">— unassigned —</option>
+        ${db.staff.filter(s => s.role === role.key).map(s => `<option value="${s.id}" ${order.assigned_staff[role.key] === s.id ? "selected" : ""}>${escapeHtml(s.name)}</option>`).join("")}
+      </select>
+    </label>`).join("");
+
+  const payments = db.payments.filter(p => p.order_id === order.id).map(p =>
+    `<tr><td>${formatDate(p.date)}</td><td>${escapeHtml(p.kind)}</td><td>${escapeHtml(p.method)}</td><td>${money(p.amount)}</td></tr>`).join("");
+
+  return `
+    <p><a href="#/biz/orders">← All orders</a></p>
+    ${bizHeader(`Order ${order.id} ${stageBadge(order)}`, `${escapeHtml(order.outfit_type)} for <a href="#/biz/customers/${order.customer_id}">${escapeHtml(customer ? customer.name : "Unknown")}</a> · placed ${formatDate(order.created_at)} · due ${formatDate(order.due_date)}`)}
+
+    <div class="two-col">
+      <div class="card">
+        <h2>Progress — step ${Math.min(stepsDone(order) + 1, LIFECYCLE.length)} of ${LIFECYCLE.length}</h2>
+        ${lifecycleList(order)}
+        <div class="job-buttons">
+          <button class="small" onclick="backFromDetail('${order.id}')" ${canMoveBack(order) ? "" : "disabled"}>◀ Back a step</button>
+          ${nextAction}
+        </div>
+      </div>
+
+      <div class="stack">
+        <div class="card">
+          <h2>Design</h2>
+          <div class="design-row">
+            <div class="thumb big">${conceptSVG({ outfit: order.outfit_type, colour: order.colour, embroidery: order.embroidery, sleeve: order.sleeve_style, neck: order.neck_style }, order.concept_variation)}</div>
+            <div>
+              <div class="kv"><span>Outfit</span><b>${escapeHtml(order.outfit_type)}</b></div>
+              <div class="kv"><span>Colour</span><b>${escapeHtml(colourName(order.colour))}</b></div>
+              <div class="kv"><span>Embroidery</span><b>${escapeHtml(order.embroidery)}</b></div>
+              <div class="kv"><span>Sleeve</span><b>${escapeHtml(order.sleeve_style)}</b></div>
+              <div class="kv"><span>Neck</span><b>${escapeHtml(order.neck_style)}</b></div>
+              <div class="kv"><span>Fabric</span><b>${escapeHtml(fabric ? fabric.name : "—")}, ${order.fabric_metres} m</b></div>
+              <div class="kv"><span>Supplier</span><b>${escapeHtml(supplier ? supplier.name : "—")}</b></div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <h2>Measurements ${profile ? `<small class="muted">${escapeHtml(profile.label)} profile</small>` : ""}</h2>
+          ${profile ? `<div class="measure-list">${MEASUREMENT_FIELDS.map(f => `<div><span>${f.label}</span><strong>${profile[f.key] != null ? profile[f.key] + '"' : "—"}</strong></div>`).join("")}</div>`
+            : `<p class="empty">No measurements yet. <a href="#/biz/measurements">Add them</a>.</p>`}
+        </div>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div class="card">
+        <h2>Production team</h2>
+        <div class="form-grid">${staffSelects}</div>
+      </div>
+      <div class="card">
+        <h2>Payments <span class="total">${balance > 0 ? `Balance ${money(balance)}` : "Paid in full"}</span></h2>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Date</th><th>Type</th><th>Method</th><th>Amount</th></tr></thead>
+          <tbody>${payments}</tbody>
+        </table></div>
+        ${balance > 0 ? `<form class="inline-form" onsubmit="return payFromDetail(event, '${order.id}')">
+          <input name="amount" type="number" min="0.01" max="${balance}" step="0.01" value="${balance}" aria-label="Amount">
+          <select name="method">${PAYMENT_METHODS.map(m => `<option>${m}</option>`).join("")}</select>
+          <button type="submit">Record payment</button>
+        </form>` : ""}
+        <p><a href="#/biz/invoices/${order.id}">View invoice →</a>${delivery ? ` · Tracking ${escapeHtml(delivery.courier)} ${escapeHtml(delivery.tracking_number)}` : ""}</p>
+        ${order.review_rating ? `<p class="review"><span class="gold">${"★".repeat(order.review_rating)}</span> ${escapeHtml(order.review_text)}</p>` : ""}
+      </div>
+    </div>
+  `;
+}
+
+function advanceFromDetail(orderId) {
+  const problem = advanceOrder(findOrder(orderId));
+  if (problem) { alert(problem); return; }
   saveData();
   renderAll();
 }
 
-function deleteOrder(orderId) {
-  if (!confirm(`Delete order ${orderId} and its payments?`)) {
-    return;
-  }
+function backFromDetail(orderId) {
+  moveOrderBack(findOrder(orderId));
+  saveData();
+  renderAll();
+}
+
+function assignStaff(orderId, role, staffId) {
   const order = findOrder(orderId);
-  const fabric = findFabric(order.fabricId);
-  if (fabric) {
-    fabric.stock += order.yards; // put the fabric back in stock
+  order.assigned_staff[role] = staffId;
+  order.updated_at = today();
+  saveData();
+  toast("Assignment saved.");
+  renderAll();
+}
+
+function payFromDetail(event, orderId) {
+  event.preventDefault();
+  const order = findOrder(orderId);
+  const amount = Number(event.target.amount.value);
+  if (amount > balanceOwed(order)) {
+    alert(`That is more than the ${money(balanceOwed(order))} still owed.`);
+    return false;
   }
-  db.orders = db.orders.filter(o => o.id !== orderId);
-  db.payments = db.payments.filter(p => p.orderId !== orderId);
+  recordOrderPayment(order, amount, event.target.method.value);
+  saveData();
+  renderAll();
+  return false;
+}
+
+function dispatchFromDetail(event, orderId) {
+  event.preventDefault();
+  const delivery = dispatchOrder(findOrder(orderId), event.target.courier.value);
+  saveData();
+  toast(`Dispatched with ${delivery.courier}: ${delivery.tracking_number}`);
+  renderAll();
+  return false;
+}
+
+function advanceDeliveryFor(orderId) {
+  advanceDelivery(findDelivery(orderId));
   saveData();
   renderAll();
 }
