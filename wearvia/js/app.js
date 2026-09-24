@@ -4,6 +4,7 @@
 // Addresses look like:
 //   #/home, #/outfit, #/tracking/NT-1003     → customer app
 //   #/biz/dashboard, #/biz/orders/NT-1003    → business dashboard
+//   #/seller/fabrics, #/seller/edit/F12      → fabric seller area
 // ============================================================
 
 const BIZ_TABS = [
@@ -14,6 +15,7 @@ const BIZ_TABS = [
   { key: "customers", label: "Customers", render: renderCustomers },
   { key: "measurements", label: "Measurements", render: renderMeasurements },
   { key: "fabrics", label: "Fabric Inventory", render: renderFabrics },
+  { key: "sellers", label: "Fabric Sellers", render: renderSellerFabrics },
   { key: "payments", label: "Payments", render: renderPayments },
   { key: "weddings", label: "Wedding Orders", render: renderWeddings },
   { key: "shop", label: "Ready to Wear", render: renderShop },
@@ -50,6 +52,9 @@ function currentRoute() {
   if (parts[0] === "biz") {
     return { area: "business", screen: parts[1] || "dashboard", id: parts[2] };
   }
+  if (parts[0] === "seller") {
+    return { area: "seller", screen: parts[1] || "fabrics", id: parts[2] };
+  }
   return { area: "customer", screen: parts[0] || "home", id: parts[1] };
 }
 
@@ -57,13 +62,19 @@ function currentRoute() {
 function renderAll() {
   const route = currentRoute();
   const isBusiness = route.area === "business";
-  document.getElementById("customer-view").hidden = isBusiness;
+  const isSeller = route.area === "seller";
+  const isCustomer = route.area === "customer";
+  document.getElementById("customer-view").hidden = !isCustomer;
   document.getElementById("business-view").hidden = !isBusiness;
-  document.getElementById("mode-customer").classList.toggle("on", !isBusiness);
+  document.getElementById("seller-view").hidden = !isSeller;
+  document.getElementById("mode-customer").classList.toggle("on", isCustomer);
+  document.getElementById("mode-seller").classList.toggle("on", isSeller);
   document.getElementById("mode-business").classList.toggle("on", isBusiness);
   document.body.classList.toggle("in-business", isBusiness);
 
-  if (isBusiness) {
+  if (isSeller) {
+    renderSellerArea(route.screen, route.id);
+  } else if (isBusiness) {
     const tab = BIZ_TABS.find(t => t.key === route.screen) || BIZ_TABS[0];
     document.getElementById("biz-tabs").innerHTML = BIZ_TABS.map(t =>
       `<a class="tab ${t.key === tab.key ? "active" : ""}" href="#/biz/${t.key}">${t.label}</a>`).join("");
@@ -112,7 +123,10 @@ window.addEventListener("hashchange", () => {
   if (inner) inner.scrollTop = 0;
 });
 
+db = loadData();
 document.getElementById("app-name").textContent = APP_NAME;
 document.getElementById("shop-name").textContent = SHOP_NAME;
 if (!location.hash) history.replaceState(null, "", "#/home");
 renderAll();
+// Uploaded photos load from the browser's photo store a moment later; draw again when they're in
+PhotoStore.ready.then(renderAll);

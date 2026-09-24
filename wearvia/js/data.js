@@ -290,9 +290,13 @@ function buildSampleData() {
     counters: { order: 1008, payment: 0, invoice: 0 }
   };
 
+  // Independent fabric sellers and their market stalls (sellers-data.js)
+  addSampleSellers(data);
+  data.sample_sellers_added = true;
+
   // Build sample orders through the same quote maths as the real flow
   const samples = [
-    { id: "NT-1001", customer: "C1", outfit: "Dress",     colour: "#c9a24a", embroidery: "None",   sleeve: "Fitted", neck: "V-neck", fabric: "F6",  metres: 4, stage: "sewing",          created: -14, due: 7,   method: "Card" },
+    { id: "NT-1001", customer: "C1", outfit: "Dress",     colour: "#c9a24a", embroidery: "None",   sleeve: "Fitted", neck: "V-neck", fabric: "F11",  metres: 4, stage: "sewing",          created: -14, due: 7,   method: "Card" },
     { id: "NT-1002", customer: "C2", outfit: "Suit",      colour: "#1e2a44", embroidery: "None",   sleeve: "Fitted", neck: "V-neck", fabric: "F7",  metres: 4, stage: "cutting",         created: -16, due: -2,  method: "Bank transfer" },
     { id: "NT-1003", customer: "C3", outfit: "Agbada",    colour: "#c9a24a", embroidery: "Gold",   sleeve: "Wide",   neck: "Round",  fabric: "F8",  metres: 7, stage: "quality_control", created: -24, due: 3,   method: "Bank transfer" },
     { id: "NT-1004", customer: "C4", outfit: "Senator",   colour: "#1e2a44", embroidery: "Silver", sleeve: "Fitted", neck: "Round",  fabric: "F5",  metres: 4, stage: "balance_paid",    created: -21, due: 1,   method: "Card", paidInFull: true, delivery: "In transit" },
@@ -356,19 +360,19 @@ function buildSampleData() {
 
 // ---- Load and save (uses the browser's localStorage) ----
 
-// "db" holds all the app's data while it runs
-let db = loadData();
+// "db" holds all the app's data while it runs. app.js loads it once every script is ready.
+let db = null;
 
 function loadData() {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
-      return JSON.parse(saved);
+      return upgradeData(JSON.parse(saved));
     }
   } catch (error) {
     console.warn("Could not load saved data, using sample data.", error);
   }
-  return buildSampleData();
+  return upgradeData(buildSampleData());
 }
 
 function saveData() {
@@ -376,12 +380,14 @@ function saveData() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
   } catch (error) {
     console.warn("Could not save data.", error);
+    if (typeof toast === "function") toast("Couldn't save — this browser's storage is full.");
   }
 }
 
 function resetSampleData() {
   if (confirm("This will erase your changes and restore the sample data. Continue?")) {
-    db = buildSampleData();
+    db = upgradeData(buildSampleData());
+    PhotoStore.clear();
     saveData();
     go("home");
     renderAll();
@@ -554,6 +560,7 @@ function createPaidOrder(details) {
   db.orders.push(order);
   db.payments.push({ id: nextPaymentId(), order_id: id, amount: details.deposit, method: details.method, kind: "Deposit", date: today() });
   db.invoices.push({ id: "INV-" + id.split("-")[1], order_id: id, line_items: order.line_items, total: order.quote_total, created_at: today() });
+  recordFabricOrder(order); // the fabric seller sees it in their orders
   if (details.deposit >= order.quote_total) order.balance_paid_at = today();
   return order;
 }

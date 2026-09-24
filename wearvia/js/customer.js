@@ -74,6 +74,7 @@ function cNav(active) {
     ${item("home", "🏠", "Home")}
     ${item("orders", "📦", "Orders")}
     <button class="plus" onclick="go('outfit')" aria-label="Start an order">+</button>
+    ${item("market", "🧶", "Fabrics")}
     ${item("designers", "🧵", "Shop")}
     ${item("profile", "👤", "Profile")}
   </nav>`;
@@ -148,8 +149,10 @@ function screenHome() {
       <h2>Your Style.<br>Our Craft.<br>Timeless You.</h2>
       ${resume ? `<button class="btn" onclick="go('${resume.screen}')">Continue your ${escapeHtml(d.outfit)} order</button>` : ""}
       <button class="${resume ? "btn2" : "btn"}" onclick="go('outfit')">Start an Order</button>
-      <button class="btn2" onclick="go('designers')">Explore Marketplace</button>
+      <button class="btn2" onclick="go('market')">Fabric Marketplace</button>
+      <button class="btn2" onclick="go('designers')">Explore Designers</button>
       <button class="btn2" onclick="go('biz/dashboard')">Business Dashboard</button>
+      <button class="linkish on-navy" onclick="go('seller')">Sell your fabric on ${APP_NAME} →</button>
     </div>
     ${cNav("home")}`;
 }
@@ -306,6 +309,7 @@ function saveFlowMeasurements(event) {
 }
 
 // ---- Screen 6: Fabric marketplace (step 4) ----
+// The photo grid and filters are in marketplace.js
 
 function screenFabric() {
   const d = draft();
@@ -320,56 +324,44 @@ function screenFabric() {
         <button class="linkish" onclick="changeFabric()">Change fabric (returns ${d.metres} m to stock)</button>
       </div>`;
   }
-  const categories = ["All"];
-  db.fabrics.forEach(f => { if (!categories.includes(f.category)) categories.push(f.category); });
-  const shown = db.fabrics.filter(f => d.fabricFilter === "All" || f.category === d.fabricFilter);
-  const selected = findFabric(d.fabricId);
-  const enough = selected && d.metres <= selected.metres_available;
+  marketMode = "flow";
+  let selected = findFabric(d.fabricId);
+  let gone = "";
+  if (selected && !isBuyable(selected)) {
+    gone = `<div class="notice">${escapeHtml(selected.name)} is no longer available. Please choose another fabric.</div>`;
+    d.fabricId = null;
+    selected = null;
+  }
+  const seller = selected ? findSupplier(selected.supplier_id) : null;
+  const enough = selected && d.metres <= selected.metres_available && d.metres >= selected.min_order_metres;
 
   return `
     ${cTop("Fabric Marketplace", "measurements")}
     <div class="content">
       ${flowBar("fabric")}
-      <div class="optbtns scroll">${categories.map(c => `<button class="optbtn ${d.fabricFilter === c ? "sel" : ""}" onclick="setFabricFilterC('${escapeHtml(c)}')">${escapeHtml(c)}</button>`).join("")}</div>
-      ${shown.map(f => {
-        const supplier = findSupplier(f.supplier_id);
-        const low = f.metres_available < LOW_STOCK_METRES;
-        const out = f.metres_available < f.min_order_metres;
-        return `<button class="fab-card ${d.fabricId === f.id ? "sel" : ""}" onclick="selectFabricC('${f.id}')" ${out ? "disabled" : ""}>
-          <div class="swatch" style="background:${f.color}"></div>
-          <div class="row-between"><span class="name">${escapeHtml(f.name)}</span><span class="price">${money(f.price_per_metre)} / metre</span></div>
-          <div class="meta">Sold by ${escapeHtml(supplier.name)}, ${escapeHtml(supplier.location)} · ${escapeHtml(supplier.delivery_estimate)}</div>
-          <div class="meta stock ${low ? "low" : ""}">${out ? "Out of stock" : `${f.metres_available} m left${low ? " · low stock" : ""}`}</div>
-        </button>`;
-      }).join("")}
+      ${gone}
+      ${marketFilterBar()}
+      <div id="market-results" class="stack">${marketResults()}</div>
       ${selected ? `
-        <div class="qty">
-          <span>Metres of ${escapeHtml(selected.name)}</span>
-          <span class="stepper">
-            <button type="button" onclick="changeMetres(-0.5)" aria-label="Less">−</button>
-            <b>${d.metres}</b>
-            <button type="button" onclick="changeMetres(0.5)" aria-label="More">+</button>
-          </span>
-        </div>
-        <div class="qline"><span>${d.metres} m × ${money(selected.price_per_metre)}</span><span>${money(d.metres * selected.price_per_metre)}</span></div>
-        ${enough ? "" : `<div class="meta low">Only ${selected.metres_available} m in stock.</div>`}` : ""}
-      <button class="cta" onclick="buyFabric()" ${selected && enough ? "" : "disabled"}>${selected ? "Buy Fabric →" : "Choose a fabric"}</button>
+        <div class="pick-bar">
+          <div class="pick-head">
+            <img src="${fabricCoverUrl(selected)}" alt="">
+            <div><div class="name">${escapeHtml(selected.name)}</div>
+              <div class="meta">${escapeHtml(seller ? seller.name : "")} · ${money(selected.price_per_metre)} / m · ${selected.metres_available} m left</div></div>
+          </div>
+          <div class="qty">
+            <span>Metres</span>
+            <span class="stepper">
+              <button type="button" onclick="changeMetres(-0.5)" aria-label="Less">−</button>
+              <b>${d.metres}</b>
+              <button type="button" onclick="changeMetres(0.5)" aria-label="More">+</button>
+            </span>
+            <b>${money(d.metres * selected.price_per_metre)}</b>
+          </div>
+          ${enough ? "" : `<div class="meta low">Only ${selected.metres_available} m in stock.</div>`}
+          <button class="cta" onclick="buyFabric()" ${enough ? "" : "disabled"}>Buy Fabric →</button>
+        </div>` : `<div class="pick-bar"><button class="cta" disabled>Tap a fabric to choose it</button></div>`}
     </div>`;
-}
-
-function setFabricFilterC(category) {
-  draft().fabricFilter = category;
-  saveData();
-  renderAll();
-}
-
-function selectFabricC(fabricId) {
-  const d = draft();
-  const fabric = findFabric(fabricId);
-  d.fabricId = fabricId;
-  d.metres = Math.min(Math.max(findOutfit(d.outfit).metres, fabric.min_order_metres), fabric.metres_available);
-  saveData();
-  renderAll();
 }
 
 function changeMetres(delta) {
@@ -390,7 +382,11 @@ function changeFabric() {
 function buyFabric() {
   const d = draft();
   const fabric = findFabric(d.fabricId);
-  if (!fabric || d.metres > fabric.metres_available) return;
+  if (!fabric || !isBuyable(fabric) || d.metres > fabric.metres_available || d.metres < fabric.min_order_metres) {
+    toast("That fabric isn't available in that amount any more.");
+    renderAll();
+    return;
+  }
   fabric.metres_available = Math.round((fabric.metres_available - d.metres) * 10) / 10;
   d.purchased = true;
   d.quoteReady = false;
@@ -703,6 +699,10 @@ function screenDesigners() {
         <div class="meta">${escapeHtml(d.speciality_tags.join(", "))}</div>
       </button>
       <div class="empty">${escapeHtml(SHOP_NAME)} is the first designer on ${APP_NAME}. More designers are joining soon.</div>
+      <button class="fab-card" onclick="go('market')">
+        <div class="name">Fabric Marketplace</div>
+        <div class="meta">${activeFabrics().filter(isOnMarket).length} fabrics from ${new Set(activeFabrics().filter(isOnMarket).map(f => f.supplier_id)).size} independent sellers</div>
+      </button>
     </div>
     ${cNav("designers")}`;
 }
@@ -838,6 +838,8 @@ const CUSTOMER_SCREENS = {
   concept: screenConcept,
   measurements: screenMeasurements,
   fabric: screenFabric,
+  market: screenMarket,
+  fabricView: screenFabricView,
   fabricPurchase: screenFabricPurchase,
   quote: screenQuote,
   payment: screenPayment,

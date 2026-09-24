@@ -8,24 +8,24 @@ let fabricFilter = "All";
 
 function renderFabrics() {
   const categories = ["All"];
-  db.fabrics.forEach(f => { if (!categories.includes(f.category)) categories.push(f.category); });
-  const visible = db.fabrics.filter(f => fabricFilter === "All" || f.category === fabricFilter);
-  const low = db.fabrics.filter(f => f.metres_available < LOW_STOCK_METRES);
+  activeFabrics().forEach(f => { if (!categories.includes(f.category)) categories.push(f.category); });
+  const visible = activeFabrics().filter(f => fabricFilter === "All" || f.category === fabricFilter);
+  const low = activeFabrics().filter(f => f.status === "approved" && f.metres_available < LOW_STOCK_METRES);
 
   const cards = visible.map(fabric => {
     const supplier = findSupplier(fabric.supplier_id);
     const isLow = fabric.metres_available < LOW_STOCK_METRES;
     return `
       <div class="fabric-card">
-        <div class="swatch" style="background:${escapeHtml(fabric.color)}"></div>
+        <img class="swatch photo" src="${fabricCoverUrl(fabric)}" alt="" loading="lazy">
         <div class="fabric-info">
-          <h3>${escapeHtml(fabric.name)}</h3>
+          <h3>${escapeHtml(fabric.name)} ${fabric.status !== "approved" || isSoldOut(fabric) ? sellerStatusBadge(fabric) : ""}</h3>
           <p>${escapeHtml(fabric.category)} · ${escapeHtml(supplier ? supplier.name + ", " + supplier.location : "—")}</p>
           <p><strong class="gold">${money(fabric.price_per_metre)}</strong> per metre · min ${fabric.min_order_metres} m · ${escapeHtml(supplier ? supplier.delivery_estimate : "")}</p>
           <p class="${isLow ? "owed" : ""}"><b>${fabric.metres_available} m</b> in stock${isLow ? " — low stock!" : ""}</p>
           <div class="job-buttons">
             <button class="small" onclick="restockFabric('${fabric.id}', 10)">Restock +10 m</button>
-            <button class="small" onclick="chooseFabric('${fabric.id}')" ${fabric.metres_available <= 0 ? "disabled" : ""}>Use in an order</button>
+            <button class="small" onclick="chooseFabric('${fabric.id}')" ${isSoldOut(fabric) ? "disabled" : ""}>Use in an order</button>
           </div>
         </div>
       </div>`;
@@ -33,10 +33,10 @@ function renderFabrics() {
 
   const supplierRows = db.suppliers.map(s => `<tr>
     <td>${escapeHtml(s.name)}</td><td>${escapeHtml(s.location)}</td><td>${escapeHtml(s.delivery_estimate)}</td><td>⭐ ${s.rating}</td>
-    <td>${db.fabrics.filter(f => f.supplier_id === s.id).map(f => escapeHtml(f.name)).join(", ") || "—"}</td></tr>`).join("");
+    <td>${sellerFabrics(s.id).map(f => escapeHtml(f.name)).join(", ") || "—"}</td></tr>`).join("");
 
   return `
-    ${bizHeader("Fabric Inventory — Live", "Stock goes down automatically when a customer buys fabric for an order.")}
+    ${bizHeader("Fabric Inventory — Live", "Stock goes down automatically when a customer buys fabric for an order. Fabrics from independent sellers are checked in the Fabric Sellers tab.")}
     ${low.length ? `<div class="alerts"><span class="alert">⚠ Low stock (under ${LOW_STOCK_METRES} m): ${low.map(f => `${escapeHtml(f.name)} (${f.metres_available} m)`).join(", ")}</span></div>` : ""}
     <div class="chips">${categories.map(c => `<button class="chip ${c === fabricFilter ? "active" : ""}" onclick="setFabricFilter('${escapeHtml(c)}')">${escapeHtml(c)}</button>`).join("")}</div>
     <div class="fabric-grid">${cards}</div>
@@ -57,7 +57,7 @@ function renderFabrics() {
         </form>
       </div>
       <div class="card">
-        <h2>Suppliers</h2>
+        <h2>Suppliers <a class="total" href="#/biz/sellers">Seller approvals →</a></h2>
         <div class="table-wrap"><table>
           <thead><tr><th>Supplier</th><th>Location</th><th>Delivery</th><th>Rating</th><th>Fabrics</th></tr></thead>
           <tbody>${supplierRows}</tbody>
@@ -75,6 +75,7 @@ function setFabricFilter(category) {
 function restockFabric(fabricId, metres) {
   const fabric = findFabric(fabricId);
   fabric.metres_available = Math.round((fabric.metres_available + metres) * 10) / 10;
+  fabric.updated_at = today();
   saveData();
   toast(`${fabric.name}: ${fabric.metres_available} m in stock.`);
   renderAll();
@@ -83,11 +84,13 @@ function restockFabric(fabricId, metres) {
 function addFabric(event) {
   event.preventDefault();
   const form = event.target;
-  const highest = db.fabrics.reduce((max, f) => Math.max(max, Number(f.id.slice(1))), 0);
   db.fabrics.push({
-    id: "F" + (highest + 1), name: form.name.value.trim(), category: form.category.value.trim(), color: form.color.value,
+    id: nextFabricId(), name: form.name.value.trim(), category: form.category.value.trim(), color: form.color.value,
     price_per_metre: Number(form.price.value), supplier_id: form.supplier.value,
-    metres_available: Number(form.stock.value), min_order_metres: Number(form.min.value)
+    metres_available: Number(form.stock.value), min_order_metres: Number(form.min.value),
+    // Added by the shop itself, so it's live straight away
+    colour_name: nearestColourName(form.color.value), description: "", photos: [],
+    status: "approved", sold_out: false, deleted_at: null, created_at: today(), review_note: ""
   });
   saveData();
   renderAll();

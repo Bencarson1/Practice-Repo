@@ -19,7 +19,8 @@ function renderDashboard() {
   const totals = businessTotals();
   const open = db.orders.filter(isOpen);
   const late = open.filter(isLate);
-  const lowStock = db.fabrics.filter(f => f.metres_available < LOW_STOCK_METRES);
+  const lowStock = activeFabrics().filter(f => f.status === "approved" && f.metres_available < LOW_STOCK_METRES);
+  const waitingFabrics = activeFabrics().filter(f => f.status === "pending");
   const awaitingReview = db.orders.filter(o => o.stage === "delivered" && !o.review_rating);
 
   const dueSoon = open.slice().sort((a, b) => a.due_date.localeCompare(b.due_date)).slice(0, 6);
@@ -41,7 +42,8 @@ function renderDashboard() {
       <div class="stat"><div class="l">Pending Payments</div><div class="n">${money(totals.pending)}</div><div class="l">balances owed</div></div>
     </div>
 
-    ${late.length || lowStock.length || awaitingReview.length ? `<div class="alerts">
+    ${late.length || lowStock.length || awaitingReview.length || waitingFabrics.length ? `<div class="alerts">
+      ${waitingFabrics.length ? `<a class="alert" href="#/biz/sellers">🧶 ${waitingFabrics.length} seller fabric${waitingFabrics.length > 1 ? "s" : ""} to approve</a>` : ""}
       ${late.length ? `<a class="alert" href="#/biz/orders">⚠ ${late.length} late order${late.length > 1 ? "s" : ""}</a>` : ""}
       ${lowStock.length ? `<a class="alert" href="#/biz/fabrics">⚠ Low stock: ${lowStock.map(f => escapeHtml(f.name)).join(", ")}</a>` : ""}
       ${awaitingReview.length ? `<span class="alert soft">${awaitingReview.length} delivered order${awaitingReview.length > 1 ? "s" : ""} awaiting a review</span>` : ""}
@@ -51,6 +53,7 @@ function renderDashboard() {
       <a class="optbtn" href="#/biz/orders">All Orders (live)</a>
       <a class="optbtn" href="#/biz/team">Tailor Team</a>
       <a class="optbtn" href="#/biz/fabrics">Inventory</a>
+      <a class="optbtn" href="#/biz/sellers">Fabric Sellers</a>
       <a class="optbtn" href="#/biz/customers">Customers</a>
       <a class="optbtn" href="#/biz/weddings">Wedding Order</a>
       <a class="optbtn" href="#/biz/shop">Ready to Wear</a>
@@ -101,7 +104,7 @@ function answerQuestion(question) {
     return `${late.length} late order${late.length > 1 ? "s" : ""}: ${late.map(o => `#${o.id} (${daysLate(o)} day${daysLate(o) === 1 ? "" : "s"}, now ${escapeHtml(currentStepLabel(o).toLowerCase())})`).join(", ")}.`;
   }
   if (q.includes("stock") || q.includes("fabric") || q.includes("inventory")) {
-    const low = db.fabrics.filter(f => f.metres_available < LOW_STOCK_METRES);
+    const low = activeFabrics().filter(f => f.status === "approved" && f.metres_available < LOW_STOCK_METRES);
     return low.length ? `Running low: ${low.map(f => `${escapeHtml(f.name)} (${f.metres_available} m)`).join(", ")}. Restock from Fabric Inventory.` : "All fabrics are above the low-stock level.";
   }
   if (q.includes("owe") || q.includes("balance") || q.includes("pending") || q.includes("payment") || q.includes("unpaid")) {
