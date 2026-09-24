@@ -72,17 +72,19 @@ function sellerWelcome() {
       </div>
       <div class="card">
         <h2>Already selling?</h2>
+        ${Cloud.live ? `<p class="hint">Your shop opens here once you've created it. Signed in with a different email? Sign out and sign in with the one your shop uses.</p>` : `
         <p class="hint">Choose your shop to sign in. (Demo: there are no passwords yet.)</p>
         <div class="shop-list">${shops.map(s => `
           <button class="shop-pick" onclick="sellerSignIn('${s.id}')">
             <img class="logo" src="${sellerLogoUrl(s)}" alt="">
             <span><b>${escapeHtml(s.name)}</b><small>${escapeHtml(s.location)} · ${sellerFabrics(s.id).length} fabric${sellerFabrics(s.id).length === 1 ? "" : "s"}</small></span>
-          </button>`).join("")}</div>
+          </button>`).join("")}</div>`}
       </div>
     </div>`;
 }
 
 function sellerSignIn(sellerId) {
+  if (Cloud.live && !sellerId) { Auth.signOut(); return; }
   db.session.sellerId = sellerId || null;
   sellerForm = null;
   saveData();
@@ -104,7 +106,8 @@ function sellerShopStrip(seller) {
 // ---- My fabrics: the market stall ----
 
 function sellerStall(seller) {
-  const fabrics = sellerFabrics(seller.id).slice().sort((a, b) => Number(b.id.slice(1)) - Number(a.id.slice(1)));
+  const fabrics = sellerFabrics(seller.id).slice().sort((a, b) =>
+    String(b.created_at || "").localeCompare(String(a.created_at || "")) || (Number(b.id.slice(1)) || 0) - (Number(a.id.slice(1)) || 0));
   const counts = {
     Live: fabrics.filter(f => f.status === "approved" && !isSoldOut(f)).length,
     Waiting: fabrics.filter(f => f.status === "pending").length,
@@ -330,7 +333,7 @@ function saveStallFabric(event, fabricId) {
     })
     .catch(error => {
       console.warn(error);
-      formError("fabric-form-error", "Couldn't save the photos — this browser's storage may be full. Try fewer or smaller photos.");
+      formError("fabric-form-error", Cloud.live ? "Couldn't upload the photos: " + (error.message || "please try again.") : "Couldn't save the photos — this browser's storage may be full. Try fewer or smaller photos.");
       if (button) { button.disabled = false; button.textContent = fabricId ? "Save changes" : "Send for approval"; }
     })
     .finally(() => { sellerSaving = false; });
@@ -347,14 +350,14 @@ function sellerOrdersScreen(seller) {
   const metres = live.reduce((total, o) => total + o.metres, 0);
   const cards = rows.map(o => {
     const fabric = findFabric(o.fabric_id);
-    const first = customerName(o.customer_id).split(" ")[0];
+    const first = o.customer_first_name || customerName(o.customer_id).split(" ")[0];
     const statusLabel = { new: "To send", sent: `Sent ${formatDate(o.sent_at)}`, cancelled: "Cancelled" }[o.status];
     return `
       <div class="sorder ${o.status}">
         <img src="${fabric ? fabricCoverUrl(fabric) : ""}" alt="">
         <div class="sorder-main">
           <div class="row-between"><b>${escapeHtml(o.fabric_name)}</b><span class="badge sstatus-${o.status}">${statusLabel}</span></div>
-          <div class="muted small-text">${escapeHtml(o.id)} · ordered ${formatDate(o.created_at)} · for ${escapeHtml(first)}'s outfit</div>
+          <div class="muted small-text">${escapeHtml(o.ref || o.id)} · ordered ${formatDate(o.created_at)} · for ${escapeHtml(first)}'s outfit</div>
           <div>${o.metres} m × ${money(o.price_per_metre)} = <b>${money(o.total)}</b></div>
           <div class="muted small-text">Send to: ${escapeHtml(o.deliver_to)}</div>
           ${o.status === "new" ? `<div class="job-buttons"><button class="small gold" onclick="sellerMarkSent('${o.id}')">Mark as sent</button></div>` : ""}
@@ -376,7 +379,7 @@ function sellerMarkSent(fabricOrderId) {
   const row = markFabricOrderSent(fabricOrderId);
   if (!row) return;
   saveData();
-  toast(`${row.id} marked as sent to ${SHOP_NAME}.`);
+  toast(`${row.ref || row.id} marked as sent to ${SHOP_NAME}.`);
   renderAll();
 }
 
@@ -469,7 +472,7 @@ function saveSellerProfileForm(event) {
   const oldLogo = seller ? seller.logo : null;
   const logo = sellerForm.logo;
   sellerSaving = true;
-  Promise.resolve(logo ? (logo.ref || PhotoStore.put(logo.url)) : null)
+  Promise.resolve(logo ? (logo.ref || PhotoStore.put(logo.url, "logo")) : null)
     .then(ref => {
       values.logo = ref;
       const saved = saveSellerProfile(seller ? seller.id : null, values);
@@ -487,7 +490,7 @@ function saveSellerProfileForm(event) {
     })
     .catch(error => {
       console.warn(error);
-      formError("profile-form-error", "Couldn't save the logo — this browser's storage may be full.");
+      formError("profile-form-error", Cloud.live ? "Couldn't upload the logo: " + (error.message || "please try again.") : "Couldn't save the logo — this browser's storage may be full.");
     })
     .finally(() => { sellerSaving = false; });
   return false;

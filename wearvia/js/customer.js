@@ -96,12 +96,13 @@ function flash() {
 
 // ---- Changing earlier choices undoes later steps ----
 
-// Puts purchased fabric back in stock if the customer changes their mind
+// Puts purchased fabric back in stock if the customer changes their mind.
+// (In live mode stock only goes down when the deposit is paid, so there's nothing to put back.)
 function returnDraftFabric() {
   const d = draft();
   if (!d.purchased) return;
   const fabric = findFabric(d.fabricId);
-  if (fabric) {
+  if (fabric && !Cloud.live) {
     fabric.metres_available = Math.round((fabric.metres_available + d.metres) * 10) / 10;
     toast(`${d.metres} m of ${fabric.name} returned to stock.`);
   }
@@ -152,7 +153,7 @@ function screenHome() {
       <button class="${resume ? "btn2" : "btn"}" onclick="go('outfit')">Start an Order</button>
       <button class="btn2" onclick="go('market')">Fabric Marketplace</button>
       <button class="btn2" onclick="go('designers')">Explore Designers</button>
-      <button class="btn2" onclick="go('biz/dashboard')">Business Dashboard</button>
+      ${Cloud.isTeam() ? `<button class="btn2" onclick="go('biz/dashboard')">Business Dashboard</button>` : ""}
       <button class="linkish on-navy" onclick="go('seller')">Sell your fabric on ${APP_NAME} →</button>
     </div>
     ${cNav("home")}`;
@@ -403,7 +404,8 @@ function buyFabric() {
     renderAll();
     return;
   }
-  fabric.metres_available = Math.round((fabric.metres_available - d.metres) * 10) / 10;
+  // Live mode: the database takes the fabric out of stock when the deposit is paid
+  if (!Cloud.live) fabric.metres_available = Math.round((fabric.metres_available - d.metres) * 10) / 10;
   d.purchased = true;
   d.quoteReady = false;
   saveData();
@@ -427,7 +429,7 @@ function screenFabricPurchase() {
       </div>
       <div class="qline"><span>${d.metres} metres × ${money(fabric.price_per_metre)}</span><span>${money(d.metres * fabric.price_per_metre)}</span></div>
       <div class="mrow"><span>Supplier delivery</span><span>${escapeHtml(supplier.delivery_estimate)} to ${escapeHtml(SHOP_NAME)}</span></div>
-      <div class="meta">Remaining stock: ${fabric.metres_available} m</div>
+      <div class="meta">${Cloud.live ? `${fabric.metres_available} m in stock. Your ${d.metres} m is taken out of stock when you pay your deposit.` : `Remaining stock: ${fabric.metres_available} m`}</div>
       <button class="cta" onclick="continueToQuote()">Continue to Quotation →</button>
     </div>`;
 }
@@ -477,8 +479,8 @@ function screenPayment() {
         <span class="optbtns">${["Card", "Apple Pay", "Bank transfer"].map(m =>
           `<button class="optbtn ${d.payMethod === m ? "sel" : ""}" onclick="setPayMethod('${m}')">${m}</button>`).join("")}</span>
       </div>
-      <div class="meta">Demo checkout — no real money is taken. Stripe connects here in the full version.</div>
-      <button class="cta" onclick="payDeposit()">Pay ${money(deposit)} Deposit</button>
+      <div class="meta">Demo checkout — no real money is taken. Your deposit shows as <b>awaiting confirmation</b> until ${escapeHtml(SHOP_NAME)} confirms it. Stripe connects here in the full version.</div>
+      <button id="pay-deposit" class="cta" onclick="payDeposit()">Pay ${money(deposit)} Deposit</button>
     </div>`;
 }
 
@@ -488,13 +490,25 @@ function setPayMethod(method) {
   renderAll();
 }
 
-// Step 7 → 8: the deposit creates the order and a tailor is assigned
+// Step 7 → 8: the deposit creates the order and a tailor is assigned.
+// The deposit waits for Nebeda Threads to confirm it before production starts.
+let placingOrder = false;
 function payDeposit() {
+  if (placingOrder) return;
   const d = draft();
   const quote = draftQuote();
   // The order belongs to whoever the measurements were saved for
   const owner = db.customers.find(c => c.measurement_profiles.some(p => p.id === d.profileId));
-  const order = createPaidOrder({
+  if (!owner) {
+    toast("Please save your measurements again.");
+    d.profileId = null;
+    go("measurements");
+    return;
+  }
+  placingOrder = true;
+  const button = document.getElementById("pay-deposit");
+  if (button) { button.disabled = true; button.textContent = "Placing your order…"; }
+  const placed = createPaidOrder({
     customerId: owner.id,
     outfit: d.outfit, colour: d.colour, embroidery: d.embroidery, sleeve: d.sleeve, neck: d.neck,
     variation: d.variation, profileId: d.profileId,
@@ -502,12 +516,21 @@ function payDeposit() {
     deposit: depositFor(quote.total), method: d.payMethod,
     inspiration: hasInspiration(d.inspiration)
       ? { photos: d.inspiration.photos.slice(), link: cleanStyleLink(d.inspiration.link) || "", note: d.inspiration.note || "" }
-      : null
+      : null,
+    confirmed: false
   });
-  db.draft = null;
-  saveData();
-  flashMessage = `Deposit paid — thank you! Order ${order.id} is with ${SHOP_NAME}.`;
-  go("tracking/" + order.id);
+  Promise.resolve(placed)
+    .then(order => {
+      db.draft = null;
+      saveData();
+      flashMessage = `Thank you! Order ${order.id} is with ${SHOP_NAME}. Your deposit is awaiting confirmation — we'll start as soon as it's confirmed.`;
+      go("tracking/" + order.id);
+    })
+    .catch(error => {
+      toast(error.message || "Couldn't place the order. Please try again.");
+      renderAll();
+    })
+    .finally(() => { placingOrder = false; });
 }
 
 // ---- My orders ----
@@ -538,6 +561,7 @@ function lifecycleList(order) {
     const state = i < done ? "done" : i === done ? "now" : "";
     let extra = "";
     if (i === done && staff) extra = ` <span class="fl">· ${escapeHtml(staff.name)}</span>`;
+    if (i === done && depositAwaiting(order)) extra = ` <span class="fl awaiting">· awaiting confirmation by ${escapeHtml(SHOP_NAME)}</span>`;
     if (i === done && label === "Delivery" && findDelivery(order.id)) extra = ` <span class="fl">· ${escapeHtml(findDelivery(order.id).status)}</span>`;
     return `<li><span class="tdot ${state}"></span><span class="${state}-t">${i + 1}. ${label}</span>${extra}</li>`;
   }).join("")}</ul>`;
@@ -547,16 +571,18 @@ function screenTracking(orderId) {
   const order = findOrder(orderId);
   if (!order) return screenNotFound();
   const balance = balanceOwed(order);
+  const awaiting = amountAwaiting(order.id);
+  const due = Math.round((balance - awaiting) * 100) / 100;
   const delivery = findDelivery(order.id);
-  const qcPassed = stageIndex(order) >= STAGES.findIndex(s => s.key === "quality_control");
+  const qcPassed = stageIndex(order) >= STAGES.findIndex(s => s.key === "quality_control") && !depositAwaiting(order);
   let action = "";
   if (order.stage === "delivered" && !order.review_rating) {
     action = `<button class="cta" onclick="go('review/${order.id}')">Leave a Review →</button>`;
-  } else if (balance > 0 && qcPassed) {
+  } else if (due > 0 && qcPassed) {
     action = `
       <div class="selopt"><span class="fl">Pay by</span><span class="optbtns">${["Card", "Apple Pay", "Bank transfer"].map(m =>
         `<button class="optbtn ${balanceMethod === m ? "sel" : ""}" onclick="balanceMethod='${m}';renderAll()">${m}</button>`).join("")}</span></div>
-      <button class="cta" onclick="payBalance('${order.id}')">Pay ${money(balance)} Balance</button>`;
+      <button class="cta" onclick="payBalance('${order.id}')">Pay ${money(due)} Balance</button>`;
   }
   return `
     ${cTop("Order #" + order.id, "orders")}
@@ -567,7 +593,8 @@ function screenTracking(orderId) {
         <div>
           <div class="name">${escapeHtml(order.outfit_type)} by ${escapeHtml(SHOP_NAME)}</div>
           <div class="meta">Total ${money(order.quote_total)} · Paid ${money(amountPaid(order.id))}</div>
-          <div class="meta">${balance > 0 ? `Balance ${money(balance)}${qcPassed ? " — due now" : " after quality control"}` : "Paid in full"}</div>
+          ${awaiting > 0 ? `<div class="meta awaiting">${money(awaiting)} awaiting confirmation by ${escapeHtml(SHOP_NAME)}</div>` : ""}
+          <div class="meta">${due > 0 ? `Balance ${money(due)}${qcPassed ? " — due now" : " after quality control"}` : balance > 0 ? "Nothing more to pay right now" : "Paid in full"}</div>
           <div class="meta">Due ${formatDate(order.due_date)}</div>
         </div>
       </div>
@@ -584,14 +611,15 @@ function screenTracking(orderId) {
     ${cNav("orders")}`;
 }
 
-// Step 14: the customer pays the balance after quality control
+// Step 14: the customer pays the balance after quality control.
+// It counts once Nebeda Threads confirms it.
 function payBalance(orderId) {
   const order = findOrder(orderId);
-  const balance = balanceOwed(order);
-  if (balance <= 0) return;
-  recordOrderPayment(order, balance, balanceMethod);
+  const due = Math.round((balanceOwed(order) - amountAwaiting(order.id)) * 100) / 100;
+  if (due <= 0) return;
+  recordOrderPayment(order, due, balanceMethod, today(), false);
   saveData();
-  flashMessage = `Balance of ${money(balance)} paid. Your outfit is ready for delivery.`;
+  flashMessage = `Thank you! Your balance of ${money(due)} is awaiting confirmation. Your outfit goes out for delivery once it's confirmed.`;
   renderAll();
 }
 
@@ -654,6 +682,11 @@ function submitReview(event, orderId) {
   order.review_rating = reviewStars;
   order.review_text = event.target.text.value.trim();
   order.updated_at = today();
+  if (db.reviews) {
+    // Live mode: reviews are their own table; the database copies it onto the order
+    db.reviews.push({ id: Cloud.newId(), order_id: order.id, designer_id: order.designer_id, customer_id: order.customer_id,
+      rating: order.review_rating, review_text: order.review_text, created_at: today() });
+  }
   saveData();
   flashMessage = "Thank you for your review!";
   reviewStars = 5;
@@ -730,7 +763,7 @@ function screenDesigners() {
 function screenDesigner() {
   const d = designer();
   const r = designerRating();
-  const reviews = db.orders.filter(o => o.review_rating).slice(-3).reverse();
+  const reviews = recentReviews(3);
   return `
     ${cTop(escapeHtml(d.business_name), "designers")}
     <div class="content">
@@ -738,7 +771,7 @@ function screenDesigner() {
       <div class="mrow"><span>Location</span><span>${escapeHtml(d.location)}</span></div>
       <div class="mrow"><span>Delivery time</span><span>${escapeHtml(d.delivery_time)}</span></div>
       <div class="mrow"><span>Speciality</span><span>${escapeHtml(d.speciality_tags.join(", "))}</span></div>
-      ${reviews.map(o => `<div class="review"><span class="gold">${"★".repeat(o.review_rating)}</span> ${escapeHtml(o.review_text || o.outfit_type)}<div class="fl">${escapeHtml(customerName(o.customer_id).split(" ")[0])} · ${escapeHtml(o.outfit_type)}</div></div>`).join("")}
+      ${reviews.map(r => `<div class="review"><span class="gold">${"★".repeat(r.rating)}</span> ${escapeHtml(r.text || r.outfit)}<div class="fl">${escapeHtml(r.who)}${r.outfit ? " · " + escapeHtml(r.outfit) : ""}</div></div>`).join("")}
       <button class="cta" onclick="go('outfit')">Request Custom Outfit</button>
       <button class="btn-outline" onclick="go('rtw')">View Ready to Wear</button>
     </div>
@@ -768,11 +801,11 @@ function buyRtw(itemId) {
   const item = db.ready_to_wear.find(i => i.id === itemId);
   if (!item || item.stock <= 0) return;
   if (!confirm(`Buy ${item.name} for ${money(item.price)}? (Demo checkout — no real money is taken.)`)) return;
-  item.stock -= 1;
-  const highest = db.rtw_sales.reduce((max, s) => Math.max(max, Number(s.id.slice(2))), 0);
-  db.rtw_sales.push({ id: "RS" + (highest + 1), item_id: item.id, customer_id: db.session.customerId, price: item.price, cost: item.cost, date: today() });
+  if (!Cloud.live) item.stock -= 1; // live mode: the database takes it out of stock
+  db.rtw_sales.push({ id: newId("RS", db.rtw_sales), item_id: item.id, customer_id: db.session.customerId, price: item.price, cost: item.cost,
+    date: today(), status: "awaiting_confirmation" });
   saveData();
-  flashMessage = `${item.name} bought — ${SHOP_NAME} will post it to you.`;
+  flashMessage = `${item.name} ordered — your payment is awaiting confirmation. ${SHOP_NAME} will post it to you once it's confirmed.`;
   renderAll();
 }
 
@@ -780,7 +813,9 @@ function buyRtw(itemId) {
 
 function screenProfile() {
   const customer = currentCustomer();
-  const signIn = `
+  const signIn = Cloud.live ? `
+    ${Cloud.me ? `<div class="meta">Signed in as ${escapeHtml(Cloud.me.email)}</div>` : ""}
+    <button class="btn-outline" onclick="Auth.signOut()">Sign out</button>` : `
     <label class="field">${customer ? "Switch customer (demo)" : "Sign in as an existing customer (demo)"}
       <select onchange="signInAs(this.value)">
         <option value="">— choose —</option>
@@ -807,7 +842,7 @@ function screenProfile() {
       <div class="mrow"><span>Measurement profiles</span><span>${customer.measurement_profiles.map(p => p.label).sort().join(", ") || "None yet"}</span></div>
       <button class="cta" onclick="go('myMeasurements')">Edit Measurements</button>
       ${signIn}
-      <button class="linkish" onclick="signInAs('')">Sign out</button>
+      ${Cloud.live ? "" : `<button class="linkish" onclick="signInAs('')">Sign out</button>`}
     </div>
     ${cNav("profile")}`;
 }

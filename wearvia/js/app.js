@@ -60,7 +60,12 @@ function currentRoute() {
 
 // Redraw whatever is on screen (called after any data change)
 function renderAll() {
+  if (!db || !document.getElementById("auth-view").hidden) return; // still loading, or signing in
   const route = currentRoute();
+  if (!Cloud.canOpen(route.area)) {
+    go(Cloud.homeRoute(), true);
+    return;
+  }
   const isBusiness = route.area === "business";
   const isSeller = route.area === "seller";
   const isCustomer = route.area === "customer";
@@ -119,15 +124,30 @@ window.addEventListener("hashchange", () => {
   }
   closeStyleViewer();
   renderAll();
+  Cloud.refreshIfStale(); // picks up changes made on other phones and laptops
   window.scrollTo(0, 0);
   const inner = document.querySelector("#customer-app .content");
   if (inner) inner.scrollTop = 0;
 });
 
-db = loadData();
 document.getElementById("app-name").textContent = APP_NAME;
 document.getElementById("shop-name").textContent = SHOP_NAME;
-if (!location.hash) history.replaceState(null, "", "#/home");
-renderAll();
-// Uploaded photos load from the browser's photo store a moment later; draw again when they're in
-PhotoStore.ready.then(renderAll);
+Auth.loading();
+Cloud.start()
+  .then(result => {
+    if (result.recovery) return Auth.show("newPassword");
+    if (!result.signedIn) return Auth.show("signIn");
+    if (Cloud.live) return Auth.enterApp();
+    // Demo mode
+    Auth.hide();
+    Auth.drawChrome();
+    if (!location.hash || !/^#\//.test(location.hash)) history.replaceState(null, "", "#/home");
+    renderAll();
+    // Uploaded photos load from the browser's photo store a moment later; draw again when they're in
+    PhotoStore.ready.then(renderAll);
+  })
+  .catch(error => {
+    console.error(error);
+    Auth.flash(error.message || "Something went wrong while loading.");
+    Auth.show("signIn");
+  });

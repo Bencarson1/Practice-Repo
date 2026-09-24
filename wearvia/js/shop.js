@@ -21,9 +21,10 @@ function renderShop() {
 
   const sales = db.rtw_sales.slice().reverse().map(s => {
     const item = db.ready_to_wear.find(i => i.id === s.item_id);
-    return `<tr><td>${formatDate(s.date)}</td><td>${escapeHtml(item ? item.name : "Removed item")}</td><td>${escapeHtml(s.customer_id ? customerName(s.customer_id) : "Guest")}</td><td>${money(s.price)}</td></tr>`;
+    return `<tr><td>${formatDate(s.date)}</td><td>${escapeHtml(item ? item.name : "Removed item")}</td><td>${escapeHtml(s.customer_id ? customerName(s.customer_id) : "Guest")}</td><td>${money(s.price)}</td>
+      <td>${s.status === "awaiting_confirmation" ? `<button class="small gold" onclick="confirmRtwSale('${s.id}')">✓ Confirm payment</button>` : escapeHtml(PAYMENT_STATUS_LABELS[s.status] || "Confirmed")}</td></tr>`;
   }).join("");
-  const takings = db.rtw_sales.reduce((t, s) => t + s.price, 0);
+  const takings = db.rtw_sales.filter(isConfirmed).reduce((t, s) => t + s.price, 0);
 
   return `
     ${bizHeader("Ready to Wear", "Non-bespoke pieces for direct sale. Customers see these on the shop page of the customer app.")}
@@ -45,13 +46,22 @@ function renderShop() {
       <div class="card">
         <h2>Sales <span class="total">${money(takings)}</span></h2>
         <div class="table-wrap"><table>
-          <thead><tr><th>Date</th><th>Item</th><th>Customer</th><th>Price</th></tr></thead>
-          <tbody>${sales || "<tr><td colspan='4' class='empty'>No sales yet.</td></tr>"}</tbody>
+          <thead><tr><th>Date</th><th>Item</th><th>Customer</th><th>Price</th><th>Payment</th></tr></thead>
+          <tbody>${sales || "<tr><td colspan='5' class='empty'>No sales yet.</td></tr>"}</tbody>
         </table></div>
         <p><a href="#/rtw">Open the customer shop →</a></p>
       </div>
     </div>
   `;
+}
+
+function confirmRtwSale(saleId) {
+  const sale = db.rtw_sales.find(s => s.id === saleId);
+  if (!sale) return;
+  sale.status = "confirmed";
+  saveData();
+  toast("Payment confirmed — post it to the customer.");
+  renderAll();
 }
 
 function changeRtwStock(itemId, delta) {
@@ -64,11 +74,11 @@ function changeRtwStock(itemId, delta) {
 function addRtwItem(event) {
   event.preventDefault();
   const form = event.target;
-  const highest = db.ready_to_wear.reduce((max, i) => Math.max(max, Number(i.id.slice(1))), 0);
   const palette = COLOURS.map(c => c.hex);
+  const count = db.ready_to_wear.length;
   db.ready_to_wear.push({
-    id: "R" + (highest + 1), name: form.name.value.trim(), price: Number(form.price.value),
-    cost: Number(form.cost.value), stock: Number(form.stock.value), color: palette[highest % palette.length]
+    id: newId("R", db.ready_to_wear), designer_id: designer().id, name: form.name.value.trim(), price: Number(form.price.value),
+    cost: Number(form.cost.value), stock: Number(form.stock.value), color: palette[count % palette.length]
   });
   saveData();
   renderAll();

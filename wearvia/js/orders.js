@@ -96,23 +96,38 @@ function createWalkInOrder(event) {
 
   const customer = findOrCreateCustomer(form.customer.value.trim(), form.phone.value.trim());
   const profile = latestProfile(customer);
-  fabric.metres_available = Math.round((fabric.metres_available - metres) * 10) / 10; // fabric purchased: stock goes down
+  // Fabric purchased: stock goes down (in live mode the database does this)
+  if (!Cloud.live) fabric.metres_available = Math.round((fabric.metres_available - metres) * 10) / 10;
 
-  const order = createPaidOrder({
+  const button = form.querySelector("button[type=submit]");
+  if (button) { button.disabled = true; button.textContent = "Creating…"; }
+  // The shop took this deposit itself, so it counts straight away
+  Promise.resolve(createPaidOrder({
     customerId: customer.id, outfit: form.outfit.value, colour: form.colour.value, embroidery: form.embroidery.value,
     sleeve: form.sleeve.value, neck: form.neck.value, profileId: profile ? profile.id : null,
-    fabric, metres, quote, deposit, method: form.method.value, dueDate: form.dueDate.value
-  });
-  pendingFabricId = null;
-  saveData();
-  toast(`Order ${order.id} created — quote ${money(quote.total)}, deposit ${money(deposit)}.${profile ? "" : " Add measurements for this customer."}`);
-  go("biz/orders/" + order.id);
+    fabric, metres, quote, deposit, method: form.method.value, dueDate: form.dueDate.value, confirmed: true
+  }))
+    .then(order => {
+      pendingFabricId = null;
+      saveData();
+      toast(`Order ${order.id} created — quote ${money(quote.total)}, deposit ${money(deposit)}.${profile ? "" : " Add measurements for this customer."}`);
+      go("biz/orders/" + order.id);
+    })
+    .catch(error => {
+      alert(error.message || "Couldn't create the order.");
+      if (button) { button.disabled = false; button.textContent = "Create order"; }
+    });
   return false;
 }
 
 function deleteOrder(orderId) {
   if (!confirm(`Delete order ${orderId} and its payments? Its fabric goes back into stock.`)) return;
   const order = findOrder(orderId);
+  if (Cloud.live) {
+    // The database puts the fabric back and tidies up the order's records
+    Cloud.deleteOrder(order).then(() => { toast(`Order ${orderId} deleted.`); go("biz/orders"); }, error => alert(error.message));
+    return;
+  }
   const fabric = findFabric(order.fabric_id);
   if (fabric) fabric.metres_available = Math.round((fabric.metres_available + order.fabric_metres) * 10) / 10;
   if (order.inspiration) order.inspiration.photos.forEach(ref => PhotoStore.remove(ref));
@@ -144,7 +159,9 @@ function renderOrderDetail(orderId) {
 
   // What the "next" button does depends on the step
   let nextAction = "";
-  if (!next) {
+  if (depositAwaiting(order)) {
+    nextAction = `<span class="owed">Deposit awaiting confirmation.</span> Confirm it under Payments below to start production.`;
+  } else if (!next) {
     nextAction = `<span class="paid">✓ Delivered${order.review_rating ? " and reviewed" : " — waiting for the customer's review"}</span>`;
   } else if (next.key === "balance_paid" && balance > 0) {
     nextAction = `<span class="owed">Waiting for the balance of ${money(balance)}.</span> Record it under Payments below.`;
@@ -167,7 +184,8 @@ function renderOrderDetail(orderId) {
     </label>`).join("");
 
   const payments = db.payments.filter(p => p.order_id === order.id).map(p =>
-    `<tr><td>${formatDate(p.date)}</td><td>${escapeHtml(p.kind)}</td><td>${escapeHtml(p.method)}</td><td>${money(p.amount)}</td></tr>`).join("");
+    `<tr><td>${formatDate(p.date)}</td><td>${escapeHtml(p.kind)}</td><td>${escapeHtml(p.method)}</td><td>${money(p.amount)}</td>
+      <td>${paymentStatusCell(p)}</td></tr>`).join("");
 
   return `
     <p><a href="#/biz/orders">← All orders</a></p>
@@ -218,7 +236,7 @@ function renderOrderDetail(orderId) {
       <div class="card">
         <h2>Payments <span class="total">${balance > 0 ? `Balance ${money(balance)}` : "Paid in full"}</span></h2>
         <div class="table-wrap"><table>
-          <thead><tr><th>Date</th><th>Type</th><th>Method</th><th>Amount</th></tr></thead>
+          <thead><tr><th>Date</th><th>Type</th><th>Method</th><th>Amount</th><th>Status</th></tr></thead>
           <tbody>${payments}</tbody>
         </table></div>
         ${balance > 0 ? `<form class="inline-form" onsubmit="return payFromDetail(event, '${order.id}')">
@@ -263,7 +281,7 @@ function payFromDetail(event, orderId) {
     alert(`That is more than the ${money(balanceOwed(order))} still owed.`);
     return false;
   }
-  recordOrderPayment(order, amount, event.target.method.value);
+  recordOrderPayment(order, amount, event.target.method.value, today(), true);
   saveData();
   renderAll();
   return false;

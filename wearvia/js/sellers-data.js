@@ -2,12 +2,9 @@
 // sellers-data.js — fabric sellers, their fabrics and their orders
 //
 // Every read and write for the Fabric Seller area goes through the
-// functions in this file, so moving to Supabase means changing this
-// file (and photos.js) only. The tables match supabase/schema.sql:
-//
-//   db.suppliers     → fabric_sellers   (every supplier is a seller shop)
-//   db.fabrics       → fabrics          (photos → fabric_photos + Storage)
-//   db.fabric_orders → fabric_orders    (one row per order that uses a seller's fabric)
+// functions in this file. In live mode they are saved to Supabase by
+// cloud.js (tables suppliers, fabrics and fabric_order_lines — see
+// supabase/setup.sql); in demo mode they stay in the browser.
 //
 // A fabric's status is "pending" (waiting for Nebeda Threads),
 // "approved" (live in the marketplace) or "hidden" (taken down by
@@ -108,6 +105,7 @@ function nearestColourName(hex) {
 }
 
 function nextFabricId(data) {
+  if (Cloud.live && !data) return Cloud.newId();
   const highest = (data || db).fabrics.reduce((max, f) => Math.max(max, Number(f.id.slice(1)) || 0), 0);
   return "F" + (highest + 1);
 }
@@ -147,7 +145,7 @@ function marketFabrics(filters) {
     return true;
   });
   const sorters = {
-    new: (a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")) || Number(b.id.slice(1)) - Number(a.id.slice(1)),
+    new: (a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")) || (Number(b.id.slice(1)) || 0) - (Number(a.id.slice(1)) || 0),
     low: (a, b) => a.price_per_metre - b.price_per_metre,
     high: (a, b) => b.price_per_metre - a.price_per_metre
   };
@@ -160,8 +158,8 @@ function marketFabrics(filters) {
 function saveSellerProfile(sellerId, values) {
   let seller = sellerId ? findSupplier(sellerId) : null;
   if (!seller) {
-    const highest = db.suppliers.reduce((max, s) => Math.max(max, Number(s.id.slice(1)) || 0), 0);
-    seller = { id: "S" + (highest + 1), rating: null, created_at: today(), logo: null };
+    seller = { id: newId("S", db.suppliers), rating: null, created_at: today(), logo: null,
+      owner_user_id: Cloud.live && Cloud.me ? Cloud.me.user_id : null };
     db.suppliers.push(seller);
   }
   seller.name = values.name;
@@ -192,7 +190,8 @@ function saveSellerFabric(sellerId, fabricId, values) {
     min_order_metres: values.min_order_metres, description: values.description, photos: values.photos,
     updated_at: today()
   });
-  if (looksDifferent && fabric.status === "approved") {
+  // A hidden fabric that's been fixed goes back for checking too
+  if (looksDifferent && (fabric.status === "approved" || fabric.status === "hidden")) {
     fabric.status = "pending";
     fabric.review_note = "";
   }
@@ -331,6 +330,9 @@ function addSampleSellers(data) {
 function upgradeData(data) {
   data.session = data.session || {};
   if (data.session.sellerId === undefined) data.session.sellerId = null;
+
+  (data.payments || []).forEach(p => { if (!p.status) p.status = "confirmed"; });
+  (data.rtw_sales || []).forEach(s => { if (!s.status) s.status = "confirmed"; });
 
   data.suppliers.forEach(s => {
     if (s.phone === undefined) s.phone = "07700 9004" + String(Number(s.id.slice(1)) || 0).padStart(2, "0");

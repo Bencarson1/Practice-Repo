@@ -69,8 +69,7 @@ function findWedding(id) {
 
 function addWedding(event) {
   event.preventDefault();
-  const highest = db.wedding_orders.reduce((max, w) => Math.max(max, Number(w.id.slice(1))), 0);
-  db.wedding_orders.push({ id: "W" + (highest + 1), designer_id: designer().id, event_name: event.target.name.value.trim(), event_date: event.target.date.value, members: [] });
+  db.wedding_orders.push({ id: newId("W", db.wedding_orders), designer_id: designer().id, event_name: event.target.name.value.trim(), event_date: event.target.date.value, members: [] });
   saveData();
   renderAll();
   return false;
@@ -79,10 +78,8 @@ function addWedding(event) {
 function addMember(event, weddingId) {
   event.preventDefault();
   const form = event.target;
-  const all = db.wedding_orders.flatMap(w => w.members);
-  const highest = all.reduce((max, m) => Math.max(max, Number(m.id.slice(2))), 0);
   findWedding(weddingId).members.push({
-    id: "WM" + (highest + 1), role: form.role.value.trim(), name: form.name.value.trim(),
+    id: newId("WM", db.wedding_orders.flatMap(w => w.members)), role: form.role.value.trim(), name: form.name.value.trim(),
     outfits: Number(form.outfits.value) || 1, order_id: "", status: "Not started"
   });
   saveData();
