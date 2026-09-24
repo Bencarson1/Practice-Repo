@@ -3,6 +3,7 @@
 //
 // A photo is saved once and then referred to by a short "ref":
 //   "ph_…"            a photo someone uploaded (kept in this browser)
+//   "ph_style_…"      a customer's style photo (see inspiration.js)
 //   "pattern:…"       a drawn sample fabric (used by the sample sellers)
 //   "logo:…"          a drawn logo made from the shop's initials
 //   "data:…"/"https:" a full image address, used as it is
@@ -11,6 +12,8 @@
 // than localStorage). Moving to Supabase: upload to a Storage bucket
 // in PhotoStore.put and return the file path as the ref, then make
 // photoUrl() build the public URL. Nothing else needs to change.
+// The folder given to put() says which bucket a photo belongs in:
+// none → "fabric-photos"/"logos", "style" → "style-photos".
 // ============================================================
 
 const MAX_PHOTOS_PER_FABRIC = 5;
@@ -75,13 +78,13 @@ const PhotoStore = (() => {
       Object.keys(saved).forEach(ref => cache.set(ref, saved[ref]));
     });
 
-  function newRef() {
-    return "ph_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  function newRef(folder) {
+    return "ph_" + (folder ? folder + "_" : "") + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   }
 
   // Saves an image (a data URL) and returns its ref. Rejects if the browser is out of space.
-  function put(dataUrl) {
-    const ref = newRef();
+  function put(dataUrl, folder) {
+    const ref = newRef(folder);
     cache.set(ref, dataUrl);
     const saving = idb
       ? idbRun("readwrite", store => store.put(dataUrl, ref))

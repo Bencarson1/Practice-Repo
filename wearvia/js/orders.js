@@ -20,7 +20,7 @@ function renderOrdersTab(orderId) {
     return `<tr>
       <td><a href="#/biz/orders/${o.id}">${o.id}</a></td>
       <td>${escapeHtml(customerName(o.customer_id))}</td>
-      <td>${escapeHtml(o.outfit_type)}</td>
+      <td>${escapeHtml(o.outfit_type)}${hasInspiration(o.inspiration) ? ` <span title="Customer uploaded style photos" aria-label="has style photos">📷</span>` : ""}</td>
       <td>${escapeHtml(fabric ? fabric.name : "—")} (${o.fabric_metres} m)</td>
       <td class="${isLate(o) ? "owed" : ""}">${formatDate(o.due_date)}</td>
       <td>${stageBadge(o)}</td>
@@ -115,6 +115,7 @@ function deleteOrder(orderId) {
   const order = findOrder(orderId);
   const fabric = findFabric(order.fabric_id);
   if (fabric) fabric.metres_available = Math.round((fabric.metres_available + order.fabric_metres) * 10) / 10;
+  if (order.inspiration) order.inspiration.photos.forEach(ref => PhotoStore.remove(ref));
   db.orders = db.orders.filter(o => o.id !== orderId);
   db.payments = db.payments.filter(p => p.order_id !== orderId);
   db.invoices = db.invoices.filter(i => i.order_id !== orderId);
@@ -171,6 +172,7 @@ function renderOrderDetail(orderId) {
   return `
     <p><a href="#/biz/orders">← All orders</a></p>
     ${bizHeader(`Order ${order.id} ${stageBadge(order)}`, `${escapeHtml(order.outfit_type)} for <a href="#/biz/customers/${order.customer_id}">${escapeHtml(customer ? customer.name : "Unknown")}</a> · placed ${formatDate(order.created_at)} · due ${formatDate(order.due_date)}`)}
+    ${styleBriefCard(order)}
 
     <div class="two-col">
       <div class="card">
@@ -189,6 +191,7 @@ function renderOrderDetail(orderId) {
             <div class="thumb big">${conceptSVG({ outfit: order.outfit_type, colour: order.colour, embroidery: order.embroidery, sleeve: order.sleeve_style, neck: order.neck_style }, order.concept_variation)}</div>
             <div>
               <div class="kv"><span>Outfit</span><b>${escapeHtml(order.outfit_type)}</b></div>
+              ${hasInspiration(order.inspiration) ? `<div class="kv"><span>Style</span><b>Copy the customer's photos ↑</b></div>` : ""}
               <div class="kv"><span>Colour</span><b>${escapeHtml(colourName(order.colour))}</b></div>
               <div class="kv"><span>Embroidery</span><b>${escapeHtml(order.embroidery)}</b></div>
               <div class="kv"><span>Sleeve</span><b>${escapeHtml(order.sleeve_style)}</b></div>

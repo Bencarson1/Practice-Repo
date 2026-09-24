@@ -59,7 +59,8 @@ The app won't let anyone skip a step: for example, opening the payment page befo
 |--------|--------------|
 | Home | Start an order, explore the marketplace, or open the business dashboard |
 | Outfit picker & Design | Agbada, Kaftan, Senator, Bubu, Two Piece, Dress, Wedding, Suit, Aso Ebi, Custom; colour, embroidery, sleeve, neck |
-| AI Design Concept | A drawing made from the customer's choices. *Regenerate* makes a new version |
+| Upload a Style | *I have a photo of the style I want*: up to 5 photos (Instagram, TikTok or Pinterest screenshots, or camera photos), the link to the post, and a note such as "same dress but longer sleeves and in green" |
+| AI Design Concept | A drawing made from the customer's choices. *Regenerate* makes a new version. Uploaded style photos show above it as *Your inspiration* |
 | Measurements | Chest, waist, shoulder, sleeve, trouser length, neck (plus hips and length), saved per year |
 | Fabric Marketplace & Purchase | Photo grid of approved fabrics from every seller. Search, and filter by type, colour, price, seller and in-stock. Each fabric has a page with all its photos, description and seller |
 | Quotation & Payment | Itemised quote; deposit by card, Apple Pay or bank transfer (demo, no real money) |
@@ -71,8 +72,8 @@ The app won't let anyone skip a step: for example, opening the payment page befo
 | Tab | What it does |
 |-----|--------------|
 | Dashboard | Order count, revenue, estimated profit, pending payments, late orders, low stock, what's due soon, and *Ask Wearvia AI* (answers from your data) |
-| Orders | Every order, live. Take walk-in orders. Open an order to move it along, assign staff, take payments and dispatch it |
-| Production | A board of every order by the last step it finished |
+| Orders | Every order, live (📷 marks orders with style photos). Take walk-in orders. Open an order to move it along, assign staff, take payments and dispatch it. If the customer uploaded a style, the order page opens with *Customer's style — copy this*: the photos (tap for full size), their note and the link |
+| Production | A board of every order by the last step it finished. Orders with style photos show the photos, note and link on their card so the tailors know what to copy |
 | Tailor Team | Who is doing cutting, sewing, embroidery, finishing and QC, and what's waiting for them |
 | Customers | Order history, spend, favourite colour, notes and measurement profiles |
 | Measurements | Save and edit any customer's measurements |
@@ -101,6 +102,7 @@ Sample customers, fabrics, orders, payments and fabric sellers load automaticall
 ## Try it out
 
 - **Place an order as a customer:** Customer app → *Start an Order* → pick an outfit → design it → *Generate AI Concept* → *Approve* → enter your name and measurements → pick a fabric → *Buy Fabric* → *Continue to Quotation* → *Proceed to Payment* → *Pay deposit*.
+- **Order from a photo:** Customer app → *Start an Order* → pick an outfit → *I have a photo of the style I want* → add photos, paste the post's link, write what to change → *Continue to Design* → then the same steps as above. The photos, link and note appear on the order page and the Production board.
 - **Make it:** Business dashboard → Orders → open your new order → click *Mark cutting done*, then sewing, embroidery, fitting and quality control.
 - **Pay the balance:** back in the Customer app, open the order and click *Pay balance*.
 - **Deliver it:** in the order page, click *Dispatch order*, then move the parcel along until it's *Delivered*.
@@ -109,7 +111,7 @@ Sample customers, fabrics, orders, payments and fabric sellers load automaticall
 
 ## Where is my data saved?
 
-Everything is saved in your browser: the data in **localStorage**, and uploaded photos and logos in **IndexedDB** (it holds far more than localStorage). Photos are shrunk to at most 1200 pixels before saving.
+Everything is saved in your browser: the data in **localStorage**, and uploaded photos and logos in **IndexedDB** (it holds far more than localStorage). Fabric photos are shrunk to at most 1200 pixels and customers' style photos to 1280 pixels, as JPEGs, before saving — a 1–2 MB phone photo becomes about 150–250 KB.
 
 - Your changes are still there when you refresh or come back later.
 - Data stays on your computer and browser only. It isn't shared with other devices or people.
@@ -131,6 +133,7 @@ wearvia/
     ├── sellers-data.js  Every read and write for fabric sellers, their fabrics and orders; sample sellers
     ├── concept.js       Draws the design concept
     ├── marketplace.js   The customer Fabric Marketplace: photo grid, filters, fabric page
+    ├── inspiration.js   Upload a Style: the customer's photos, link and note, and how the shop sees them
     ├── seller.js        The Fabric Seller area
     ├── seller-fabrics.js Business tab: approve or hide sellers' fabrics
     ├── customer.js      Every customer app screen
@@ -175,6 +178,7 @@ These parts work in the app but need real services before going live (see sectio
 - **Payments:** a demo checkout. No money is taken. Stripe goes here.
 - **Ask Wearvia AI:** answers a set of common questions from your data. It isn't a language model.
 - **Data:** saved in one browser. Move it to Supabase or Firebase so staff and customers share it, and add logins. The profile page's "sign in as" menu and the sellers' "choose your shop" list are only for trying the demo.
+- **Style photos on Supabase:** `supabase/schema.sql` also has `order_inspiration`, `order_style_photos` and a private `style-photos` bucket. Style photos are saved through the same `PhotoStore` (with the folder `"style"`, so their refs start `ph_style_`), and the link and note are on `order.inspiration`.
 - **Fabric sellers on Supabase:** `supabase/schema.sql` has the tables (`fabric_sellers`, `fabrics`, `fabric_photos`, `fabric_orders`), two Storage buckets and access rules. All seller reads and writes are in `js/sellers-data.js`, and all photo saving is in `PhotoStore` in `js/photos.js`, so those two files are the only ones to change. Seller payouts need Stripe Connect.
 - **Delivery tracking:** tracking numbers are made up. Connect Royal Mail, DHL or Shippo.
 - **Designers:** Nebeda Threads is the only designer for now, as the spec says for version 1.

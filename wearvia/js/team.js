@@ -19,6 +19,7 @@ function renderTeam() {
           </div>
           ${jobs.length ? `<ul class="jobs">${jobs.map(o => `<li>
             <a href="#/biz/orders/${o.id}">${o.id}</a> ${escapeHtml(o.outfit_type)} — ${escapeHtml(currentStepLabel(o).toLowerCase())} now
+            ${hasInspiration(o.inspiration) ? `<a href="#/biz/orders/${o.id}" title="The customer uploaded photos of the style to copy">📷 style photos</a>` : ""}
             ${others.length ? `<select class="small" onchange="reassign('${o.id}', '${role.key}', this.value)" aria-label="Reassign ${o.id}">
               <option value="">Reassign…</option>${others.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join("")}</select>` : ""}
           </li>`).join("")}</ul>` : `<p class="muted small-text">No jobs waiting right now · ${assigned.length} order(s) assigned for later</p>`}

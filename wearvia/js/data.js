@@ -547,6 +547,7 @@ function createPaidOrder(details) {
     outfit_type: details.outfit, colour: details.colour, embroidery: details.embroidery,
     sleeve_style: details.sleeve, neck_style: details.neck,
     concept_variation: details.variation || 1, concept_image_url: "",
+    inspiration: details.inspiration || null,   // customer's style photos, link and note (inspiration.js)
     measurement_profile_id: details.profileId || null,
     fabric_id: details.fabric.id, fabric_supplier_id: details.fabric.supplier_id,
     fabric_metres: details.metres, fabric_cost: details.quote.fabricCost,

@@ -9,6 +9,8 @@
 --   db.suppliers     → fabric_sellers
 --   db.fabrics       → fabrics (+ fabric_photos, photos in Storage)
 --   db.fabric_orders → fabric_orders
+--   db.orders[].inspiration → order_inspiration + order_style_photos
+--                             (photos in the "style-photos" bucket)
 -- ============================================================
 
 create table fabric_sellers (
@@ -119,3 +121,47 @@ create policy "staff create orders" on fabric_orders for insert with check (is_s
 --   * a seller can't change status or review_note themselves (only staff can)
 --   * changing name, category, colour, description or photos sets status back to 'pending';
 --     price and stock changes keep it live
+
+-- ============================================================
+-- "Upload a style": a customer's photos of the outfit they want
+-- copied, the link to the post and a note of what to change.
+-- In the browser this is order.inspiration = { photos, link, note }
+-- and the photos are PhotoStore refs starting "ph_style_".
+-- ============================================================
+
+create table order_inspiration (
+  order_id    text primary key,                          -- "NT-1009" (link to orders when that table moves over)
+  owner_id    uuid references auth.users (id),           -- the customer's login
+  link        text not null default '' check (link = '' or link ~* '^https?://'),
+  note        text not null default '' check (char_length(note) <= 500),
+  created_at  timestamptz not null default now()
+);
+
+-- Up to 5 photos per order, in the order the customer added them
+create table order_style_photos (
+  order_id     text not null references order_inspiration (order_id) on delete cascade,
+  position     smallint not null check (position between 0 and 4),
+  storage_path text not null,                            -- "<owner uuid>/<order id>/<position>.jpg" in "style-photos"
+  primary key (order_id, position)
+);
+
+-- Private: customers' own photos. Show them with signed URLs (createSignedUrl).
+-- While the customer is still ordering, upload to "<owner uuid>/draft/<file>.jpg"
+-- and move the files when the deposit is paid.
+insert into storage.buckets (id, name, public) values ('style-photos', 'style-photos', false);
+
+alter table order_inspiration  enable row level security;
+alter table order_style_photos enable row level security;
+
+create policy "customers and staff see a style" on order_inspiration for select using (owner_id = auth.uid() or is_staff());
+create policy "customers add their style"       on order_inspiration for insert with check (owner_id = auth.uid());
+create policy "style photos follow the order"   on order_style_photos for select
+  using (exists (select 1 from order_inspiration i where i.order_id = order_style_photos.order_id and (i.owner_id = auth.uid() or is_staff())));
+create policy "customers add style photos"      on order_style_photos for insert
+  with check (exists (select 1 from order_inspiration i where i.order_id = order_style_photos.order_id and i.owner_id = auth.uid()));
+
+-- Files: each customer writes to their own folder; staff can read everything
+create policy "customers upload style photos" on storage.objects for insert
+  with check (bucket_id = 'style-photos' and (storage.foldername(name))[1] = auth.uid()::text);
+create policy "customers and staff view style photos" on storage.objects for select
+  using (bucket_id = 'style-photos' and ((storage.foldername(name))[1] = auth.uid()::text or is_staff()));
