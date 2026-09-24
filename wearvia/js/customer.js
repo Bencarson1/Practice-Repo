@@ -203,31 +203,43 @@ function generateConcept() {
 
 // ---- Screen 4: AI design concept (step 2) ----
 
+let conceptGenerating = false; // true while "Generating…" shows after Regenerate
+
 function screenConcept() {
   const d = draft();
+  const busy = conceptGenerating;
   return `
     ${cTop("AI Design Concept", "design")}
     <div class="content">
       ${flowBar("concept")}
       <div class="fab-card concept">
-        <div class="concept-art">${conceptSVG(d, d.variation)}</div>
+        <div class="concept-art ${busy ? "generating" : ""}" aria-busy="${busy}">
+          ${conceptSVG(d, d.variation)}
+          ${busy ? `<div class="gen-overlay" role="status"><span class="gen-spin"></span>Generating…</div>` : ""}
+        </div>
         <div class="name">${escapeHtml(d.outfit)} · ${escapeHtml(d.embroidery)} embroidery · ${escapeHtml(d.sleeve)} sleeve</div>
         <div class="meta">${escapeHtml(colourName(d.colour))} · ${escapeHtml(d.neck)} neck · AI-generated concept based on your choices · Variation ${d.variation}</div>
       </div>
       <div class="optbtns two">
-        <button class="optbtn" onclick="regenerateConcept()">↻ Regenerate</button>
-        <button class="optbtn sel" onclick="approveConcept()">✓ Approve Concept</button>
+        <button class="optbtn" onclick="regenerateConcept()" ${busy ? "disabled" : ""}>↻ Regenerate</button>
+        <button class="optbtn sel" onclick="approveConcept()" ${busy ? "disabled" : ""}>✓ Approve Concept</button>
       </div>
       <button class="linkish" onclick="go('design')">Change my options</button>
     </div>`;
 }
 
 function regenerateConcept() {
-  const d = draft();
-  d.variation += 1;
-  d.conceptApproved = false;
-  saveData();
+  if (conceptGenerating) return;
+  conceptGenerating = true;
   renderAll();
+  setTimeout(() => {
+    const d = draft();
+    d.variation += 1;
+    d.conceptApproved = false;
+    conceptGenerating = false;
+    saveData();
+    renderAll();
+  }, 1000);
 }
 
 function approveConcept() {
