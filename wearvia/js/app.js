@@ -5,6 +5,7 @@
 //   #/home, #/outfit, #/tracking/NT-1003     → customer app
 //   #/biz/dashboard, #/biz/orders/NT-1003    → business dashboard
 //   #/seller/fabrics, #/seller/edit/F12      → fabric seller area
+//   #/for-tailors                            → how to join as a tailor
 // ============================================================
 
 // show: only for some people (the fabric marketplace and approving tailors are the admin's)
@@ -61,6 +62,9 @@ function currentRoute() {
   if (parts[0] === "seller") {
     return { area: "seller", screen: parts[1] || "fabrics", id: parts[2] };
   }
+  if (parts[0] === "for-tailors") {
+    return { area: "tailors", screen: "welcome" };
+  }
   return { area: "customer", screen: parts[0] || "home", id: parts[1] };
 }
 
@@ -69,7 +73,7 @@ function renderAll() {
   if (!db || !document.getElementById("auth-view").hidden) return; // still loading, or signing in
   const route = currentRoute();
   // Without an account you can find tailors; anything else asks you to sign in
-  if (Cloud.isGuest() && (route.area !== "customer" || !Cloud.GUEST_SCREENS.includes(route.screen))) {
+  if (Cloud.isGuest() && !guestCanOpen(route)) {
     Auth.show("signIn");
     return;
   }
@@ -79,12 +83,15 @@ function renderAll() {
   }
   const isBusiness = route.area === "business";
   const isSeller = route.area === "seller";
+  const isTailors = route.area === "tailors";
   const isCustomer = route.area === "customer";
   document.getElementById("customer-view").hidden = !isCustomer;
   document.getElementById("business-view").hidden = !isBusiness;
   document.getElementById("seller-view").hidden = !isSeller;
+  document.getElementById("join-view").hidden = !isTailors;
   document.getElementById("mode-customer").classList.toggle("on", isCustomer);
   document.getElementById("mode-seller").classList.toggle("on", isSeller);
+  document.getElementById("mode-tailors").classList.toggle("on", isTailors);
   document.getElementById("mode-business").classList.toggle("on", isBusiness);
   document.body.classList.toggle("in-business", isBusiness);
   // Quotes and prices on screen use the right tailor's price list
@@ -96,6 +103,8 @@ function renderAll() {
 
   if (isSeller) {
     renderSellerArea(route.screen, route.id);
+  } else if (isTailors) {
+    renderTailorJoin();
   } else if (isBusiness) {
     const tabs = BIZ_TABS.filter(t => !t.show || t.show());
     const tab = tabs.find(t => t.key === route.screen) || tabs[0];
@@ -112,6 +121,11 @@ function renderAll() {
     const tailor = route.screen === "tailor" ? designerById((db.designers.find(d => d.slug === route.id) || {}).id) : null;
     document.title = tailor ? `${tailor.business_name} · ${APP_NAME}` : route.screen === "tailors" ? `Find tailors near me · ${APP_NAME}` : APP_NAME;
   }
+}
+
+// Without an account you can find tailors and read how to join as one
+function guestCanOpen(route) {
+  return route.area === "tailors" || (route.area === "customer" && Cloud.GUEST_SCREENS.includes(route.screen));
 }
 
 // A short message that fades away
@@ -170,7 +184,7 @@ Cloud.start()
     if (result.recovery) return Auth.show("newPassword");
     if (!result.signedIn) {
       // Someone arriving at a tailor page (e.g. from Google) can look around first
-      if (Cloud.GUEST_SCREENS.includes(currentRoute().screen) && currentRoute().area === "customer") {
+      if (guestCanOpen(currentRoute())) {
         return Cloud.startGuest().then(() => { Auth.hide(); Auth.drawChrome(); renderAll(); });
       }
       return Auth.show("signIn");
