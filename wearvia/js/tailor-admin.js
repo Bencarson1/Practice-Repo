@@ -6,8 +6,11 @@
 // Saving a postcode or address looks up its map position automatically
 // (geo.js: postcodes.io for UK postcodes, OpenStreetMap Nominatim
 // elsewhere). "Use my current location" sets it from the device instead.
-// The database decides what the public sees: a tailor who hides their
-// address is shown about 1 km away, with only the postcode district.
+// The database decides what the public sees: every tailor is shown about
+// 1 km away, with only the postcode district, and phone numbers, emails,
+// links and social handles are hidden from descriptions and captions
+// (supabase/no-leakage.sql). The full address is shared with a customer
+// only once their deposit is confirmed.
 // ============================================================
 
 const PORTFOLIO_MAX = 12;
@@ -21,7 +24,7 @@ function tailorStatusBanner(d) {
   if (d.admin_status === "hidden") {
     return `<div class="card attention"><b>Your profile is hidden from customers.</b> ${d.admin_note ? `The ${APP_NAME} team says: “${escapeHtml(d.admin_note)}”.` : ""} Update it and contact ${APP_NAME} to be shown again.</div>`;
   }
-  return `<div class="card attention"><b>Waiting for approval.</b> Customers can't find you yet. Add your photo, specialities, location and a few portfolio photos — the ${APP_NAME} team checks new tailors and approves them.</div>`;
+  return `<div class="card attention"><b>Waiting for approval.</b>${d.tailor_terms_accepted_at ? "" : " Accept the tailor terms below first."} Customers can't find you yet. Add your photo, specialities, location and a few portfolio photos — the ${APP_NAME} team checks new tailors and approves them.</div>`;
 }
 
 // ---- My profile ----
@@ -42,6 +45,7 @@ function renderMyProfile() {
     ${bizHeader("My profile", `What customers see when they find ${escapeHtml(d.business_name)} on ${APP_NAME}.`)}
     ${tailorStatusBanner(d)}
     ${canEdit ? "" : `<div class="card"><p class="hint">Only the owner can change the profile. Ask them to update it.</p></div>`}
+    ${tailorTermsCard(d, canEdit)}
     <div class="card">
       <p class="share-row">Your public page: <a href="${escapeHtml(link)}" target="_blank" rel="noopener">${escapeHtml(link.replace(/^https?:\/\//, ""))}</a>
         ${d.admin_status === "approved" ? `· <a href="#/tailor/${escapeHtml(d.slug)}">see it in the app</a>` : "(live once you're approved)"}</p>
@@ -52,6 +56,7 @@ function renderMyProfile() {
       <div class="form-grid">
         <label>Business name<input name="business" required maxlength="80" value="${escapeHtml(d.business_name)}"></label>
         <label>Web address <small class="muted">wearvia…/tailor/<b>this</b>/</small><input name="slug" maxlength="60" pattern="[a-z0-9-]+" value="${escapeHtml(d.slug || "")}"></label>
+        <p class="hint wide">🔒 Customers contact you through ${APP_NAME}: phone numbers, emails, websites and social handles are hidden from your profile and portfolio automatically.</p>
         <label class="wide">About your business<textarea name="description" rows="4" maxlength="1200" placeholder="What you make, how long it takes, how fittings work…">${escapeHtml(d.description || "")}</textarea></label>
       </div>
 
@@ -66,13 +71,12 @@ function renderMyProfile() {
       </div>
 
       <h2>Where you are</h2>
-      <p class="hint">Customers search by distance. We look up your map position from your postcode (or address) when you save. Your full address is only shown if you switch it on; otherwise customers see your area (e.g. “SE15”) and a position rounded to about 1 km.</p>
+      <p class="hint">Customers search by distance. We look up your map position from your postcode (or address) when you save. Customers see your area (e.g. “SE15”) and a position rounded to about 1 km. Your full address is shared with a customer only once their deposit is confirmed, in “Delivery and fitting details” — for delivery and fittings.</p>
       <div class="form-grid">
         <label>Country<select name="country" required>${countryOptions(d.country_code, "Choose your country")}</select></label>
         <label>City or town<input name="city" required maxlength="60" value="${escapeHtml(d.city || "")}"></label>
         <label>Postcode<input name="postcode" maxlength="12" value="${escapeHtml(d.postcode || "")}" autocomplete="postal-code"></label>
         <label class="wide">Full address <small class="muted">(optional)</small><input name="address" maxlength="120" value="${escapeHtml(d.address_line || "")}" autocomplete="street-address"></label>
-        <label class="check wide"><input type="checkbox" name="showAddress" ${d.show_exact_address ? "checked" : ""}> Show my exact address to customers (for a shop they can visit)</label>
       </div>
       <div id="profile-location" class="location-row">${profileLocationRow()}</div>
       </fieldset>
@@ -161,12 +165,13 @@ function saveMyProfile(event) {
     city: form.city.value.trim(),
     postcode: form.postcode.value.trim().toUpperCase(),
     address_line: form.address.value.trim(),
-    show_exact_address: form.showAddress.checked
+    show_exact_address: false
   };
   if (v.business_name.length < 2) return formError("profile-error", "Enter your business name.");
   if (!v.country_code) return formError("profile-error", "Choose your country.");
   if (!v.city) return formError("profile-error", "Enter your city or town.");
-  if (v.show_exact_address && !v.address_line) return formError("profile-error", "Enter your full address, or switch off “show my exact address”.");
+  if (hideContactDetails(v.business_name).hidden) return formError("profile-error", "Your business name can't include a phone number, email, website or social handle.");
+  const hidDetails = hideContactDetails(v.description).hidden;
   if (!Cloud.live && db.designers.some(x => x.slug === v.slug && x.id !== d.id)) return formError("profile-error", "Another tailor uses that web address. Try another.");
 
   profileSaving = true;
@@ -177,7 +182,7 @@ function saveMyProfile(event) {
   // A new postcode or address: look up where it is (unless the location was just set from the device)
   const placeChanged = v.country_code !== d.country_code || v.city !== (d.city || "") || v.postcode !== (d.postcode || "") || v.address_line !== (d.address_line || "");
   const lookUp = (placeChanged || profileForm.lat == null) && profileForm.source !== "gps"
-    ? Geo.geocode({ country: v.country_code, city: v.city, postcode: v.postcode, address: v.show_exact_address ? v.address_line : "" })
+    ? Geo.geocode({ country: v.country_code, city: v.city, postcode: v.postcode, address: v.address_line })
     : Promise.resolve(null);
 
   let warning = "";
@@ -208,7 +213,7 @@ function saveMyProfile(event) {
     })
     .then(() => {
       profileForm = null;
-      toast(warning ? "Saved — but your map position isn't set." : "Profile saved.");
+      toast(warning ? "Saved — but your map position isn't set." : hidDetails ? "Saved. " + CONTACT_HIDDEN_NOTICE : "Profile saved.");
       renderAll();
       if (warning) formError("profile-error", warning);
     })
@@ -226,7 +231,8 @@ function addPortfolioPhotos(input) {
   const room = PORTFOLIO_MAX - (d.portfolio || []).length;
   const files = Array.from(input.files || []).slice(0, room);
   const titleBox = document.getElementById("portfolio-title");
-  const title = titleBox ? titleBox.value.trim() : "";
+  const title = titleBox ? hideContactDetails(titleBox.value.trim()).text : "";
+  if (titleBox && hideContactDetails(titleBox.value).hidden) toast(CONTACT_HIDDEN_NOTICE);
   if (!files.length) return;
   profileForm.adding += files.length;
   renderAll();
@@ -257,6 +263,33 @@ function removePortfolioPhoto(itemId) {
   renderAll();
 }
 
+// The tailor terms: shown until the owner ticks them
+function tailorTermsCard(d, canEdit) {
+  if (d.tailor_terms_accepted_at) return "";
+  return `<form class="card attention" onsubmit="return acceptTermsFromProfile(event, '${d.id}')">
+    <h2>Tailor terms</h2>
+    <p class="hint">${d.admin_status === "approved" ? "" : `The ${APP_NAME} team approves you once you've accepted them. `}They protect you and your customers: orders, chats and payments stay on ${APP_NAME}.</p>
+    ${tailorTermsHtml(true)}
+    ${canEdit ? `${tailorTermsCheckbox()}<div class="form-actions"><button type="submit" class="gold">Accept the tailor terms</button></div>`
+      : `<p class="hint">Only the owner can accept them.</p>`}
+  </form>`;
+}
+
+function acceptTermsFromProfile(event, designerId) {
+  event.preventDefault();
+  if (!event.target.acceptTerms.checked) { toast("Tick the box to agree to the tailor terms."); return false; }
+  if (Cloud.live) {
+    Cloud.acceptTailorTerms(designerId).then(() => { toast("Thank you — tailor terms accepted."); renderAll(); }, error => alert(error.message));
+    return false;
+  }
+  const d = designerById(designerId);
+  d.tailor_terms_accepted_at = new Date().toISOString();
+  saveData();
+  toast("Thank you — tailor terms accepted.");
+  renderAll();
+  return false;
+}
+
 // ---- Tailors (admin) ----
 
 let tailorAdminFilter = "pending";
@@ -277,6 +310,8 @@ function renderTailorAdmin() {
           ${d.public_latitude == null ? ` · <span class="owed">no map position</span>` : ""}${d.phone ? ` · 📞 ${escapeHtml(d.phone)}` : ""}</div>
         <div class="small-text">${escapeHtml((d.speciality_tags || []).join(", ") || "No specialities yet")} · ${(d.portfolio || []).length} portfolio photo${(d.portfolio || []).length === 1 ? "" : "s"}${d.description ? "" : " · no description"}</div>
         ${d.admin_note ? `<div class="small-text owed">Hidden because: ${escapeHtml(d.admin_note)}</div>` : ""}
+        ${d.tailor_terms_accepted_at ? `<div class="small-text paid">✓ Accepted the tailor terms ${formatDate(String(d.tailor_terms_accepted_at).slice(0, 10))}</div>`
+          : d.is_mine === false ? "" : `<div class="small-text owed">Hasn't accepted the tailor terms yet</div>`}
       </div>
       <div class="nowrap job-buttons">
         <a class="button small ghost" href="#/tailor/${escapeHtml(d.slug)}">View page</a>
@@ -304,6 +339,10 @@ function renderTailorAdmin() {
 
 function setTailorStatus(id, status) {
   const d = designerById(id);
+  if (status === "approved" && !d.tailor_terms_accepted_at && d.id !== (mainDesigner() || {}).id && !Cloud.live) {
+    alert(`${d.business_name} hasn't accepted the ${APP_NAME} tailor terms yet. They'll see them in Business → My profile.`);
+    return;
+  }
   let note = "";
   if (status === "hidden") {
     note = prompt(`Why hide ${d.business_name}? They'll see this note.`, "");

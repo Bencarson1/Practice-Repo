@@ -114,3 +114,11 @@ Existing helper functions used by policies: `is_admin()`, `can_manage_designer(d
 - **customers** gains added_by_designer_id; **designer_customer_notes** holds each tailor's own notes (the old shared `customers.notes` column is kept but no longer readable through the API).
 - Functions: `wearvia_search_tailors`, `wearvia_tailor_page`, `wearvia_register_designer`, `wearvia_my_designers`, `wearvia_set_designer_status`; `wearvia_bootstrap`, `wearvia_add_team_member`, `wearvia_team_logins`, the order/quote/chat functions now work per tailor.
 - Storage: public bucket `designer-photos` (logos and portfolios).
+
+## Added by wearvia/supabase/no-leakage.sql
+
+- **wv_hide_contacts(text)**: the contact-details filter (phones, emails, links, social handles, "call me on"). Triggers run it on order_messages (plus a new `contact_hidden` column), designers (name, description, location, city, making time, specialities), designer_portfolio_items, designer_services, reviews and orders (style note, review; messaging-app links are removed).
+- **hidden_contact_details**: the originals of anything hidden — readable only by the admin.
+- **designers**: `public_address` is always empty and positions are always rounded; new columns tailor_terms_version, tailor_terms_accepted_at, tailor_terms_accepted_by (set from the sign-up details or `wearvia_accept_tailor_terms`); a new tailor can't be approved without them.
+- **customers**: email and phone are no longer readable through the API; `wearvia_customer_contacts()` returns your own, your walk-in customers' and (for the admin) everyone's. Teams can't overwrite app customers' email or phone.
+- **order_delivery_addresses** (no direct access), `wearvia_set_delivery_address(order, address)` and `wearvia_delivery_details()`: the tailor's business address and the customer's delivery address, only once the deposit is confirmed.

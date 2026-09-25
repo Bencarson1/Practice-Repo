@@ -226,6 +226,7 @@ function renderOrderDetail(orderId) {
           ${fabricOrderRow ? `<div class="kv"><span>Fabric from seller</span><b>${fabricOrderRow.status === "sent" ? "Sent " + formatDate(fabricOrderRow.sent_at) : fabricOrderRow.status === "new" ? "Not sent yet" : "Cancelled"}</b></div>` : ""}
           ${order.quoted_at ? `<div class="kv"><span>Quote</span><b>Accepted ${formatDate(order.accepted_at)}</b></div>` : ""}`)}
         ${measurementsCard(order)}
+        <div class="card">${deliveryBoxHtml(order, "team")}</div>
       </div>
     </div>
 
