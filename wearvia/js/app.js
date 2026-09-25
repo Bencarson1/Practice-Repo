@@ -17,6 +17,7 @@ const BIZ_TABS = [
   { key: "fabrics", label: "Fabric Inventory", render: renderFabrics },
   { key: "sellers", label: "Fabric Sellers", render: renderSellerFabrics },
   { key: "payments", label: "Payments", render: renderPayments },
+  { key: "prices", label: "Prices", render: renderPrices },
   { key: "weddings", label: "Wedding Orders", render: renderWeddings },
   { key: "shop", label: "Ready to Wear", render: renderShop },
   { key: "deliveries", label: "Deliveries", render: renderDeliveries },

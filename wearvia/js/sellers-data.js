@@ -387,6 +387,8 @@ function upgradeDataToYards(data) {
 // Safe to run more than once.
 function upgradeData(data) {
   upgradeDataToYards(data);
+  if (!data.prices) data.prices = defaultPriceList();
+  applyPriceList(data.prices);
   data.session = data.session || {};
   if (data.session.sellerId === undefined) data.session.sellerId = null;
 

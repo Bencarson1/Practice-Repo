@@ -82,6 +82,7 @@ The app won't let anyone skip a step: for example, opening the payment page befo
 | Fabric Inventory | Live stock in yards, low-stock warnings (under 10 yd), restocking, new fabrics and suppliers |
 | Fabric Sellers | Approve sellers' fabrics or hide them (with a reason the seller sees), and see every seller's shop, fabrics and sales |
 | Payments | Record payments, see balances and payment history |
+| Prices | Tailoring price and typical yards for each outfit, embroidery prices and the delivery price. The database charges these prices on every customer order, so the quote a customer sees always matches. Walk-in orders can use your own price instead |
 | Wedding Orders | One event with many people, each with their own outfit and status |
 | Ready to Wear | Items, stock and sales |
 | Deliveries | Dispatch orders and update courier tracking |
@@ -120,7 +121,7 @@ Who can do what is decided by the database, not by the browser (see `supabase/se
 
 | Person | How they get an account | What they can do |
 |---|---|---|
-| Customer | Creates one: *I want outfits made* | Their own profile, measurements, orders and payments. Payments always start as *awaiting confirmation*. They can't move production stages or mark anything paid |
+| Customer | Creates one: *I want outfits made* | Their own profile, measurements, orders and payments. Payments always start as *awaiting confirmation*. The database works out tailoring, embroidery and delivery itself from the price list, so a customer can't change what they pay. They can't move production stages or mark anything paid |
 | Fabric seller | Creates one: *I sell fabric* | Their own shop and fabrics. New or changed fabrics wait for approval; they can't approve their own. They see the orders that use their fabric (customer's first name only) |
 | Nebeda Threads staff | The owner adds their email in Tailor Team → *Team logins*; they then create an account with that email | The Business dashboard: confirm payments, move production stages, manage everything |
 | Owner / admin | Set once in the Supabase SQL Editor (see below) | Everything, plus adding and removing staff logins |
@@ -131,7 +132,7 @@ Who can do what is decided by the database, not by the browser (see `supabase/se
 
 The app is already pointed at the Wearvia Supabase project in `js/config.js` (the project URL and the *publishable* key — that key is meant to be public). **Never put the secret key in the app.**
 
-1. **Run the database scripts.** Supabase → *SQL Editor* → *New query* → paste all of `supabase/setup.sql` → *Run*. It adds the missing tables, columns, security rules and photo buckets without touching your existing data. Then open another *New query*, paste all of `supabase/yards.sql` → *Run*. It switches the fabric columns from metres to yards and converts what's in them (money already charged doesn't change). Both are safe to run again.
+1. **Run the database scripts.** Supabase → *SQL Editor* → *New query* → paste all of `supabase/setup.sql` → *Run*. It adds the missing tables, columns, security rules and photo buckets without touching your existing data. Then open another *New query*, paste all of `supabase/yards.sql` → *Run*. It switches the fabric columns from metres to yards and converts what's in them (money already charged doesn't change). Then do the same with `supabase/prices.sql`: it adds the price list (Business → Prices), makes the database price every customer order, and removes old unused metre functions. All three are safe to run again.
 2. **Set the sign-in addresses.** Supabase → *Authentication* → *URL Configuration*: set *Site URL* to the address where the app is published, and add the same address under *Redirect URLs*. The links in sign-up and password emails go there.
 3. **Keep email confirmation on.** Supabase → *Authentication* → *Sign In / Providers* → *Email*: leave *Confirm email* switched on. Staff logins are only granted to confirmed emails.
 4. **Make yourself the owner.** Open the app, create an account with your email (choose *I want outfits made*) and confirm it. Then in the SQL Editor run
@@ -145,7 +146,8 @@ wearvia/
 ├── index.html           The page layout
 ├── supabase/
 │   ├── setup.sql        Run once in the Supabase SQL Editor: tables, security rules, photo buckets
-│   └── yards.sql        Run after setup.sql: switches fabric from metres to yards
+│   ├── yards.sql        Run after setup.sql: switches fabric from metres to yards
+│   └── prices.sql       Run after yards.sql: the price list, and orders priced by the database
 ├── css/
 │   └── style.css        Colours, fonts and layout
 └── js/
@@ -170,6 +172,7 @@ wearvia/
     ├── measurements.js  Measurements
     ├── fabrics.js       Fabric inventory and suppliers
     ├── payments.js      Payments
+    ├── prices.js        Prices (the price list)
     ├── weddings.js      Wedding and group orders
     ├── shop.js          Ready-to-wear
     ├── deliveries.js    Deliveries

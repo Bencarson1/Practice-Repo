@@ -40,21 +40,25 @@ function renderOrdersTab(orderId) {
 
     <div class="card">
       <h2>New walk-in order</h2>
-      <p class="hint">For orders taken in the shop or by phone. Online customers order through the customer app. The price is quoted the same way (fabric + tailoring + embroidery + delivery) and the order starts once a deposit is paid.</p>
+      <p class="hint">For orders taken in the shop or by phone. Online customers order through the customer app. The price is quoted the same way (fabric + tailoring + embroidery + delivery) and the order starts once a deposit is paid. Leave the tailoring, embroidery and delivery prices blank to use the <a href="#/biz/prices">price list</a>, or type your own price for this order.</p>
       <form id="order-form" class="form-grid" onsubmit="return createWalkInOrder(event)">
         <label>Customer name
           <input name="customer" list="customer-list" required placeholder="Type a name">
           <datalist id="customer-list">${db.customers.map(c => `<option value="${escapeHtml(c.name)}"></option>`).join("")}</datalist>
         </label>
         <label>Phone (for new customers)<input name="phone" placeholder="Optional"></label>
-        <label>Outfit<select name="outfit" onchange="this.form.yards.value = findOutfit(this.value).yards">${OUTFITS.map(o =>
+        <label>Outfit<select name="outfit" onchange="this.form.yards.value = findOutfit(this.value).yards; showListPrices(this.form)">${OUTFITS.map(o =>
           `<option value="${escapeHtml(o.name)}">${escapeHtml(o.name)}</option>`).join("")}</select></label>
         <label>Colour${select("colour", COLOURS.map(c => ({ value: c.hex, label: c.name })))}</label>
-        <label>Embroidery${select("embroidery", EMBROIDERY.map(e => ({ value: e.name, label: `${e.name} (${money(e.price)})` })))}</label>
+        <label>Embroidery<select name="embroidery" onchange="showListPrices(this.form)">${EMBROIDERY.map(e =>
+          `<option value="${escapeHtml(e.name)}">${escapeHtml(`${e.name} (${money(e.price)})`)}</option>`).join("")}</select></label>
         <label>Sleeve${select("sleeve", SLEEVES.map(s => ({ value: s, label: s })))}</label>
         <label>Neck${select("neck", NECKS.map(s => ({ value: s, label: s })))}</label>
         <label>Fabric<select name="fabric" id="order-fabric" required>${fabricOptions}</select></label>
         <label>Yards needed<input name="yards" type="number" min="0.5" step="0.5" value="${OUTFITS[0].yards}" required></label>
+        <label>Tailoring price (${CURRENCY})<input name="ownTailoring" type="number" min="0" step="0.01" placeholder="Price list: ${money(OUTFITS[0].tailoring)}"></label>
+        <label>Embroidery price (${CURRENCY})<input name="ownEmbroidery" type="number" min="0" step="0.01" placeholder="Price list: ${money(EMBROIDERY[0].price)}"></label>
+        <label>Delivery price (${CURRENCY})<input name="ownDelivery" type="number" min="0" step="0.01" placeholder="Price list: ${money(DELIVERY_FEE)}"></label>
         <label>Due date<input name="dueDate" type="date" value="${addDays(14)}" required></label>
         <label>Deposit paid now (${CURRENCY})<input name="deposit" type="number" min="0.01" step="0.01" placeholder="Blank = ${Math.round(DEPOSIT_RATE * 100)}% of quote"></label>
         <label>Paid by${select("method", PAYMENT_METHODS.map(m => ({ value: m, label: m })))}</label>
@@ -88,7 +92,9 @@ function createWalkInOrder(event) {
     return false;
   }
 
-  const quote = computeQuote(form.outfit.value, form.embroidery.value, fabric, yards);
+  const quote = computeQuote(form.outfit.value, form.embroidery.value, fabric, yards, {
+    tailoring: form.ownTailoring.value, embroidery: form.ownEmbroidery.value, delivery: form.ownDelivery.value
+  });
   const deposit = form.deposit.value ? Number(form.deposit.value) : depositFor(quote.total);
   if (deposit > quote.total) {
     alert(`The deposit can't be more than the quote of ${money(quote.total)}.`);
@@ -119,6 +125,12 @@ function createWalkInOrder(event) {
       if (button) { button.disabled = false; button.textContent = "Create order"; }
     });
   return false;
+}
+
+// The walk-in form shows the price-list prices for the outfit and embroidery chosen
+function showListPrices(form) {
+  form.ownTailoring.placeholder = "Price list: " + money(findOutfit(form.outfit.value).tailoring);
+  form.ownEmbroidery.placeholder = "Price list: " + money(embroideryPrice(form.embroidery.value));
 }
 
 function deleteOrder(orderId) {

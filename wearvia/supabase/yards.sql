@@ -4,6 +4,10 @@
 -- Paste this whole file into Supabase → SQL Editor → New query → Run.
 -- Run it once, just before the app update that uses yards goes live.
 --
+-- Already run on the live database: don't run it again. (If you ever do,
+-- run prices.sql straight afterwards — this file puts back an older
+-- version of the "new order" trigger that doesn't use the price list.)
+--
 -- What it does:
 --   1. Renames the fabric columns to yards and converts what's in them
 --        fabrics.price_per_metre         → price_per_yard   (× 0.9144, to the penny)

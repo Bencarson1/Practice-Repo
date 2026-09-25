@@ -204,13 +204,14 @@ const Cloud = (() => {
   async function load() {
     const tables = ["designers", "suppliers", "fabrics", "customers", "measurement_profiles", "orders", "payments",
       "invoices", "deliveries", "fabric_order_lines", "tailors", "wedding_orders", "wedding_order_members",
-      "ready_to_wear_items", "ready_to_wear_sales", "reviews"];
+      "ready_to_wear_items", "ready_to_wear_sales", "reviews", "price_list"];
     const rows = {};
-    const results = await Promise.all(tables.map(t => fetchAll(t, "created_at")));
+    const results = await Promise.all(tables.map(t => fetchAll(t, t === "price_list" ? "sort_order" : "created_at")));
     tables.forEach((t, i) => { rows[t] = results[i]; });
     const previous = db;
     state.loadedAt = Date.now();
     db = buildDb(rows, previous);
+    applyPriceList(db.prices);   // quotes use the prices the database charges
     state.snapshot = snapshotOf(db);
     return db;
   }
@@ -319,6 +320,9 @@ const Cloud = (() => {
         date: day(s.sold_on || s.created_at), status: s.status
       })),
 
+      // Empty until supabase/prices.sql has been run; the starting prices are used until then
+      prices: r.price_list.map(p => ({ id: p.id, kind: p.kind, name: p.name, price: num(p.price), yards: num(p.yards) })),
+
       reviews: r.reviews.map(v => ({
         id: v.id, order_id: numberOf.get(v.order_id) || null, designer_id: v.designer_id, customer_id: v.customer_id,
         rating: v.rating, review_text: v.review_text || "", created_at: day(v.created_at)
@@ -401,6 +405,8 @@ const Cloud = (() => {
     { table: "fabric_order_lines", rows: d => d.fabric_orders.map(l => ({ id: l.id, status: l.status })) },
     { table: "ready_to_wear_items", rows: d => d.ready_to_wear.map(i => ({
         id: i.id, designer_id: i.designer_id || d.designers[0].id, name: i.name, price: i.price, cost: i.cost, stock: i.stock, colour_hex: i.color })) },
+    { table: "price_list", rows: d => (d.prices || []).map(p => ({
+        id: p.id, price: p.price, yards: p.kind === "outfit" ? p.yards : null })) },
     { table: "ready_to_wear_sales", rows: d => d.rtw_sales.map(s => ({
         id: s.id, item_id: s.item_id, customer_id: s.customer_id || null, price: s.price, cost: s.cost,
         status: s.status || "confirmed", sold_on: s.date })) }
@@ -571,6 +577,8 @@ const Cloud = (() => {
         sleeve_style: details.sleeve, neck_style: details.neck, concept_variation: details.variation || 1,
         measurement_profile_id: details.profileId || null,
         fabric_id: details.fabric.id, fabric_yards: details.yards, fabric_cost: details.quote.fabricCost,
+        // The database works out a customer's prices itself and only checks this total matches;
+        // the team's own prices on a walk-in order are kept
         tailoring_cost: lines[1].amount, embroidery_cost: lines[2].amount, delivery_cost: lines[3].amount,
         quote_total: details.quote.total, deposit_amount: details.deposit, line_items: lines,
         inspiration_photos: insp ? insp.photos.map(ref => photoPath(ref, STYLE)).filter(Boolean) : [],
@@ -578,7 +586,11 @@ const Cloud = (() => {
         due_date: details.dueDate || addDays(14)
       };
       const created = await state.client.from("orders").insert(row).select("id, order_number").single();
-      if (created.error) throw new Error(friendly(created.error));
+      if (created.error) {
+        // Usually a price changed since the quote was shown: load the new prices so the quote shows them
+        await load().catch(() => {});
+        throw new Error(friendly(created.error));
+      }
       if (details.deposit > 0) {
         const paid = await state.client.from("payments").insert({
           id: newId(), order_id: id, amount: details.deposit, method: details.method, kind: "Deposit",

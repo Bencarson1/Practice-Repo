@@ -10,7 +10,7 @@ function businessTotals() {
   const orderRevenue = db.payments.filter(isConfirmed).reduce((total, p) => total + p.amount, 0);
   const shopRevenue = db.rtw_sales.filter(isConfirmed).reduce((total, s) => total + s.price, 0);
   // Estimated profit = order value minus fabric and delivery costs, plus ready-to-wear margin
-  const orderProfit = db.orders.reduce((total, o) => total + o.quote_total - o.fabric_cost - DELIVERY_FEE, 0);
+  const orderProfit = db.orders.reduce((total, o) => total + o.quote_total - o.fabric_cost - deliveryCostOf(o), 0);
   const shopProfit = db.rtw_sales.filter(isConfirmed).reduce((total, s) => total + s.price - s.cost, 0);
   const pending = db.orders.reduce((total, o) => total + Math.max(balanceOwed(o), 0), 0);
   return { revenue: orderRevenue + shopRevenue, profit: orderProfit + shopProfit, pending };
