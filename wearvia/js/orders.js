@@ -21,7 +21,7 @@ function renderOrdersTab(orderId) {
       <td><a href="#/biz/orders/${o.id}">${o.id}</a></td>
       <td>${escapeHtml(customerName(o.customer_id))}</td>
       <td>${escapeHtml(o.outfit_type)}${hasInspiration(o.inspiration) ? ` <span title="Customer uploaded style photos" aria-label="has style photos">📷</span>` : ""}</td>
-      <td>${escapeHtml(fabric ? fabric.name : "—")} (${o.fabric_metres} m)</td>
+      <td>${escapeHtml(fabric ? fabric.name : "—")} (${o.fabric_yards} yd)</td>
       <td class="${isLate(o) ? "owed" : ""}">${formatDate(o.due_date)}</td>
       <td>${stageBadge(o)}</td>
       <td>${money(o.quote_total)}</td>
@@ -32,7 +32,7 @@ function renderOrdersTab(orderId) {
   }).join("");
 
   const fabricOptions = activeFabrics().filter(f => !isSoldOut(f) || f.id === pendingFabricId).map(f =>
-    `<option value="${f.id}" ${f.id === pendingFabricId ? "selected" : ""}>${escapeHtml(f.name)} — ${money(f.price_per_metre)}/m (${f.metres_available} m left)</option>`).join("");
+    `<option value="${f.id}" ${f.id === pendingFabricId ? "selected" : ""}>${escapeHtml(f.name)} — ${money(f.price_per_yard)}/yd (${f.yards_available} yd left)</option>`).join("");
   const select = (name, items) => `<select name="${name}">${items.map(i => `<option value="${escapeHtml(i.value)}">${escapeHtml(i.label)}</option>`).join("")}</select>`;
 
   return `
@@ -47,13 +47,14 @@ function renderOrdersTab(orderId) {
           <datalist id="customer-list">${db.customers.map(c => `<option value="${escapeHtml(c.name)}"></option>`).join("")}</datalist>
         </label>
         <label>Phone (for new customers)<input name="phone" placeholder="Optional"></label>
-        <label>Outfit${select("outfit", OUTFITS.map(o => ({ value: o.name, label: o.name })))}</label>
+        <label>Outfit<select name="outfit" onchange="this.form.yards.value = findOutfit(this.value).yards">${OUTFITS.map(o =>
+          `<option value="${escapeHtml(o.name)}">${escapeHtml(o.name)}</option>`).join("")}</select></label>
         <label>Colour${select("colour", COLOURS.map(c => ({ value: c.hex, label: c.name })))}</label>
         <label>Embroidery${select("embroidery", EMBROIDERY.map(e => ({ value: e.name, label: `${e.name} (${money(e.price)})` })))}</label>
         <label>Sleeve${select("sleeve", SLEEVES.map(s => ({ value: s, label: s })))}</label>
         <label>Neck${select("neck", NECKS.map(s => ({ value: s, label: s })))}</label>
         <label>Fabric<select name="fabric" id="order-fabric" required>${fabricOptions}</select></label>
-        <label>Metres needed<input name="metres" type="number" min="0.5" step="0.5" value="5" required></label>
+        <label>Yards needed<input name="yards" type="number" min="0.5" step="0.5" value="${OUTFITS[0].yards}" required></label>
         <label>Due date<input name="dueDate" type="date" value="${addDays(14)}" required></label>
         <label>Deposit paid now (${CURRENCY})<input name="deposit" type="number" min="0.01" step="0.01" placeholder="Blank = ${Math.round(DEPOSIT_RATE * 100)}% of quote"></label>
         <label>Paid by${select("method", PAYMENT_METHODS.map(m => ({ value: m, label: m })))}</label>
@@ -76,18 +77,18 @@ function createWalkInOrder(event) {
   event.preventDefault();
   const form = event.target;
   const fabric = findFabric(form.fabric.value);
-  const metres = Number(form.metres.value);
+  const yards = Number(form.yards.value);
 
   if (isSoldOut(fabric)) {
     alert(`${fabric.name} is sold out.`);
     return false;
   }
-  if (metres > fabric.metres_available) {
-    alert(`Only ${fabric.metres_available} m of ${fabric.name} left in stock.`);
+  if (yards > fabric.yards_available) {
+    alert(`Only ${fabric.yards_available} yd of ${fabric.name} left in stock.`);
     return false;
   }
 
-  const quote = computeQuote(form.outfit.value, form.embroidery.value, fabric, metres);
+  const quote = computeQuote(form.outfit.value, form.embroidery.value, fabric, yards);
   const deposit = form.deposit.value ? Number(form.deposit.value) : depositFor(quote.total);
   if (deposit > quote.total) {
     alert(`The deposit can't be more than the quote of ${money(quote.total)}.`);
@@ -97,7 +98,7 @@ function createWalkInOrder(event) {
   const customer = findOrCreateCustomer(form.customer.value.trim(), form.phone.value.trim());
   const profile = latestProfile(customer);
   // Fabric purchased: stock goes down (in live mode the database does this)
-  if (!Cloud.live) fabric.metres_available = Math.round((fabric.metres_available - metres) * 10) / 10;
+  if (!Cloud.live) fabric.yards_available = Math.round((fabric.yards_available - yards) * 10) / 10;
 
   const button = form.querySelector("button[type=submit]");
   if (button) { button.disabled = true; button.textContent = "Creating…"; }
@@ -105,7 +106,7 @@ function createWalkInOrder(event) {
   Promise.resolve(createPaidOrder({
     customerId: customer.id, outfit: form.outfit.value, colour: form.colour.value, embroidery: form.embroidery.value,
     sleeve: form.sleeve.value, neck: form.neck.value, profileId: profile ? profile.id : null,
-    fabric, metres, quote, deposit, method: form.method.value, dueDate: form.dueDate.value, confirmed: true
+    fabric, yards, quote, deposit, method: form.method.value, dueDate: form.dueDate.value, confirmed: true
   }))
     .then(order => {
       pendingFabricId = null;
@@ -129,7 +130,7 @@ function deleteOrder(orderId) {
     return;
   }
   const fabric = findFabric(order.fabric_id);
-  if (fabric) fabric.metres_available = Math.round((fabric.metres_available + order.fabric_metres) * 10) / 10;
+  if (fabric) fabric.yards_available = Math.round((fabric.yards_available + order.fabric_yards) * 10) / 10;
   if (order.inspiration) order.inspiration.photos.forEach(ref => PhotoStore.remove(ref));
   db.orders = db.orders.filter(o => o.id !== orderId);
   db.payments = db.payments.filter(p => p.order_id !== orderId);
@@ -214,7 +215,7 @@ function renderOrderDetail(orderId) {
               <div class="kv"><span>Embroidery</span><b>${escapeHtml(order.embroidery)}</b></div>
               <div class="kv"><span>Sleeve</span><b>${escapeHtml(order.sleeve_style)}</b></div>
               <div class="kv"><span>Neck</span><b>${escapeHtml(order.neck_style)}</b></div>
-              <div class="kv"><span>Fabric</span><b>${escapeHtml(fabric ? fabric.name : "—")}, ${order.fabric_metres} m</b></div>
+              <div class="kv"><span>Fabric</span><b>${escapeHtml(fabric ? fabric.name : "—")}, ${order.fabric_yards} yd</b></div>
               <div class="kv"><span>Supplier</span><b>${escapeHtml(supplier ? supplier.name : "—")}</b></div>
               ${fabricOrderRow ? `<div class="kv"><span>Fabric from seller</span><b>${fabricOrderRow.status === "sent" ? "Sent " + formatDate(fabricOrderRow.sent_at) : fabricOrderRow.status === "new" ? "Not sent yet" : "Cancelled"}</b></div>` : ""}
             </div>

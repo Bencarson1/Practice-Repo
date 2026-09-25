@@ -6,6 +6,10 @@
 -- it never drops or recreates a table, and it is safe to run again
 -- (every step checks whether it has already been done).
 --
+-- Fabric is sold by the yard. A database that still has the old metre
+-- columns (price_per_metre, metres_available …) needs yards.sql as well:
+-- run this file first, then yards.sql.
+--
 -- What it does:
 --   1. Adds the enum values the app uses
 --   2. Adds the missing columns (fabric photos, supplier phone/logo, style photos …)
@@ -94,9 +98,12 @@ begin
     alter table public.fabrics add constraint fabrics_status_check_wv
       check (status in ('pending', 'approved', 'hidden'));
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'fabrics_stock_check_wv') then
+  -- (only once the database is in yards — see yards.sql)
+  if not exists (select 1 from pg_constraint where conname = 'fabrics_stock_check_wv')
+     and exists (select 1 from information_schema.columns
+                 where table_schema = 'public' and table_name = 'fabrics' and column_name = 'yards_available') then
     alter table public.fabrics add constraint fabrics_stock_check_wv
-      check (metres_available >= 0) not valid;
+      check (yards_available >= 0) not valid;
   end if;
 end $$;
 
@@ -192,8 +199,8 @@ create table if not exists public.fabric_order_lines (
   supplier_id         uuid not null references public.suppliers (id) on delete cascade,
   fabric_id           uuid references public.fabrics (id) on delete set null,
   fabric_name         text not null,               -- copied so it survives edits
-  metres              numeric(8, 1) not null,
-  price_per_metre     numeric(10, 2) not null,
+  yards               numeric(8, 2) not null,
+  price_per_yard      numeric(10, 2) not null,
   total               numeric(10, 2) not null,
   customer_first_name text not null default '',    -- sellers only see a first name
   deliver_to          text not null default '',
@@ -363,11 +370,11 @@ begin
       if v_fabric.deleted_at is not null or v_fabric.status <> 'approved' or v_fabric.sold_out then
         raise exception '% is no longer available. Please choose another fabric.', v_fabric.name;
       end if;
-      if coalesce(new.fabric_metres, 0) < coalesce(v_fabric.min_order_metres, 0) then
-        raise exception 'The smallest order for % is % m.', v_fabric.name, v_fabric.min_order_metres;
+      if coalesce(new.fabric_yards, 0) < coalesce(v_fabric.min_order_yards, 0) then
+        raise exception 'The smallest order for % is % yd.', v_fabric.name, v_fabric.min_order_yards;
       end if;
     end if;
-    v_cost := round(coalesce(new.fabric_metres, 0) * v_fabric.price_per_metre, 2);
+    v_cost := round(coalesce(new.fabric_yards, 0) * v_fabric.price_per_yard, 2);
     if not v_team and abs(coalesce(new.fabric_cost, 0) - v_cost) > 0.01 then
       raise exception 'The price of % has changed. Please check your quote and try again.', v_fabric.name;
     end if;
@@ -442,10 +449,10 @@ declare
   v_first    text;
   v_deliver  text;
 begin
-  if new.fabric_id is not null and coalesce(new.fabric_metres, 0) > 0 then
+  if new.fabric_id is not null and coalesce(new.fabric_yards, 0) > 0 then
     update public.fabrics
-       set metres_available = round(metres_available - new.fabric_metres, 1)
-     where id = new.fabric_id and metres_available >= new.fabric_metres
+       set yards_available = round(yards_available - new.fabric_yards, 1)
+     where id = new.fabric_id and yards_available >= new.fabric_yards
     returning * into v_fabric;
     if not found then
       raise exception 'There isn''t enough of that fabric left in stock.';
@@ -456,11 +463,11 @@ begin
     select split_part(trim(c.name), ' ', 1) into v_first from public.customers c where c.id = new.customer_id;
     select d.business_name || coalesce(', ' || d.location, '') into v_deliver from public.designers d where d.id = new.designer_id;
     insert into public.fabric_order_lines
-      (order_id, order_number, supplier_id, fabric_id, fabric_name, metres, price_per_metre, total,
+      (order_id, order_number, supplier_id, fabric_id, fabric_name, yards, price_per_yard, total,
        customer_first_name, deliver_to, created_at)
     values
-      (new.id, new.order_number, v_fabric.supplier_id, v_fabric.id, v_fabric.name, new.fabric_metres,
-       v_fabric.price_per_metre, new.fabric_cost, coalesce(v_first, ''), coalesce(v_deliver, ''), new.created_at);
+      (new.id, new.order_number, v_fabric.supplier_id, v_fabric.id, v_fabric.name, new.fabric_yards,
+       v_fabric.price_per_yard, new.fabric_cost, coalesce(v_first, ''), coalesce(v_deliver, ''), new.created_at);
   end if;
 
   insert into public.invoices (order_id, line_items, total, invoice_number, created_at)
@@ -506,8 +513,8 @@ end $$;
 create or replace function public.wv_orders_before_delete() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
-  if old.fabric_id is not null and coalesce(old.fabric_metres, 0) > 0 then
-    update public.fabrics set metres_available = round(metres_available + old.fabric_metres, 1)
+  if old.fabric_id is not null and coalesce(old.fabric_yards, 0) > 0 then
+    update public.fabrics set yards_available = round(yards_available + old.fabric_yards, 1)
     where id = old.fabric_id;
   end if;
   update public.fabric_order_lines set status = 'cancelled' where order_id = old.id and status <> 'cancelled';

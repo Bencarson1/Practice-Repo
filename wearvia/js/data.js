@@ -10,7 +10,9 @@ const CURRENCY = "£";
 const STORAGE_KEY = "wearvia-app-v2";
 const DEPOSIT_RATE = 0.6;            // 60% deposit, balance after quality control
 const DELIVERY_FEE = 15;
-const LOW_STOCK_METRES = 10;
+const LOW_STOCK_YARDS = 10;          // "low stock" warning below this many yards
+const YARDS_PER_METRE = 1.0936;      // only used to convert data saved before Wearvia switched to yards
+const METRES_PER_YARD = 0.9144;
 
 // ---- The confirmed order lifecycle (WEARVIA-SPEC.md, section 2) ----
 // Keep this sequence exactly.
@@ -56,18 +58,19 @@ const STAFF_ROLES = [
 ];
 
 // ---- Outfit options (screens 2 and 3) ----
-// tailoring = our making price in £; metres = typical fabric needed
+// tailoring = our making price in £; yards = typical fabric needed for one adult
+// (45–60 inch wide fabric, as sold by the yard)
 const OUTFITS = [
-  { name: "Agbada",    tailoring: 280, metres: 7 },
-  { name: "Kaftan",    tailoring: 150, metres: 4 },
-  { name: "Senator",   tailoring: 170, metres: 4 },
-  { name: "Bubu",      tailoring: 140, metres: 5 },
-  { name: "Two Piece", tailoring: 180, metres: 5 },
-  { name: "Dress",     tailoring: 160, metres: 4 },
-  { name: "Wedding",   tailoring: 450, metres: 8 },
-  { name: "Suit",      tailoring: 350, metres: 4 },
-  { name: "Aso Ebi",   tailoring: 160, metres: 5 },
-  { name: "Custom",    tailoring: 200, metres: 5 }
+  { name: "Agbada",    tailoring: 280, yards: 10 },   // robe, buba and sokoto
+  { name: "Kaftan",    tailoring: 150, yards: 4.5 },  // kaftan and trousers
+  { name: "Senator",   tailoring: 170, yards: 4 },    // top and trousers
+  { name: "Bubu",      tailoring: 140, yards: 5 },
+  { name: "Two Piece", tailoring: 180, yards: 4 },
+  { name: "Dress",     tailoring: 160, yards: 3 },
+  { name: "Wedding",   tailoring: 450, yards: 10 },
+  { name: "Suit",      tailoring: 350, yards: 3.5 },
+  { name: "Aso Ebi",   tailoring: 160, yards: 5 },    // iro and buba, or a gown
+  { name: "Custom",    tailoring: 200, yards: 5 }
 ];
 const COLOURS = [
   { hex: "#1e2a44", name: "Navy" },
@@ -157,11 +160,17 @@ function embroideryPrice(name) {
   return found ? found.price : 0;
 }
 
+// Yards × price per yard, rounded to the penny the same way the database does
+// (worked out in whole pence so 4.5 yd × £41.15 is £185.18, not £185.17)
+function fabricCostFor(yards, pricePerYard) {
+  return Math.round(Math.round(yards * 100) * Math.round(pricePerYard * 100) / 100) / 100;
+}
+
 // Itemised quotation: fabric, tailoring, embroidery, delivery → total (screen 8)
-function computeQuote(outfit, embroidery, fabric, metres) {
-  const fabricCost = Math.round(metres * fabric.price_per_metre * 100) / 100;
+function computeQuote(outfit, embroidery, fabric, yards) {
+  const fabricCost = fabricCostFor(yards, fabric.price_per_yard);
   const lines = [
-    { label: `Fabric — ${fabric.name} (${metres} m × ${money(fabric.price_per_metre)})`, amount: fabricCost },
+    { label: `Fabric — ${fabric.name} (${yards} yd × ${money(fabric.price_per_yard)})`, amount: fabricCost },
     { label: `Tailoring (${outfit})`, amount: findOutfit(outfit).tailoring },
     { label: `Embroidery (${embroidery})`, amount: embroideryPrice(embroidery) },
     { label: "Delivery", amount: DELIVERY_FEE }
@@ -216,18 +225,18 @@ function buildSampleData() {
       { id: "S8", name: "Silk Road Traders", location: "London", delivery_estimate: "Next day", rating: 4.6 }
     ],
 
-    // Price is per metre in pounds (£); stock is in metres
+    // Price is per yard in pounds (£); stock is in yards
     fabrics: [
-      { id: "F1", name: "Italian Cashmere",   category: "Cashmere", color: "#1e3a5f", price_per_metre: 45, supplier_id: "S1", metres_available: 74,  min_order_metres: 2 },
-      { id: "F2", name: "Ankara Print",       category: "Ankara",   color: "#c9a24a", price_per_metre: 8,  supplier_id: "S2", metres_available: 120, min_order_metres: 2 },
-      { id: "F3", name: "Aso Oke",            category: "Aso Oke",  color: "#7c1f2e", price_per_metre: 25, supplier_id: "S3", metres_available: 40,  min_order_metres: 3 },
-      { id: "F4", name: "Gold Lace",          category: "Lace",     color: "#8a6d1f", price_per_metre: 22, supplier_id: "S4", metres_available: 7,   min_order_metres: 2 },
-      { id: "F5", name: "Navy Senator",       category: "Senator",  color: "#20304a", price_per_metre: 9,  supplier_id: "S5", metres_available: 120, min_order_metres: 2 },
-      { id: "F6", name: "Sunburst Ankara",    category: "Ankara",   color: "#e8871e", price_per_metre: 10, supplier_id: "S2", metres_available: 44,  min_order_metres: 2 },
-      { id: "F7", name: "Midnight Navy Wool", category: "Wool",     color: "#1f2a44", price_per_metre: 44, supplier_id: "S6", metres_available: 27,  min_order_metres: 2 },
-      { id: "F8", name: "Royal Gold Aso Oke", category: "Aso Oke",  color: "#c9a227", price_per_metre: 49, supplier_id: "S3", metres_available: 20,  min_order_metres: 3 },
-      { id: "F9", name: "Classic White Linen",category: "Linen",    color: "#f4f1ea", price_per_metre: 17.5, supplier_id: "S7", metres_available: 55, min_order_metres: 1 },
-      { id: "F10", name: "Emerald Silk",      category: "Silk",     color: "#1d7a5a", price_per_metre: 38, supplier_id: "S8", metres_available: 13,  min_order_metres: 1 }
+      { id: "F1", name: "Italian Cashmere",   category: "Cashmere", color: "#1e3a5f", price_per_yard: 41, supplier_id: "S1", yards_available: 80,  min_order_yards: 2 },
+      { id: "F2", name: "Ankara Print",       category: "Ankara",   color: "#c9a24a", price_per_yard: 7.5,  supplier_id: "S2", yards_available: 130, min_order_yards: 2 },
+      { id: "F3", name: "Aso Oke",            category: "Aso Oke",  color: "#7c1f2e", price_per_yard: 23, supplier_id: "S3", yards_available: 44,  min_order_yards: 3 },
+      { id: "F4", name: "Gold Lace",          category: "Lace",     color: "#8a6d1f", price_per_yard: 20, supplier_id: "S4", yards_available: 7,   min_order_yards: 2 },
+      { id: "F5", name: "Navy Senator",       category: "Senator",  color: "#20304a", price_per_yard: 8,  supplier_id: "S5", yards_available: 130, min_order_yards: 2 },
+      { id: "F6", name: "Sunburst Ankara",    category: "Ankara",   color: "#e8871e", price_per_yard: 9, supplier_id: "S2", yards_available: 48,  min_order_yards: 2 },
+      { id: "F7", name: "Midnight Navy Wool", category: "Wool",     color: "#1f2a44", price_per_yard: 40, supplier_id: "S6", yards_available: 30,  min_order_yards: 2 },
+      { id: "F8", name: "Royal Gold Aso Oke", category: "Aso Oke",  color: "#c9a227", price_per_yard: 45, supplier_id: "S3", yards_available: 22,  min_order_yards: 3 },
+      { id: "F9", name: "Classic White Linen",category: "Linen",    color: "#f4f1ea", price_per_yard: 16, supplier_id: "S7", yards_available: 60, min_order_yards: 1 },
+      { id: "F10", name: "Emerald Silk",      category: "Silk",     color: "#1d7a5a", price_per_yard: 35, supplier_id: "S8", yards_available: 14,  min_order_yards: 1 }
     ],
 
     staff: [
@@ -307,21 +316,21 @@ function buildSampleData() {
 
   // Build sample orders through the same quote maths as the real flow
   const samples = [
-    { id: "NT-1001", customer: "C1", outfit: "Dress",     colour: "#c9a24a", embroidery: "None",   sleeve: "Fitted", neck: "V-neck", fabric: "F11",  metres: 4, stage: "sewing",          created: -14, due: 7,   method: "Card" },
-    { id: "NT-1002", customer: "C2", outfit: "Suit",      colour: "#1e2a44", embroidery: "None",   sleeve: "Fitted", neck: "V-neck", fabric: "F7",  metres: 4, stage: "cutting",         created: -16, due: -2,  method: "Bank transfer" },
-    { id: "NT-1003", customer: "C3", outfit: "Agbada",    colour: "#c9a24a", embroidery: "Gold",   sleeve: "Wide",   neck: "Round",  fabric: "F8",  metres: 7, stage: "quality_control", created: -24, due: 3,   method: "Bank transfer" },
-    { id: "NT-1004", customer: "C4", outfit: "Senator",   colour: "#1e2a44", embroidery: "Silver", sleeve: "Fitted", neck: "Round",  fabric: "F5",  metres: 4, stage: "balance_paid",    created: -21, due: 1,   method: "Card", paidInFull: true, delivery: "In transit" },
-    { id: "NT-1005", customer: "C1", outfit: "Two Piece", colour: "#2d4f3a", embroidery: "Gold",   sleeve: "Fitted", neck: "Round",  fabric: "F10", metres: 5, stage: "tailor_assigned", created: -2,  due: 12,  method: "Apple Pay" },
-    { id: "NT-1006", customer: "C5", outfit: "Bubu",      colour: "#7c1f2e", embroidery: "Gold",   sleeve: "Wide",   neck: "Round",  fabric: "F4",  metres: 5, stage: "delivered",       created: -40, due: -20, method: "Card", paidInFull: true, delivery: "Delivered", review: [5, "Beautiful work and a perfect fit."] },
-    { id: "NT-1007", customer: "C5", outfit: "Kaftan",    colour: "#1e2a44", embroidery: "Silver", sleeve: "Wide",   neck: "V-neck", fabric: "F1",  metres: 4, stage: "embroidery",      created: -10, due: 5,   method: "Bank transfer" },
-    { id: "NT-1008", customer: "C6", outfit: "Wedding",   colour: "#efe6d2", embroidery: "Gold",   sleeve: "Wide",   neck: "Round",  fabric: "F3",  metres: 8, stage: "fitting",         created: -18, due: 30,  method: "Card" }
+    { id: "NT-1001", customer: "C1", outfit: "Dress",     colour: "#c9a24a", embroidery: "None",   sleeve: "Fitted", neck: "V-neck", fabric: "F11",  yards: 3, stage: "sewing",          created: -14, due: 7,   method: "Card" },
+    { id: "NT-1002", customer: "C2", outfit: "Suit",      colour: "#1e2a44", embroidery: "None",   sleeve: "Fitted", neck: "V-neck", fabric: "F7",  yards: 3.5, stage: "cutting",         created: -16, due: -2,  method: "Bank transfer" },
+    { id: "NT-1003", customer: "C3", outfit: "Agbada",    colour: "#c9a24a", embroidery: "Gold",   sleeve: "Wide",   neck: "Round",  fabric: "F8",  yards: 10, stage: "quality_control", created: -24, due: 3,   method: "Bank transfer" },
+    { id: "NT-1004", customer: "C4", outfit: "Senator",   colour: "#1e2a44", embroidery: "Silver", sleeve: "Fitted", neck: "Round",  fabric: "F5",  yards: 4, stage: "balance_paid",    created: -21, due: 1,   method: "Card", paidInFull: true, delivery: "In transit" },
+    { id: "NT-1005", customer: "C1", outfit: "Two Piece", colour: "#2d4f3a", embroidery: "Gold",   sleeve: "Fitted", neck: "Round",  fabric: "F10", yards: 4, stage: "tailor_assigned", created: -2,  due: 12,  method: "Apple Pay" },
+    { id: "NT-1006", customer: "C5", outfit: "Bubu",      colour: "#7c1f2e", embroidery: "Gold",   sleeve: "Wide",   neck: "Round",  fabric: "F4",  yards: 5, stage: "delivered",       created: -40, due: -20, method: "Card", paidInFull: true, delivery: "Delivered", review: [5, "Beautiful work and a perfect fit."] },
+    { id: "NT-1007", customer: "C5", outfit: "Kaftan",    colour: "#1e2a44", embroidery: "Silver", sleeve: "Wide",   neck: "V-neck", fabric: "F1",  yards: 4.5, stage: "embroidery",      created: -10, due: 5,   method: "Bank transfer" },
+    { id: "NT-1008", customer: "C6", outfit: "Wedding",   colour: "#efe6d2", embroidery: "Gold",   sleeve: "Wide",   neck: "Round",  fabric: "F3",  yards: 10, stage: "fitting",         created: -18, due: 30,  method: "Card" }
   ];
 
   const staffFor = role => data.staff.find(s => s.role === role).id;
 
   samples.forEach(s => {
     const fabric = data.fabrics.find(f => f.id === s.fabric);
-    const quote = computeQuote(s.outfit, s.embroidery, fabric, s.metres);
+    const quote = computeQuote(s.outfit, s.embroidery, fabric, s.yards);
     const created = addDays(s.created);
     const deposit = depositFor(quote.total);
     const stageIndex = STAGES.findIndex(st => st.key === s.stage);
@@ -332,7 +341,7 @@ function buildSampleData() {
       outfit_type: s.outfit, colour: s.colour, embroidery: s.embroidery, sleeve_style: s.sleeve, neck_style: s.neck,
       concept_variation: 1, concept_image_url: "",
       measurement_profile_id: measurementProfile.id,
-      fabric_id: fabric.id, fabric_supplier_id: fabric.supplier_id, fabric_metres: s.metres, fabric_cost: quote.fabricCost,
+      fabric_id: fabric.id, fabric_supplier_id: fabric.supplier_id, fabric_yards: s.yards, fabric_cost: quote.fabricCost,
       line_items: quote.lines, quote_total: quote.total,
       deposit_amount: deposit, deposit_paid_at: created, balance_paid_at: null,
       stage: s.stage,
@@ -618,7 +627,7 @@ function createPaidOrder(details) {
     inspiration: details.inspiration || null,   // customer's style photos, link and note (inspiration.js)
     measurement_profile_id: details.profileId || null,
     fabric_id: details.fabric.id, fabric_supplier_id: details.fabric.supplier_id,
-    fabric_metres: details.metres, fabric_cost: details.quote.fabricCost,
+    fabric_yards: details.yards, fabric_cost: details.quote.fabricCost,
     line_items: details.quote.lines, quote_total: details.quote.total,
     deposit_amount: details.deposit, deposit_paid_at: null, balance_paid_at: null,
     stage: "tailor_assigned",

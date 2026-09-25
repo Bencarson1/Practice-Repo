@@ -20,7 +20,7 @@ function renderDashboard() {
   const totals = businessTotals();
   const open = db.orders.filter(isOpen);
   const late = open.filter(isLate);
-  const lowStock = activeFabrics().filter(f => f.status === "approved" && f.metres_available < LOW_STOCK_METRES);
+  const lowStock = activeFabrics().filter(f => f.status === "approved" && f.yards_available < LOW_STOCK_YARDS);
   const waitingFabrics = activeFabrics().filter(f => f.status === "pending");
   const awaitingReview = db.orders.filter(o => o.stage === "delivered" && !o.review_rating);
   const waitingPayments = paymentsAwaiting();
@@ -48,7 +48,7 @@ function renderDashboard() {
       ${waitingPayments.length ? `<a class="alert" href="#/biz/payments">💷 ${waitingPayments.length} payment${waitingPayments.length > 1 ? "s" : ""} to confirm</a>` : ""}
       ${waitingFabrics.length ? `<a class="alert" href="#/biz/sellers">🧶 ${waitingFabrics.length} seller fabric${waitingFabrics.length > 1 ? "s" : ""} to approve</a>` : ""}
       ${late.length ? `<a class="alert" href="#/biz/orders">⚠ ${late.length} late order${late.length > 1 ? "s" : ""}</a>` : ""}
-      ${lowStock.length ? `<a class="alert" href="#/biz/fabrics">⚠ Low stock: ${lowStock.map(f => escapeHtml(f.name)).join(", ")}</a>` : ""}
+      ${lowStock.length ? `<a class="alert" href="#/biz/fabrics">⚠ Low stock: ${lowStock.map(f => `${escapeHtml(f.name)} (${f.yards_available} yd)`).join(", ")}</a>` : ""}
       ${awaitingReview.length ? `<span class="alert soft">${awaitingReview.length} delivered order${awaitingReview.length > 1 ? "s" : ""} awaiting a review</span>` : ""}
     </div>` : ""}
 
@@ -106,9 +106,9 @@ function answerQuestion(question) {
     if (!late.length) return "No orders are late. 🎉";
     return `${late.length} late order${late.length > 1 ? "s" : ""}: ${late.map(o => `#${o.id} (${daysLate(o)} day${daysLate(o) === 1 ? "" : "s"}, now ${escapeHtml(currentStepLabel(o).toLowerCase())})`).join(", ")}.`;
   }
-  if (q.includes("stock") || q.includes("fabric") || q.includes("inventory")) {
-    const low = activeFabrics().filter(f => f.status === "approved" && f.metres_available < LOW_STOCK_METRES);
-    return low.length ? `Running low: ${low.map(f => `${escapeHtml(f.name)} (${f.metres_available} m)`).join(", ")}. Restock from Fabric Inventory.` : "All fabrics are above the low-stock level.";
+  if (q.includes("stock") || q.includes("fabric") || q.includes("inventory") || q.includes("yard")) {
+    const low = activeFabrics().filter(f => f.status === "approved" && f.yards_available < LOW_STOCK_YARDS);
+    return low.length ? `Running low: ${low.map(f => `${escapeHtml(f.name)} (${f.yards_available} yd)`).join(", ")}. Restock from Fabric Inventory.` : `Every fabric has at least ${LOW_STOCK_YARDS} yd in stock.`;
   }
   if (q.includes("owe") || q.includes("balance") || q.includes("pending") || q.includes("payment") || q.includes("unpaid")) {
     const owing = db.orders.filter(o => balanceOwed(o) > 0);

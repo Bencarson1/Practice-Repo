@@ -49,7 +49,7 @@ function marketFilterBar() {
     ${marketFiltersOpen ? `
       <div class="market-filters">
         <label class="field">Colour<select onchange="setMarketFilter('colour',this.value)">${option("All", "Any colour", f.colour)}${colours.map(c => option(c.name, c.name, f.colour)).join("")}</select></label>
-        <label class="field">Price per metre<select onchange="setMarketFilter('price',this.value)">${PRICE_BANDS.map(p => option(p.key, p.label, f.price)).join("")}</select></label>
+        <label class="field">Price per yard<select onchange="setMarketFilter('price',this.value)">${PRICE_BANDS.map(p => option(p.key, p.label, f.price)).join("")}</select></label>
         <label class="field">Seller<select onchange="setMarketFilter('seller',this.value)">${option("All", "All sellers", f.seller)}${sellers.map(s => option(s.id, s.name, f.seller)).join("")}</select></label>
         <label class="field">Sort by<select onchange="setMarketFilter('sort',this.value)">${MARKET_SORTS.map(s => option(s.key, s.label, f.sort)).join("")}</select></label>
         <label class="check"><input type="checkbox" ${f.inStock ? "checked" : ""} onchange="setMarketFilter('inStock',this.checked)"> In stock only</label>
@@ -60,7 +60,7 @@ function marketFilterBar() {
 function fabricTile(fabric, selectedId) {
   const seller = findSupplier(fabric.supplier_id);
   const soldOut = isSoldOut(fabric);
-  const low = !soldOut && fabric.metres_available < LOW_STOCK_METRES;
+  const low = !soldOut && fabric.yards_available < LOW_STOCK_YARDS;
   const photos = fabricPhotoRefs(fabric).length;
   return `<button class="mtile ${fabric.id === selectedId ? "sel" : ""} ${soldOut ? "is-out" : ""}" onclick="go('fabricView/${fabric.id}')">
     <span class="mphoto">
@@ -70,9 +70,9 @@ function fabricTile(fabric, selectedId) {
       ${fabric.id === selectedId ? `<span class="picked">✓ Chosen</span>` : ""}
     </span>
     <span class="mname">${escapeHtml(fabric.name)}</span>
-    <span class="mprice">${money(fabric.price_per_metre)}<small> / metre</small></span>
+    <span class="mprice">${money(fabric.price_per_yard)}<small> / yard</small></span>
     <span class="mseller">${escapeHtml(seller ? seller.name : "Seller")}</span>
-    <span class="mstock ${low ? "low" : ""}">${soldOut ? "Sold out" : `${fabric.metres_available} m left`}</span>
+    <span class="mstock ${low ? "low" : ""}">${soldOut ? "Sold out" : `${fabric.yards_available} yd left`}</span>
   </button>`;
 }
 
@@ -141,12 +141,12 @@ function screenFabricView(fabricId) {
       </div>
       ${refs.length > 1 ? `<div class="gallery-thumbs">${refs.map((ref, i) =>
         `<button class="${i === 0 ? "on" : ""}" onclick="showPhoto(${i})" aria-label="Show photo ${i + 1}"><img src="${photoUrl(ref)}" alt=""></button>`).join("")}</div>` : ""}
-      <div class="row-between"><span class="name big">${escapeHtml(fabric.name)}</span><span class="price big">${money(fabric.price_per_metre)} / m</span></div>
+      <div class="row-between"><span class="name big">${escapeHtml(fabric.name)}</span><span class="price big">${money(fabric.price_per_yard)} / yd</span></div>
       <div class="tags">
         <span class="tag">${escapeHtml(fabric.category)}</span>
         <span class="tag"><span class="dot" style="background:${escapeHtml(fabric.color)}"></span>${escapeHtml(fabric.colour_name)}</span>
-        <span class="tag ${soldOut ? "low" : fabric.metres_available < LOW_STOCK_METRES ? "low" : ""}">${soldOut ? "Sold out" : `${fabric.metres_available} m in stock`}</span>
-        ${fabric.min_order_metres > 1 ? `<span class="tag">Min ${fabric.min_order_metres} m</span>` : ""}
+        <span class="tag ${soldOut ? "low" : fabric.yards_available < LOW_STOCK_YARDS ? "low" : ""}">${soldOut ? "Sold out" : `${fabric.yards_available} yd in stock`}</span>
+        ${fabric.min_order_yards > 1 ? `<span class="tag">Min ${fabric.min_order_yards} yd</span>` : ""}
       </div>
       ${fabric.description ? `<p class="desc">${escapeHtml(fabric.description)}</p>` : ""}
       ${action}
@@ -188,7 +188,7 @@ function chooseMarketFabric(fabricId) {
   const d = draft();
   if (d.purchased) return;
   d.fabricId = fabricId;
-  d.metres = suggestedMetres(d, fabric);
+  d.yards = suggestedYards(d, fabric);
   saveData();
   if (choosingFabricForOrder()) {
     go("fabric");
@@ -199,6 +199,6 @@ function chooseMarketFabric(fabricId) {
 }
 
 // Enough for the outfit, at least the seller's minimum, no more than they have
-function suggestedMetres(d, fabric) {
-  return Math.min(Math.max(findOutfit(d.outfit).metres, fabric.min_order_metres), fabric.metres_available);
+function suggestedYards(d, fabric) {
+  return Math.min(Math.max(findOutfit(d.outfit).yards, fabric.min_order_yards), fabric.yards_available);
 }

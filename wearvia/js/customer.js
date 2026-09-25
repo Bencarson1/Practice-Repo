@@ -35,7 +35,7 @@ function newDraft() {
   return {
     outfit: "Agbada", colour: "#1e2a44", embroidery: "Gold", sleeve: "Wide", neck: "Round",
     variation: 1, designDone: false, conceptApproved: false, profileId: null,
-    fabricId: null, metres: 7, purchased: false, quoteReady: false,
+    fabricId: null, yards: findOutfit("Agbada").yards, purchased: false, quoteReady: false,
     payMethod: "Card", fabricFilter: "All", inspiration: null
   };
 }
@@ -103,8 +103,8 @@ function returnDraftFabric() {
   if (!d.purchased) return;
   const fabric = findFabric(d.fabricId);
   if (fabric && !Cloud.live) {
-    fabric.metres_available = Math.round((fabric.metres_available + d.metres) * 10) / 10;
-    toast(`${d.metres} m of ${fabric.name} returned to stock.`);
+    fabric.yards_available = Math.round((fabric.yards_available + d.yards) * 10) / 10;
+    toast(`${d.yards} yd of ${fabric.name} returned to stock.`);
   }
   d.purchased = false;
   d.quoteReady = false;
@@ -122,7 +122,7 @@ function setDesign(key, value) {
   const d = draft();
   if (d[key] === value) return;
   d[key] = value;
-  if (key === "outfit") d.metres = findOutfit(value).metres;
+  if (key === "outfit") d.yards = findOutfit(value).yards;
   if (d.conceptApproved) resetAfterDesign();
   saveData();
   renderAll();
@@ -336,9 +336,9 @@ function screenFabric() {
       ${cTop("Fabric Marketplace", "measurements")}
       <div class="content">
         ${flowBar("fabric")}
-        <div class="notice">You've already bought ${d.metres} m of ${escapeHtml(fabric.name)} for this order.</div>
+        <div class="notice">You've already bought ${d.yards} yd of ${escapeHtml(fabric.name)} for this order.</div>
         <button class="cta" onclick="go('fabricPurchase')">View purchase →</button>
-        <button class="linkish" onclick="changeFabric()">Change fabric (returns ${d.metres} m to stock)</button>
+        <button class="linkish" onclick="changeFabric()">Change fabric (returns ${d.yards} yd to stock)</button>
       </div>`;
   }
   marketMode = "flow";
@@ -350,7 +350,7 @@ function screenFabric() {
     selected = null;
   }
   const seller = selected ? findSupplier(selected.supplier_id) : null;
-  const enough = selected && d.metres <= selected.metres_available && d.metres >= selected.min_order_metres;
+  const enough = selected && d.yards <= selected.yards_available && d.yards >= selected.min_order_yards;
 
   return `
     ${cTop("Fabric Marketplace", "measurements")}
@@ -364,27 +364,28 @@ function screenFabric() {
           <div class="pick-head">
             <img src="${fabricCoverUrl(selected)}" alt="">
             <div><div class="name">${escapeHtml(selected.name)}</div>
-              <div class="meta">${escapeHtml(seller ? seller.name : "")} · ${money(selected.price_per_metre)} / m · ${selected.metres_available} m left</div></div>
+              <div class="meta">${escapeHtml(seller ? seller.name : "")} · ${money(selected.price_per_yard)} / yd · ${selected.yards_available} yd left</div></div>
           </div>
           <div class="qty">
-            <span>Metres</span>
+            <span>Yards</span>
             <span class="stepper">
-              <button type="button" onclick="changeMetres(-0.5)" aria-label="Less">−</button>
-              <b>${d.metres}</b>
-              <button type="button" onclick="changeMetres(0.5)" aria-label="More">+</button>
+              <button type="button" onclick="changeYards(-0.5)" aria-label="Less">−</button>
+              <b>${d.yards}</b>
+              <button type="button" onclick="changeYards(0.5)" aria-label="More">+</button>
             </span>
-            <b>${money(d.metres * selected.price_per_metre)}</b>
+            <b>${money(fabricCostFor(d.yards, selected.price_per_yard))}</b>
           </div>
-          ${enough ? "" : `<div class="meta low">Only ${selected.metres_available} m in stock.</div>`}
+          ${enough ? "" : `<div class="meta low">Only ${selected.yards_available} yd in stock.</div>`}
           <button class="cta" onclick="buyFabric()" ${enough ? "" : "disabled"}>Buy Fabric →</button>
         </div>` : `<div class="pick-bar"><button class="cta" disabled>Tap a fabric to choose it</button></div>`}
     </div>`;
 }
 
-function changeMetres(delta) {
+function changeYards(delta) {
   const d = draft();
   const fabric = findFabric(d.fabricId);
-  d.metres = Math.min(Math.max(d.metres + delta, fabric.min_order_metres), Math.max(fabric.metres_available, fabric.min_order_metres));
+  const yards = Math.min(Math.max(d.yards + delta, fabric.min_order_yards), Math.max(fabric.yards_available, fabric.min_order_yards));
+  d.yards = Math.round(yards * 100) / 100;
   saveData();
   renderAll();
 }
@@ -399,13 +400,13 @@ function changeFabric() {
 function buyFabric() {
   const d = draft();
   const fabric = findFabric(d.fabricId);
-  if (!fabric || !isBuyable(fabric) || d.metres > fabric.metres_available || d.metres < fabric.min_order_metres) {
+  if (!fabric || !isBuyable(fabric) || d.yards > fabric.yards_available || d.yards < fabric.min_order_yards) {
     toast("That fabric isn't available in that amount any more.");
     renderAll();
     return;
   }
   // Live mode: the database takes the fabric out of stock when the deposit is paid
-  if (!Cloud.live) fabric.metres_available = Math.round((fabric.metres_available - d.metres) * 10) / 10;
+  if (!Cloud.live) fabric.yards_available = Math.round((fabric.yards_available - d.yards) * 10) / 10;
   d.purchased = true;
   d.quoteReady = false;
   saveData();
@@ -427,9 +428,9 @@ function screenFabricPurchase() {
         <div class="n">${escapeHtml(fabric.name)}</div>
         <div class="l">from ${escapeHtml(supplier.name)}, ${escapeHtml(supplier.location)}</div>
       </div>
-      <div class="qline"><span>${d.metres} metres × ${money(fabric.price_per_metre)}</span><span>${money(d.metres * fabric.price_per_metre)}</span></div>
+      <div class="qline"><span>${d.yards} yards × ${money(fabric.price_per_yard)}</span><span>${money(fabricCostFor(d.yards, fabric.price_per_yard))}</span></div>
       <div class="mrow"><span>Supplier delivery</span><span>${escapeHtml(supplier.delivery_estimate)} to ${escapeHtml(SHOP_NAME)}</span></div>
-      <div class="meta">${Cloud.live ? `${fabric.metres_available} m in stock. Your ${d.metres} m is taken out of stock when you pay your deposit.` : `Remaining stock: ${fabric.metres_available} m`}</div>
+      <div class="meta">${Cloud.live ? `${fabric.yards_available} yd in stock. Your ${d.yards} yd is taken out of stock when you pay your deposit.` : `Remaining stock: ${fabric.yards_available} yd`}</div>
       <button class="cta" onclick="continueToQuote()">Continue to Quotation →</button>
     </div>`;
 }
@@ -443,7 +444,7 @@ function continueToQuote() {
 
 function draftQuote() {
   const d = draft();
-  return computeQuote(d.outfit, d.embroidery, findFabric(d.fabricId), d.metres);
+  return computeQuote(d.outfit, d.embroidery, findFabric(d.fabricId), d.yards);
 }
 
 // ---- Screen 8: Quotation (step 6) ----
@@ -512,7 +513,7 @@ function payDeposit() {
     customerId: owner.id,
     outfit: d.outfit, colour: d.colour, embroidery: d.embroidery, sleeve: d.sleeve, neck: d.neck,
     variation: d.variation, profileId: d.profileId,
-    fabric: findFabric(d.fabricId), metres: d.metres, quote,
+    fabric: findFabric(d.fabricId), yards: d.yards, quote,
     deposit: depositFor(quote.total), method: d.payMethod,
     inspiration: hasInspiration(d.inspiration)
       ? { photos: d.inspiration.photos.slice(), link: cleanStyleLink(d.inspiration.link) || "", note: d.inspiration.note || "" }

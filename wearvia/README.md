@@ -64,7 +64,7 @@ The app won't let anyone skip a step: for example, opening the payment page befo
 | Upload a Style | *I have a photo of the style I want*: up to 5 photos (Instagram, TikTok or Pinterest screenshots, or camera photos), the link to the post, and a note such as "same dress but longer sleeves and in green" |
 | AI Design Concept | A drawing made from the customer's choices. *Regenerate* makes a new version. Uploaded style photos show above it as *Your inspiration* |
 | Measurements | Chest, waist, shoulder, sleeve, trouser length, neck (plus hips and length), saved per year |
-| Fabric Marketplace & Purchase | Photo grid of approved fabrics from every seller. Search, and filter by type, colour, price, seller and in-stock. Each fabric has a page with all its photos, description and seller |
+| Fabric Marketplace & Purchase | Photo grid of approved fabrics from every seller, priced per yard. Search, and filter by type, colour, price, seller and in-stock. Each fabric has a page with all its photos, description and seller. The amount starts at the typical yards for the outfit and goes up or down in steps of 0.5 yd |
 | Quotation & Payment | Itemised quote; deposit by card, Apple Pay or bank transfer (demo, no real money) |
 | My Orders & Tracking | All 16 steps, who is working on it, balance due, invoice and delivery tracking |
 | Designers, Ready to Wear, Profile | Nebeda Threads' profile and reviews, the ready-to-wear shop, and the customer's details |
@@ -79,7 +79,7 @@ The app won't let anyone skip a step: for example, opening the payment page befo
 | Tailor Team | Who is doing cutting, sewing, embroidery, finishing and QC, and what's waiting for them |
 | Customers | Order history, spend, favourite colour, notes and measurement profiles |
 | Measurements | Save and edit any customer's measurements |
-| Fabric Inventory | Live stock, low-stock warnings, restocking, new fabrics and suppliers |
+| Fabric Inventory | Live stock in yards, low-stock warnings (under 10 yd), restocking, new fabrics and suppliers |
 | Fabric Sellers | Approve sellers' fabrics or hide them (with a reason the seller sees), and see every seller's shop, fabrics and sales |
 | Payments | Record payments, see balances and payment history |
 | Wedding Orders | One event with many people, each with their own outfit and status |
@@ -93,8 +93,8 @@ The app won't let anyone skip a step: for example, opening the payment page befo
 |-----|--------------|
 | Sell on Wearvia | Create a seller profile, or sign in as an existing shop (demo — no passwords yet) |
 | My fabrics | The seller's stall: every fabric with its status (*Live*, *Waiting for approval*, *Hidden*, *Sold out*). Edit, mark sold out / back in stock, or delete |
-| Add a fabric | Up to 5 photos (the first is the cover), name, type, colour, price per metre in £, metres in stock, smallest order and a description |
-| Orders | Every order that used the seller's fabric: metres, price, who it's for (first name only) and where to send it. *Mark as sent* when it's posted |
+| Add a fabric | Up to 5 photos (the first is the cover), name, type, colour, price per yard in £, yards in stock, smallest order (in yards) and a description |
+| Orders | Every order that used the seller's fabric: yards, price, who it's for (first name only) and where to send it. *Mark as sent* when it's posted |
 | Shop profile | Shop name, location, phone, delivery time and logo |
 
 How approval works: new fabrics wait for Nebeda Threads to approve them before customers see them. Changing a live fabric's photos, name, type, colour or description sends it back for a quick check; price and stock changes go live straight away. If Nebeda Threads hides a fabric, the seller sees the reason on their stall.
@@ -131,7 +131,7 @@ Who can do what is decided by the database, not by the browser (see `supabase/se
 
 The app is already pointed at the Wearvia Supabase project in `js/config.js` (the project URL and the *publishable* key — that key is meant to be public). **Never put the secret key in the app.**
 
-1. **Run the database script.** Supabase → *SQL Editor* → *New query* → paste all of `supabase/setup.sql` → *Run*. It adds the missing tables, columns, security rules and photo buckets without touching your existing data. It's safe to run again.
+1. **Run the database scripts.** Supabase → *SQL Editor* → *New query* → paste all of `supabase/setup.sql` → *Run*. It adds the missing tables, columns, security rules and photo buckets without touching your existing data. Then open another *New query*, paste all of `supabase/yards.sql` → *Run*. It switches the fabric columns from metres to yards and converts what's in them (money already charged doesn't change). Both are safe to run again.
 2. **Set the sign-in addresses.** Supabase → *Authentication* → *URL Configuration*: set *Site URL* to the address where the app is published, and add the same address under *Redirect URLs*. The links in sign-up and password emails go there.
 3. **Keep email confirmation on.** Supabase → *Authentication* → *Sign In / Providers* → *Email*: leave *Confirm email* switched on. Staff logins are only granted to confirmed emails.
 4. **Make yourself the owner.** Open the app, create an account with your email (choose *I want outfits made*) and confirm it. Then in the SQL Editor run
@@ -144,7 +144,8 @@ The app is already pointed at the Wearvia Supabase project in `js/config.js` (th
 wearvia/
 ├── index.html           The page layout
 ├── supabase/
-│   └── setup.sql        Run once in the Supabase SQL Editor: tables, security rules, photo buckets
+│   ├── setup.sql        Run once in the Supabase SQL Editor: tables, security rules, photo buckets
+│   └── yards.sql        Run after setup.sql: switches fabric from metres to yards
 ├── css/
 │   └── style.css        Colours, fonts and layout
 └── js/
@@ -190,7 +191,7 @@ const DEPOSIT_RATE = 0.6;            // 60% deposit
 const DELIVERY_FEE = 15;
 ```
 
-Tailoring prices per outfit, embroidery prices and colours are in the lists just below. To change the look, edit the colours at the top of `css/style.css` (for example `--gold` and `--navy`).
+Tailoring prices and the typical yards of fabric for each outfit, embroidery prices and colours are in the lists just below. Fabric is sold by the yard; the low-stock warning level is `LOW_STOCK_YARDS` (10). To change the look, edit the colours at the top of `css/style.css` (for example `--gold` and `--navy`).
 
 If you change the sample data in `data.js`, click **Reset to sample data** in the app to load it.
 

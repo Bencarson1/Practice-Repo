@@ -61,7 +61,7 @@ function sellerWelcome() {
     ${bizHeader(`Sell your fabric on ${APP_NAME}`, `Put your fabrics in front of ${escapeHtml(SHOP_NAME)}'s customers, like a stall at the market.`)}
     <ol class="how-steps">
       <li><b>Create your shop</b><span>Shop name, where you are, your phone number, delivery time and logo.</span></li>
-      <li><b>Add your fabrics</b><span>Up to 5 photos each, with the type, colour, price per metre and how many metres you have.</span></li>
+      <li><b>Add your fabrics</b><span>Up to 5 photos each, with the type, colour, price per yard and how many yards you have.</span></li>
       <li><b>Get approved and sell</b><span>${escapeHtml(SHOP_NAME)} checks each fabric, then customers can choose it for their outfit. Orders appear in your Orders tab.</span></li>
     </ol>
     <div class="two-col">
@@ -138,8 +138,8 @@ function sellerStall(seller) {
         <div class="stall-info">
           <h3>${escapeHtml(f.name)}</h3>
           <p class="muted">${escapeHtml(f.category)} · ${escapeHtml(f.colour_name)}</p>
-          <p><strong class="gold">${money(f.price_per_metre)}</strong> per metre</p>
-          <p class="${soldOut ? "owed" : f.metres_available < LOW_STOCK_METRES ? "owed" : ""}">${f.metres_available} m in stock${f.sold_out ? " · marked sold out" : ""}</p>
+          <p><strong class="gold">${money(f.price_per_yard)}</strong> per yard</p>
+          <p class="${soldOut ? "owed" : f.yards_available < LOW_STOCK_YARDS ? "owed" : ""}">${f.yards_available} yd in stock${f.sold_out ? " · marked sold out" : ""}</p>
           ${f.status === "hidden" ? `<p class="review-note">Hidden by ${escapeHtml(SHOP_NAME)}${f.review_note ? `: “${escapeHtml(f.review_note)}”` : ""}. Edit it and it goes back for checking.</p>` : ""}
           ${f.status === "pending" ? `<p class="muted small-text">${escapeHtml(SHOP_NAME)} will check it soon.</p>` : ""}
           <div class="job-buttons">
@@ -175,8 +175,8 @@ function stallSoldOut(fabricId) {
 
 function stallBackInStock(fabricId) {
   const fabric = findFabric(fabricId);
-  if (fabric.metres_available < fabric.min_order_metres) {
-    toast("Add how many metres you have first.");
+  if (fabric.yards_available < fabric.min_order_yards) {
+    toast("Add how many yards you have first.");
     go("seller/edit/" + fabricId);
     return;
   }
@@ -206,7 +206,7 @@ function sellerFabricForm(seller, fabricId) {
   if (!sellerForm || sellerForm.key !== key) {
     sellerForm = { key, photos: fabric ? (fabric.photos || []).map(ref => ({ ref, url: photoUrl(ref) })) : [] };
   }
-  const v = fabric || { name: "", category: "Ankara", colour_name: "Blue", price_per_metre: "", metres_available: "", min_order_metres: 1, description: "" };
+  const v = fabric || { name: "", category: "Ankara", colour_name: "Blue", price_per_yard: "", yards_available: "", min_order_yards: 1, description: "" };
   const option = (value, current) => `<option value="${escapeHtml(value)}" ${value === current ? "selected" : ""}>${escapeHtml(value)}</option>`;
   return `
     <div class="biz-head"><h1>${fabric ? "Edit " + escapeHtml(fabric.name) : "Add a fabric"}</h1>
@@ -223,9 +223,9 @@ function sellerFabricForm(seller, fabricId) {
         <label class="wide">Fabric name<input name="name" required maxlength="60" value="${escapeHtml(v.name)}" placeholder="e.g. Blue Harvest Ankara"></label>
         <label>Type<select name="category">${FABRIC_TYPES.map(t => option(t, v.category)).join("")}</select></label>
         <label>Main colour<select name="colour">${FABRIC_COLOURS.map(c => option(c.name, v.colour_name)).join("")}</select></label>
-        <label>Price per metre (${CURRENCY})<input name="price" type="number" inputmode="decimal" min="0.5" max="1000" step="0.01" required value="${v.price_per_metre}" placeholder="e.g. 12.50"></label>
-        <label>Metres in stock<input name="stock" type="number" inputmode="decimal" min="0" max="10000" step="0.5" required value="${v.metres_available}" placeholder="e.g. 40"></label>
-        <label>Smallest order (metres)<input name="min" type="number" inputmode="decimal" min="0.5" max="50" step="0.5" required value="${v.min_order_metres}"></label>
+        <label>Price per yard (${CURRENCY})<input name="price" type="number" inputmode="decimal" min="0.5" max="1000" step="0.01" required value="${v.price_per_yard}" placeholder="e.g. 12.50"></label>
+        <label>Yards in stock<input name="stock" type="number" inputmode="decimal" min="0" max="10000" step="0.1" required value="${v.yards_available}" placeholder="e.g. 40"></label>
+        <label>Smallest order (yards)<input name="min" type="number" inputmode="decimal" min="0.5" max="50" step="0.5" required value="${v.min_order_yards}"></label>
         <label class="wide">Description<textarea name="description" rows="4" maxlength="600" placeholder="What is it made of? How wide is it? What is it good for?">${escapeHtml(v.description || "")}</textarea></label>
       </div>
       <p id="fabric-form-error" class="form-error" role="alert"></p>
@@ -302,16 +302,16 @@ function saveStallFabric(event, fabricId) {
     name: form.name.value.trim(),
     category: form.category.value,
     colour_name: form.colour.value,
-    price_per_metre: Math.round(Number(form.price.value) * 100) / 100,
-    metres_available: Math.round(Number(form.stock.value) * 10) / 10,
-    min_order_metres: Number(form.min.value),
+    price_per_yard: Math.round(Number(form.price.value) * 100) / 100,
+    yards_available: Math.round(Number(form.stock.value) * 10) / 10,
+    min_order_yards: Number(form.min.value),
     description: form.description.value.trim()
   };
   if (!sellerForm.photos.length) return formError("fabric-form-error", "Add at least one photo of the fabric.");
   if (!values.name) return formError("fabric-form-error", "Give the fabric a name.");
-  if (!form.price.value || !(values.price_per_metre >= 0.5)) return formError("fabric-form-error", `Enter a price per metre of at least ${money(0.5)}.`);
-  if (form.stock.value === "" || !(values.metres_available >= 0)) return formError("fabric-form-error", "Enter how many metres you have (0 or more).");
-  if (!(values.min_order_metres >= 0.5)) return formError("fabric-form-error", "The smallest order must be at least 0.5 m.");
+  if (!form.price.value || !(values.price_per_yard >= 0.5)) return formError("fabric-form-error", `Enter a price per yard of at least ${money(0.5)}.`);
+  if (form.stock.value === "" || !(values.yards_available >= 0)) return formError("fabric-form-error", "Enter how many yards you have (0 or more).");
+  if (!(values.min_order_yards >= 0.5)) return formError("fabric-form-error", "The smallest order must be at least 0.5 yd.");
 
   const before = fabricId ? (findFabric(fabricId).photos || []) : [];
   const photos = sellerForm.photos;
@@ -347,7 +347,7 @@ function sellerOrdersScreen(seller) {
   const live = rows.filter(o => o.status !== "cancelled");
   const toSend = rows.filter(o => o.status === "new");
   const earned = live.reduce((total, o) => total + o.total, 0);
-  const metres = live.reduce((total, o) => total + o.metres, 0);
+  const yards = live.reduce((total, o) => total + o.yards, 0);
   const cards = rows.map(o => {
     const fabric = findFabric(o.fabric_id);
     const first = o.customer_first_name || customerName(o.customer_id).split(" ")[0];
@@ -358,7 +358,7 @@ function sellerOrdersScreen(seller) {
         <div class="sorder-main">
           <div class="row-between"><b>${escapeHtml(o.fabric_name)}</b><span class="badge sstatus-${o.status}">${statusLabel}</span></div>
           <div class="muted small-text">${escapeHtml(o.ref || o.id)} · ordered ${formatDate(o.created_at)} · for ${escapeHtml(first)}'s outfit</div>
-          <div>${o.metres} m × ${money(o.price_per_metre)} = <b>${money(o.total)}</b></div>
+          <div>${o.yards} yd × ${money(o.price_per_yard)} = <b>${money(o.total)}</b></div>
           <div class="muted small-text">Send to: ${escapeHtml(o.deliver_to)}</div>
           ${o.status === "new" ? `<div class="job-buttons"><button class="small gold" onclick="sellerMarkSent('${o.id}')">Mark as sent</button></div>` : ""}
         </div>
@@ -369,7 +369,7 @@ function sellerOrdersScreen(seller) {
     <div class="statgrid">
       <div class="stat"><div class="l">To send</div><div class="n">${toSend.length}</div></div>
       <div class="stat"><div class="l">Orders</div><div class="n">${live.length}</div></div>
-      <div class="stat"><div class="l">Metres sold</div><div class="n">${Math.round(metres * 10) / 10} m</div></div>
+      <div class="stat"><div class="l">Yards sold</div><div class="n">${Math.round(yards * 10) / 10} yd</div></div>
       <div class="stat"><div class="l">Sales</div><div class="n">${money(earned)}</div></div>
     </div>
     ${rows.length ? `<div class="sorders">${cards}</div>` : `<div class="card"><p class="empty">No orders yet. They'll appear here when a customer chooses your fabric.</p></div>`}`;
