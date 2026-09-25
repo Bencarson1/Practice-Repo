@@ -139,6 +139,7 @@ function screenHome() {
       <button class="btn2" onclick="go('market')">Fabric Marketplace</button>
       ${Cloud.isTeam() ? `<button class="btn2" onclick="go('biz/dashboard')">Business Dashboard</button>` : ""}
       <button class="linkish on-navy" onclick="go('seller')">Sell your fabric on ${APP_NAME} →</button>
+      <button class="linkish on-navy" onclick="go('for-tailors')">Are you a tailor or designer? Join ${APP_NAME} →</button>
     </div>
     ${cNav("home")}`;
 }

@@ -27,6 +27,7 @@
     <nav class="modes" aria-label="Switch view">
       <a id="mode-customer" href="#/home">Customer<span class="wide-only"> app</span></a>
       <a id="mode-seller" href="#/seller">Fabric seller<span class="wide-only">s</span></a>
+      <a id="mode-tailors" href="#/for-tailors">Tailors</a>
       <a id="mode-business" href="#/biz/dashboard">Business<span class="wide-only"> dashboard</span></a>
     </nav>
     <div id="account" class="account"></div>
@@ -51,6 +52,12 @@
     <div id="seller-view" class="seller-view" hidden>
       <nav id="seller-tabs" class="biz-tabs" aria-label="Seller sections"></nav>
       <section id="seller-content" class="biz seller"></section>
+    </div>
+
+    <!-- Tailors: how to join Wearvia as a tailor or designer -->
+    <div id="join-view" class="seller-view" hidden>
+      <nav id="join-tabs" class="biz-tabs" aria-label="Tailor sections"></nav>
+      <section id="join-content" class="biz seller"></section>
     </div>
   </main>
 
@@ -78,6 +85,7 @@
   <script src="js/customer.js"></script>
   <script src="js/seller.js"></script>
   <script src="js/seller-fabrics.js"></script>
+  <script src="js/tailor-join.js"></script>
   <script src="js/dashboard.js"></script>
   <script src="js/quotes.js"></script>
   <script src="js/orders.js"></script>
