@@ -74,7 +74,8 @@ const Cloud = (() => {
 
   function homeRoute() {
     if (!state.live || !state.me) return "home";
-    if (state.me.is_team) return "biz/dashboard";
+    if (state.me.is_team) return state.me.designer_id && state.me.designers && state.me.designers.length
+      && state.me.designers[0].admin_status !== "approved" ? "biz/profile" : "biz/dashboard";
     if (state.me.account_type === "seller") return state.me.supplier_id ? "seller/fabrics" : "seller/profile";
     return "home";
   }
@@ -96,7 +97,7 @@ const Cloud = (() => {
     });
     state.client.auth.onAuthStateChange((event) => {
       if (event === "PASSWORD_RECOVERY") setTimeout(() => Auth.show("newPassword"), 0);
-      if (event === "SIGNED_OUT") { state.me = null; db = null; Auth.show("signIn"); }
+      if (event === "SIGNED_OUT") { state.me = null; db = null; state.snapshot = null; Auth.show("signIn"); }
     });
     let session = null;
     try {
@@ -138,7 +139,8 @@ const Cloud = (() => {
       email: details.email,
       password: details.password,
       options: {
-        data: { full_name: details.name, phone: details.phone || "", account_type: details.accountType },
+        data: { full_name: details.name, phone: details.phone || "", account_type: details.accountType,
+                business_name: details.businessName || "", country_code: details.country || "", city: details.city || "" },
         emailRedirectTo: location.origin + location.pathname
       }
     });
@@ -180,17 +182,43 @@ const Cloud = (() => {
     return text;
   }
 
+  // ---- Browsing tailors without an account ----
+  // Anyone can find tailors and open their pages. Everything else needs signing in.
+
+  const GUEST_SCREENS = ["tailors", "tailor", "joinTailor"];
+
+  function isGuest() { return state.live && !state.me; }
+
+  async function startGuest() {
+    const lists = await loadPublicLists().catch(() => ({ countries: [], specialities: [] }));
+    const empty = {};
+    ["suppliers", "fabrics", "customers", "measurement_profiles", "orders", "payments", "invoices", "deliveries", "fabric_order_lines",
+     "tailors", "wedding_orders", "wedding_order_members", "ready_to_wear_items", "ready_to_wear_sales", "reviews", "price_list",
+     "order_messages", "order_chat_reads", "designers", "my_designers", "designer_portfolio_items", "designer_customer_notes"].forEach(t => { empty[t] = []; });
+    empty.countries = lists.countries;
+    empty.specialities = lists.specialities;
+    db = buildDb(empty, null);
+    return db;
+  }
+
   // ---- Loading ----
 
   const iso = value => value ? String(value) : null;
   const day = value => value ? String(value).slice(0, 10) : null;
   const num = value => value == null || value === "" ? null : Number(value);
 
-  const STYLE = "style-photos", FABRIC_PHOTOS = "fabric-photos", LOGOS = "seller-logos", CHAT = "chat-photos";
+  const STYLE = "style-photos", FABRIC_PHOTOS = "fabric-photos", LOGOS = "seller-logos", CHAT = "chat-photos", DESIGNER_PHOTOS = "designer-photos";
+  // The tailor columns everyone may read. The exact address, postcode and map
+  // position are private: owners read their own through wearvia_my_designers().
+  const DESIGNER_PUBLIC = "id, business_name, slug, location, rating, review_count, speciality_tags, owner_user_id, admin_status, "
+    + "profile_image_url, description, starting_price, delivery_estimate, country_code, city, postcode_area, public_address, "
+    + "public_latitude, public_longitude, show_exact_address, delivery_available, custom_orders, created_at, updated_at";
+  const CUSTOMER_COLUMNS = "id, auth_user_id, name, email, phone, created_at, added_by_designer_id";
   const PRIVATE_BUCKETS = [STYLE, CHAT];
 
-  async function fetchAll(table, order) {
-    let query = state.client.from(table).select("*");
+  async function fetchAll(table, order, columns, filter) {
+    let query = state.client.from(table).select(columns || "*");
+    if (filter) query = filter(query);
     if (order) query = query.order(order, { ascending: true });
     const { data, error } = await query;
     if (error) {
@@ -202,33 +230,88 @@ const Cloud = (() => {
     return data || [];
   }
 
+  async function rpcRows(name, args) {
+    const { data, error } = await state.client.rpc(name, args || {});
+    if (error) {
+      console.warn(`Couldn't load ${name}:`, error.message);
+      if (/does not exist|PGRST202/i.test(error.message || "")) return [];
+      throw new Error(friendly(error));
+    }
+    return data || [];
+  }
+
   async function load() {
-    const tables = ["designers", "suppliers", "fabrics", "customers", "measurement_profiles", "orders", "payments",
+    const tables = ["suppliers", "fabrics", "measurement_profiles", "orders", "payments",
       "invoices", "deliveries", "fabric_order_lines", "tailors", "wedding_orders", "wedding_order_members",
-      "ready_to_wear_items", "ready_to_wear_sales", "reviews", "price_list", "order_messages", "order_chat_reads"];
-    const sortBy = { price_list: "sort_order", order_chat_reads: "last_read_at" };
+      "ready_to_wear_sales", "order_messages", "order_chat_reads", "countries", "specialities", "designer_customer_notes"];
+    const sortBy = { order_chat_reads: "last_read_at", countries: "sort_order", specialities: "sort_order", designer_customer_notes: "updated_at" };
     const rows = {};
-    const results = await Promise.all(tables.map(t => fetchAll(t, sortBy[t] || "created_at")));
+    const results = await Promise.all(tables.map(t => fetchAll(t, sortBy[t] || "created_at"))
+      .concat([fetchAll("customers", "created_at", CUSTOMER_COLUMNS),
+               state.me && state.me.is_team ? rpcRows("wearvia_my_designers") : Promise.resolve([])]));
     tables.forEach((t, i) => { rows[t] = results[i]; });
+    rows.customers = results[tables.length];
+    rows.my_designers = results[tables.length + 1];
+
+    // Only the tailors this person needs: their own, their orders' tailors,
+    // Nebeda Threads, and the one they're ordering from now
+    const ids = new Set(rows.my_designers.map(d => d.id).concat(rows.orders.map(o => o.designer_id)));
+    (state.me && state.me.designers || []).forEach(d => ids.add(d.id));
+    if (state.me && state.me.main_designer_id) ids.add(state.me.main_designer_id);
+    const draftTailor = (db && db.draft && db.draft.designerId) || (loadDraft() || {}).designerId;
+    if (draftTailor) ids.add(draftTailor);
+    const list = Array.from(ids).filter(Boolean);
+    const inList = q => q.in(list.length ? "designer_id" : "id", list.length ? list : ["00000000-0000-0000-0000-000000000000"]);
+    const [designers, prices, items, reviews, portfolio] = await Promise.all([
+      fetchAll("designers", "created_at", DESIGNER_PUBLIC, q => q.in("id", list.length ? list : ["00000000-0000-0000-0000-000000000000"])),
+      fetchAll("price_list", "sort_order", null, inList),
+      fetchAll("ready_to_wear_items", "created_at", null, inList),
+      fetchAll("reviews", "created_at", null, inList),
+      fetchAll("designer_portfolio_items", "sort_order", null, inList)
+    ]);
+    Object.assign(rows, { designers, price_list: prices, ready_to_wear_items: items, reviews, designer_portfolio_items: portfolio });
+
     const previous = db;
     state.loadedAt = Date.now();
     db = buildDb(rows, previous);
-    applyPriceList(db.prices);   // quotes use the prices the database charges
+    usePricesOf(contextDesignerId());   // quotes use the prices the database charges
     state.snapshot = snapshotOf(db);
     return db;
   }
 
+  // A tailor record from the database (public columns, plus the private ones for the owner)
+  function designerFrom(row, full, portfolio) {
+    const d = Object.assign({}, row, full || {});
+    return {
+      id: d.id, business_name: d.business_name || "Tailor", slug: d.slug || "", location: d.location || "",
+      rating: num(d.rating), review_count: d.review_count || 0, speciality_tags: d.speciality_tags || [],
+      commission_rate: num(d.commission_rate) || 0, delivery_time: d.delivery_estimate || "7–14 days",
+      profile_image: d.profile_image_url || null, description: d.description || "", starting_price: num(d.starting_price),
+      country_code: d.country_code || null, city: d.city || "", postcode_area: d.postcode_area || null,
+      public_address: d.public_address || null, public_latitude: num(d.public_latitude), public_longitude: num(d.public_longitude),
+      show_exact_address: !!d.show_exact_address, delivery_available: !!d.delivery_available, custom_orders: d.custom_orders !== false,
+      admin_status: d.admin_status || (d.approved ? "approved" : "pending"), admin_note: d.admin_note || "",
+      owner_user_id: d.owner_user_id || null, created_at: iso(d.created_at), updated_at: iso(d.updated_at),
+      // Private: only filled in for the owner, their team and the admin
+      postcode: full ? full.postcode || "" : undefined, address_line: full ? full.address_line || "" : undefined,
+      latitude: full ? num(full.latitude) : undefined, longitude: full ? num(full.longitude) : undefined,
+      phone: full ? full.phone || "" : undefined, is_mine: !!full,
+      portfolio: (portfolio || []).filter(p => p.designer_id === d.id).map(p => ({ id: p.id, image: p.image_url, title: p.title || p.caption || "" }))
+    };
+  }
+
   function buildDb(r, previous) {
     const numberOf = new Map(r.orders.map(o => [o.id, o.order_number || "NT-" + o.id.slice(0, 6)]));
-    const designerRow = r.designers.slice().sort((a, b) =>
-      (/^nebeda/i.test(b.business_name || "") - /^nebeda/i.test(a.business_name || "")))[0];
+    const full = new Map(r.my_designers.map(d => [d.id, d]));
+    const publicRows = new Map(r.designers.map(d => [d.id, d]));
+    r.my_designers.forEach(d => { if (!publicRows.has(d.id)) publicRows.set(d.id, d); });
 
     const data = {
-      designers: [designerRow ? {
-        id: designerRow.id, business_name: designerRow.business_name || SHOP_NAME, location: designerRow.location || "",
-        rating: num(designerRow.rating) || 5, review_count: 0, speciality_tags: designerRow.speciality_tags || [],
-        commission_rate: num(designerRow.commission_rate) || 0, delivery_time: designerRow.delivery_estimate || "7–14 days"
-      } : { id: null, business_name: SHOP_NAME, location: "", rating: 5, review_count: 0, speciality_tags: [], commission_rate: 0, delivery_time: "7–14 days" }],
+      designers: Array.from(publicRows.values()).map(d => designerFrom(d, full.get(d.id), r.designer_portfolio_items)),
+      main_designer_id: (state.me && state.me.main_designer_id) || null,
+      countries: r.countries.map(c => ({ code: c.code, name: c.name, slug: c.slug, flag: c.flag, uses_miles: !!c.uses_miles, sort_order: c.sort_order })),
+      specialities: r.specialities.map(x => ({ id: x.id, name: x.name, sort_order: x.sort_order, active: x.active !== false })),
+      customer_notes: r.designer_customer_notes.map(n => ({ designer_id: n.designer_id, customer_id: n.customer_id, notes: n.notes || "" })),
 
       suppliers: r.suppliers.map(s => ({
         id: s.id, name: s.name || "Seller", location: s.location || "", phone: s.phone || "",
@@ -249,8 +332,8 @@ const Cloud = (() => {
       staff: r.tailors.filter(t => t.active !== false).map(t => ({ id: t.id, name: t.name, role: t.role, phone: t.phone || "", designer_id: t.designer_id })),
 
       customers: r.customers.map(c => ({
-        id: c.id, name: c.name || "Customer", email: c.email || "", phone: c.phone || "", notes: c.notes || "",
-        auth_user_id: c.auth_user_id || null, created_at: day(c.created_at) || today(),
+        id: c.id, name: c.name || "Customer", email: c.email || "", phone: c.phone || "",
+        auth_user_id: c.auth_user_id || null, added_by_designer_id: c.added_by_designer_id || null, created_at: day(c.created_at) || today(),
         measurement_profiles: r.measurement_profiles.filter(p => p.customer_id === c.id).map(p => ({
           id: p.id, label: p.label || thisYear(), chest: num(p.chest), waist: num(p.waist), shoulder: num(p.shoulder),
           sleeve: num(p.sleeve), trouser_length: num(p.trouser_length), neck: num(p.neck), hips: num(p.hip),
@@ -326,7 +409,7 @@ const Cloud = (() => {
       })),
 
       // Empty until supabase/prices.sql has been run; the starting prices are used until then
-      prices: r.price_list.map(p => ({ id: p.id, kind: p.kind, name: p.name, price: num(p.price), yards: num(p.yards) })),
+      prices: r.price_list.map(p => ({ id: p.id, designer_id: p.designer_id, kind: p.kind, name: p.name, price: num(p.price), yards: num(p.yards) })),
 
       messages: messagesFrom(r.order_messages, numberOf),
       chat_reads: keepLocalReads(readsFrom(r.order_chat_reads, numberOf), previous && previous.chat_reads),
@@ -337,6 +420,7 @@ const Cloud = (() => {
       })),
 
       session: {
+        designerId: (previous && previous.session && previous.session.designerId) || (state.me && state.me.designer_id) || null,
         customerId: state.me && state.me.customer_id || (previous && previous.session && previous.session.customerId) || null,
         sellerId: (previous && previous.session && previous.session.sellerId) || (state.me && state.me.supplier_id) || null
       },
@@ -345,6 +429,9 @@ const Cloud = (() => {
       sample_sellers_added: true,
       version: 4
     };
+    // Tailors fetched for the search or a public page stay known
+    (previous && previous.designers || []).forEach(d => { if (!data.designers.some(x => x.id === d.id) && d.from_search) data.designers.push(d); });
+    (previous && previous.prices || []).forEach(p => { if (!data.prices.some(x => x.id === p.id) && data.designers.some(d => d.id === p.designer_id && d.from_search)) data.prices.push(p); });
     // Someone who signed up as a seller but hasn't opened their shop yet
     if (data.session.sellerId && !data.suppliers.some(s => s.id === data.session.sellerId)) data.session.sellerId = null;
     if (!data.session.sellerId && state.me) {
@@ -424,7 +511,7 @@ const Cloud = (() => {
       const insp = details.inspiration;
       // No yards and no prices: the database ignores them from a customer anyway
       const row = {
-        id, customer_id: details.customerId, designer_id: designer().id,
+        id, customer_id: details.customerId, designer_id: details.designerId || draftDesignerId(),
         outfit_type: details.outfit, colour: details.colour, embroidery: details.embroidery,
         sleeve_style: details.sleeve, neck_style: details.neck, concept_variation: details.variation || 1,
         measurement_profile_id: details.profileId || null, fabric_id: details.fabric.id,
@@ -504,12 +591,13 @@ const Cloud = (() => {
         photos: (f.photos || []).map(ref => photoPath(ref, FABRIC_PHOTOS)).filter(Boolean),
         status: f.status, review_note: f.review_note || "", sold_out: !!f.sold_out,
         deleted_at: f.deleted_at ? new Date(f.deleted_at + "T12:00:00Z").toISOString() : null })) },
-    { table: "customers", rows: d => d.customers.map(c => ({ id: c.id, name: c.name, email: c.email || null, phone: c.phone || null, notes: c.notes || "" })) },
+    { table: "customers", rows: d => d.customers.map(c => ({ id: c.id, name: c.name, email: c.email || null, phone: c.phone || null,
+        added_by_designer_id: c.added_by_designer_id || null })) },
     { table: "measurement_profiles", rows: d => d.customers.flatMap(c => c.measurement_profiles.map(p => ({
         id: p.id, customer_id: c.id, label: p.label, chest: p.chest, waist: p.waist, shoulder: p.shoulder, sleeve: p.sleeve,
         trouser_length: p.trouser_length, neck: p.neck, hip: p.hips, garment_length: p.length }))) },
-    { table: "tailors", rows: d => d.staff.map(s => ({ id: s.id, designer_id: s.designer_id || d.designers[0].id, name: s.name, role: s.role, phone: s.phone || "" })) },
-    { table: "wedding_orders", rows: d => d.wedding_orders.map(w => ({ id: w.id, designer_id: w.designer_id || d.designers[0].id, event_name: w.event_name, event_date: w.event_date })) },
+    { table: "tailors", rows: d => d.staff.map(s => ({ id: s.id, designer_id: s.designer_id || bizDesignerId(), name: s.name, role: s.role, phone: s.phone || "" })) },
+    { table: "wedding_orders", rows: d => d.wedding_orders.map(w => ({ id: w.id, designer_id: w.designer_id || bizDesignerId(), event_name: w.event_name, event_date: w.event_date })) },
     { table: "wedding_order_members", rows: d => d.wedding_orders.flatMap(w => w.members.map(m => ({
         id: m.id, wedding_order_id: w.id, role: m.role, name: m.name || "", outfits: Number(m.outfits) || 1,
         order_id: m.order_id ? orderUuid(m.order_id) : null, status: m.status || "Not started" }))) },
@@ -527,7 +615,7 @@ const Cloud = (() => {
         id: v.id, order_id: orderUuid(v.order_id), designer_id: v.designer_id, customer_id: v.customer_id, rating: v.rating, review_text: v.review_text })) },
     { table: "fabric_order_lines", rows: d => d.fabric_orders.map(l => ({ id: l.id, status: l.status })) },
     { table: "ready_to_wear_items", rows: d => d.ready_to_wear.map(i => ({
-        id: i.id, designer_id: i.designer_id || d.designers[0].id, name: i.name, price: i.price, cost: i.cost, stock: i.stock, colour_hex: i.color })) },
+        id: i.id, designer_id: i.designer_id || bizDesignerId(), name: i.name, price: i.price, cost: i.cost, stock: i.stock, colour_hex: i.color })) },
     { table: "price_list", rows: d => (d.prices || []).map(p => ({
         id: p.id, price: p.price, yards: p.kind === "outfit" ? p.yards : null })) },
     { table: "ready_to_wear_sales", rows: d => d.rtw_sales.map(s => ({
@@ -695,7 +783,7 @@ const Cloud = (() => {
       const id = newId();
       const insp = details.inspiration;
       const row = {
-        id, customer_id: details.customerId, designer_id: designer().id,
+        id, customer_id: details.customerId, designer_id: bizDesignerId(),
         outfit_type: details.outfit, colour: details.colour, embroidery: details.embroidery,
         sleeve_style: details.sleeve, neck_style: details.neck, concept_variation: details.variation || 1,
         measurement_profile_id: details.profileId || null,
@@ -753,11 +841,11 @@ const Cloud = (() => {
   }
 
   async function uploadPhoto(dataUrl, folder) {
-    const bucket = folder === "style" ? STYLE : folder === "chat" ? CHAT : folder === "logo" ? LOGOS : FABRIC_PHOTOS;
+    const bucket = folder === "style" ? STYLE : folder === "chat" ? CHAT : folder === "logo" ? LOGOS : folder === "designer" ? DESIGNER_PHOTOS : FABRIC_PHOTOS;
     const path = `${state.me.user_id}/${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}.jpg`;
     const { error } = await state.client.storage.from(bucket).upload(path, dataUrlToBlob(dataUrl), { contentType: "image/jpeg", upsert: false });
     if (error) throw new Error(friendly(error));
-    if (bucket === LOGOS) return publicUrl(bucket, path);
+    if (bucket === LOGOS || bucket === DESIGNER_PHOTOS) return publicUrl(bucket, path);
     const ref = `sb:${bucket}/${path}`;
     state.localPhotos.set(ref, dataUrl);
     return ref;
@@ -822,14 +910,14 @@ const Cloud = (() => {
   // ---- Team logins (owner only) ----
 
   async function loadTeamLogins() {
-    const { data, error } = await state.client.rpc("wearvia_team_logins");
+    const { data, error } = await state.client.rpc("wearvia_team_logins", { p_designer_id: bizDesignerId() });
     if (error) throw new Error(friendly(error));
     state.teamLogins = data || [];
     return state.teamLogins;
   }
 
   async function addTeamLogin(email, jobRole) {
-    const { data, error } = await state.client.rpc("wearvia_add_team_member", { p_email: email, p_job_role: jobRole });
+    const { data, error } = await state.client.rpc("wearvia_add_team_member", { p_email: email, p_job_role: jobRole, p_designer_id: bizDesignerId() });
     if (error) throw new Error(friendly(error));
     await loadTeamLogins();
     return data;
@@ -843,15 +931,130 @@ const Cloud = (() => {
     await loadTeamLogins();
   }
 
+  // ---- Tailors: joining, profiles, approval, searching ----
+
+  // A signed-in person opens their tailor business (it waits for the admin)
+  async function registerDesigner(details) {
+    const { data, error } = await state.client.rpc("wearvia_register_designer", {
+      p_business_name: details.businessName, p_country_code: details.country || null, p_city: details.city || null, p_phone: details.phone || null
+    });
+    if (error) throw new Error(friendly(error));
+    state.teamLogins = null;
+    await afterSignIn();
+    if (db) db.session.designerId = data;
+    return data;
+  }
+
+  // The owner saves their profile. The database works out what the public sees.
+  async function saveDesignerProfile(id, fields) {
+    await flush();
+    const { data, error } = await state.client.from("designers").update(fields).eq("id", id).select("id");
+    if (error) throw new Error(friendly(error));
+    if (!data || !data.length) throw new Error("You don't have permission to change that profile.");
+    await load();
+  }
+
+  async function addPortfolioItem(designerId, imageUrl, title) {
+    const { error } = await state.client.from("designer_portfolio_items").insert({
+      designer_id: designerId, image_url: imageUrl, title: title || null, sort_order: Date.now() % 1000000 });
+    if (error) throw new Error(friendly(error));
+    await load();
+  }
+
+  async function removePortfolioItem(item) {
+    const { error } = await state.client.from("designer_portfolio_items").delete().eq("id", item.id);
+    if (error) throw new Error(friendly(error));
+    const where = splitRef(item.image);
+    if (where && state.me && where.path.startsWith(state.me.user_id + "/")) state.client.storage.from(where.bucket).remove([where.path]).catch(() => {});
+    await load();
+  }
+
+  async function setDesignerStatus(id, status, note) {
+    const { error } = await state.client.rpc("wearvia_set_designer_status", { p_designer_id: id, p_status: status, p_note: note || "" });
+    if (error) throw new Error(friendly(error));
+    await load();
+  }
+
+  async function addSpeciality(name) {
+    const { error } = await state.client.from("specialities").insert({ name, sort_order: 100 });
+    if (error) throw new Error(/duplicate|unique/i.test(error.message || "") ? `"${name}" is already on the list.` : friendly(error));
+    await load();
+  }
+
+  function saveCustomerNotes(designerId, customerId, notes) {
+    return state.client.from("designer_customer_notes")
+      .upsert({ designer_id: designerId, customer_id: customerId, notes, updated_at: new Date().toISOString() })
+      .then(({ error }) => { if (error) throw new Error(friendly(error)); });
+  }
+
+  // A client that works before anyone signs in (the tailor search is public)
+  function publicClient() {
+    if (state.client) return state.client;
+    if (!state.anon) state.anon = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: false } });
+    return state.anon;
+  }
+
+  async function searchTailors(p) {
+    const { data, error } = await publicClient().rpc("wearvia_search_tailors", {
+      p_lat: p.lat ?? null, p_lng: p.lng ?? null, p_radius_km: p.radiusKm ?? null, p_country: p.country || null,
+      p_city: p.city || null, p_area: p.area || null, p_specialities: p.specialities && p.specialities.length ? p.specialities : null,
+      p_delivery: p.delivery || null, p_custom: p.custom || null, p_min_rating: p.minRating || null,
+      p_sort: p.sort || "distance", p_limit: p.limit || 20, p_offset: p.offset || 0
+    });
+    if (error) throw new Error(friendly(error));
+    const rows = (data || []).map(row => Object.assign(designerFrom(row), { distance_km: num(row.distance_km), from_search: true }));
+    rows.forEach(remember);
+    return { rows, total: data && data.length ? Number(data[0].total_count) : 0 };
+  }
+
+  // A tailor's public page: profile, portfolio, services, latest reviews
+  async function tailorPage(slug) {
+    const { data, error } = await publicClient().rpc("wearvia_tailor_page", { p_slug: slug });
+    if (error) throw new Error(friendly(error));
+    if (!data) return null;
+    const d = Object.assign(designerFrom(data), { from_search: true, services: data.services || [],
+      page_reviews: (data.reviews || []).map(r => ({ rating: r.rating, text: r.text || "", who: r.who, outfit: r.outfit || "" })),
+      portfolio: (data.portfolio || []).map(p => ({ id: p.id, image: p.image_url, title: p.title || p.caption || "" })) });
+    remember(d);
+    return d;
+  }
+
+  // Keeps a tailor from a search or a page so the order flow can use it
+  function remember(d) {
+    if (!db) return;
+    const mine = db.designers.find(x => x.id === d.id);
+    if (mine && mine.is_mine) return;
+    if (mine) Object.assign(mine, d); else db.designers.push(d);
+  }
+
+  // The price list of the tailor a customer is about to order from
+  async function ensurePrices(designerId) {
+    if (!state.live || !designerId || !db || pricesOf(designerId).length) return;
+    const { data, error } = await publicClient().from("price_list").select("*").eq("designer_id", designerId).order("sort_order");
+    if (error) { console.warn(error.message); return; }
+    (data || []).forEach(p => { if (!db.prices.some(x => x.id === p.id)) db.prices.push({ id: p.id, designer_id: p.designer_id, kind: p.kind, name: p.name, price: num(p.price), yards: num(p.yards) }); });
+  }
+
+  // Countries and specialities before anyone signs in (for "Join as a tailor")
+  async function loadPublicLists() {
+    const client = publicClient();
+    const [countries, specialities] = await Promise.all([
+      client.from("countries").select("*").order("sort_order"), client.from("specialities").select("*").order("sort_order")]);
+    return { countries: countries.data || [], specialities: specialities.data || [] };
+  }
+
   return {
     get live() { return state.live; },
     get me() { return state.me; },
+    GUEST_SCREENS, isGuest, startGuest,
     get teamLogins() { return state.teamLogins; },
     start, afterSignIn, signIn, signUp, signOut, sendPasswordReset, setNewPassword,
     enterDemo, leaveDemo, newId, isTeam, isOwner, canOpen, homeRoute,
     save, flush, refresh, refreshIfStale, placeOrder, deleteOrder,
     requestQuote, sendQuote, acceptQuote, sendMessage, markChatRead, refreshChat,
     uploadPhoto, removePhoto, photoUrl,
-    loadTeamLogins, addTeamLogin, removeTeamLogin
+    loadTeamLogins, addTeamLogin, removeTeamLogin,
+    registerDesigner, saveDesignerProfile, addPortfolioItem, removePortfolioItem, setDesignerStatus, addSpeciality,
+    saveCustomerNotes, searchTailors, tailorPage, ensurePrices, loadPublicLists
   };
 })();

@@ -77,7 +77,7 @@ function cNav(active) {
     ${item("orders", "📦", "Orders", unreadBadge(unread, "in your orders"))}
     <button class="plus" onclick="go('outfit')" aria-label="Start an order">+</button>
     ${item("market", "🧶", "Fabrics")}
-    ${item("designers", "🧵", "Shop")}
+    ${item("tailors", "📍", "Tailors")}
     ${item("profile", "👤", "Profile")}
   </nav>`;
 }
@@ -132,12 +132,11 @@ function screenHome() {
     <div class="hero">
       <div class="brand">WEARVIA</div>
       <div class="tagline">Bespoke · Ready to Wear · African Luxury</div>
-      <div class="featured">Now on Wearvia: <b>${escapeHtml(SHOP_NAME)}</b> · ${escapeHtml(designer().location)}</div>
       <h2>Your Style.<br>Our Craft.<br>Timeless You.</h2>
-      ${resume ? `<button class="btn" onclick="go('${resume.screen}')">Continue your ${escapeHtml(d.outfit)} order</button>` : ""}
-      <button class="${resume ? "btn2" : "btn"}" onclick="go('outfit')">Start an Order</button>
+      <button class="btn near-btn" onclick="go('tailors')"><span aria-hidden="true">📍</span> Find tailors near me</button>
+      ${resume ? `<button class="btn2" onclick="go('${resume.screen}')">Continue your ${escapeHtml(d.outfit)} order with ${escapeHtml(draftDesigner().business_name)}</button>` : ""}
+      <button class="btn2" onclick="go('outfit')">Start an Order${d && d.designerId ? "" : ` with ${escapeHtml(draftDesigner().business_name)}`}</button>
       <button class="btn2" onclick="go('market')">Fabric Marketplace</button>
-      <button class="btn2" onclick="go('designers')">Explore Designers</button>
       ${Cloud.isTeam() ? `<button class="btn2" onclick="go('biz/dashboard')">Business Dashboard</button>` : ""}
       <button class="linkish on-navy" onclick="go('seller')">Sell your fabric on ${APP_NAME} →</button>
     </div>
@@ -368,7 +367,7 @@ function screenSend() {
       <div class="order-head">
         <div class="thumb">${conceptSVG(d, d.variation)}</div>
         <div>
-          <div class="name">${escapeHtml(d.outfit)} by ${escapeHtml(SHOP_NAME)}</div>
+          <div class="name">${escapeHtml(d.outfit)} by ${escapeHtml(draftDesigner().business_name)}</div>
           <div class="meta">${escapeHtml(colourName(d.colour))} · ${escapeHtml(d.embroidery)} embroidery · ${escapeHtml(d.sleeve)} sleeve · ${escapeHtml(d.neck)} neck</div>
         </div>
       </div>
@@ -383,7 +382,7 @@ function screenSend() {
       <div class="send-next">
         <b>What happens next</b>
         <ol>
-          <li>${escapeHtml(SHOP_NAME)} looks at your design, photos and measurements.</li>
+          <li>${escapeHtml(draftDesigner().business_name)} looks at your design, photos and measurements.</li>
           <li>You chat here in the app to agree how many yards of fabric you need.</li>
           <li>They send your quote: fabric (yards × ${money(fabric.price_per_yard)}) + tailoring ${money(tailoring)} + embroidery ${money(embroidery)} + delivery ${money(DELIVERY_FEE)}.</li>
           <li>Accept it and pay a ${Math.round(DEPOSIT_RATE * 100)}% deposit. The fabric is only bought then.</li>
@@ -422,7 +421,7 @@ function sendToTailor() {
   const button = document.getElementById("send-request");
   if (button) { button.disabled = true; button.textContent = "Sending…"; }
   const sent = requestQuote({
-    customerId: owner.id,
+    customerId: owner.id, designerId: draftDesignerId(),
     outfit: d.outfit, colour: d.colour, embroidery: d.embroidery, sleeve: d.sleeve, neck: d.neck,
     variation: d.variation, profileId: d.profileId, fabric,
     inspiration: hasInspiration(d.inspiration)
@@ -435,7 +434,7 @@ function sendToTailor() {
       db.session.customerId = owner.id;
       db.draft = null;
       saveData();
-      flashMessage = `Sent! ${SHOP_NAME} will chat with you here to agree the yards, then send your quote.`;
+      flashMessage = `Sent! ${designerName(order.designer_id)} will chat with you here to agree the yards, then send your quote.`;
       go("tracking/" + order.id);
     })
     .catch(error => {
@@ -456,7 +455,7 @@ function quoteLinesHtml(order) {
 
 function chatButton(order, primary) {
   const unread = unreadCount(order.id, "customer");
-  return `<button class="${primary ? "cta" : "btn-outline"} chat-open" onclick="go('chat/${order.id}')">💬 Chat with ${escapeHtml(SHOP_NAME)}${unread ? ` <span class="chat-badge">${unread} new</span>` : ""}</button>`;
+  return `<button class="${primary ? "cta" : "btn-outline"} chat-open" onclick="go('chat/${order.id}')">💬 Chat with ${escapeHtml(designerName(order.designer_id))}${unread ? ` <span class="chat-badge">${unread} new</span>` : ""}</button>`;
 }
 
 // What the customer can do now on an order that's still a request or a quote
@@ -465,14 +464,14 @@ function quoteBlock(order) {
   if (status === "requested") {
     return `<div class="quote-card waiting">
       <b>${escapeHtml(QUOTE_STATUS_LABELS.requested)}</b>
-      ${order.fabric_problem ? `<div class="notice warn">${escapeHtml(order.fabric_problem)}. ${escapeHtml(SHOP_NAME)} will suggest another fabric in the chat.</div>` : ""}
-      <div class="meta">${escapeHtml(SHOP_NAME)} will chat with you to agree how many yards of fabric you need, then send your quote here. Nothing is bought or charged until you accept it.</div>
+      ${order.fabric_problem ? `<div class="notice warn">${escapeHtml(order.fabric_problem)}. ${escapeHtml(designerName(order.designer_id))} will suggest another fabric in the chat.</div>` : ""}
+      <div class="meta">${escapeHtml(designerName(order.designer_id))} will chat with you to agree how many yards of fabric you need, then send your quote here. Nothing is bought or charged until you accept it.</div>
       ${chatButton(order, true)}
     </div>`;
   }
   if (status === "quoted") {
     return `<div class="quote-card">
-      <b>Your quote from ${escapeHtml(SHOP_NAME)}</b>
+      <b>Your quote from ${escapeHtml(designerName(order.designer_id))}</b>
       ${quoteLinesHtml(order)}
       <button id="accept-quote" class="cta" onclick="acceptQuoteFromApp('${order.id}')">Accept quote</button>
       <button class="btn-outline" onclick="go('chat/${order.id}')">Ask a question</button>
@@ -532,7 +531,7 @@ function screenPay(orderId) {
         <span class="optbtns">${["Card", "Apple Pay", "Bank transfer"].map(m =>
           `<button class="optbtn ${depositMethod === m ? "sel" : ""}" onclick="depositMethod='${m}';renderAll()">${m}</button>`).join("")}</span>
       </div>
-      <div class="meta">Demo checkout — no real money is taken. Your deposit shows as <b>awaiting confirmation</b> until ${escapeHtml(SHOP_NAME)} confirms it. Stripe connects here in the full version.</div>
+      <div class="meta">Demo checkout — no real money is taken. Your deposit shows as <b>awaiting confirmation</b> until ${escapeHtml(designerName(order.designer_id))} confirms it. Stripe connects here in the full version.</div>
       <button id="pay-deposit" class="cta" onclick="payDeposit('${order.id}')">Pay ${money(deposit)} Deposit</button>
     </div>`;
 }
@@ -605,7 +604,7 @@ function lifecycleList(order) {
     const state = i < done ? "done" : i === done ? "now" : "";
     let extra = "";
     if (i === done && staff) extra = ` <span class="fl">· ${escapeHtml(staff.name)}</span>`;
-    if (i === done && isPlaced(order) && depositAwaiting(order)) extra = ` <span class="fl awaiting">· ${depositStarted(order) ? `awaiting confirmation by ${escapeHtml(SHOP_NAME)}` : "waiting for your deposit"}</span>`;
+    if (i === done && isPlaced(order) && depositAwaiting(order)) extra = ` <span class="fl awaiting">· ${depositStarted(order) ? `awaiting confirmation by ${escapeHtml(designerName(order.designer_id))}` : "waiting for your deposit"}</span>`;
     if (i === done && !isPlaced(order)) extra = ` <span class="fl awaiting">· ${escapeHtml(currentStepLabel(order).toLowerCase())}</span>`;
     if (i === done && label === "Delivery" && findDelivery(order.id)) extra = ` <span class="fl">· ${escapeHtml(findDelivery(order.id).status)}</span>`;
     return `<li><span class="tdot ${state}"></span><span class="${state}-t">${i + 1}. ${label}</span>${extra}</li>`;
@@ -641,10 +640,10 @@ function screenTracking(orderId) {
       <div class="order-head">
         <div class="thumb">${conceptSVG({ outfit: order.outfit_type, colour: order.colour, embroidery: order.embroidery, sleeve: order.sleeve_style, neck: order.neck_style }, order.concept_variation)}</div>
         <div>
-          <div class="name">${escapeHtml(order.outfit_type)} by ${escapeHtml(SHOP_NAME)}</div>
+          <div class="name">${escapeHtml(order.outfit_type)} by ${escapeHtml(designerName(order.designer_id))}</div>
           ${placed ? `
           <div class="meta">Total ${money(order.quote_total)} · Paid ${money(amountPaid(order.id))}</div>
-          ${awaiting > 0 ? `<div class="meta awaiting">${money(awaiting)} awaiting confirmation by ${escapeHtml(SHOP_NAME)}</div>` : ""}
+          ${awaiting > 0 ? `<div class="meta awaiting">${money(awaiting)} awaiting confirmation by ${escapeHtml(designerName(order.designer_id))}</div>` : ""}
           <div class="meta">${due > 0 ? `Balance ${money(due)}${qcPassed ? " — due now" : " after quality control"}` : balance > 0 ? "Nothing more to pay right now" : "Paid in full"}</div>
           <div class="meta">Due ${formatDate(order.due_date)}</div>` : `
           <div class="meta">Sent to the tailor ${formatDate(order.created_at)}</div>
@@ -660,7 +659,7 @@ function screenTracking(orderId) {
         ${placed ? `<button class="optbtn" onclick="go('invoice/${order.id}')">Invoice</button>` : ""}
         ${delivery ? `<button class="optbtn" onclick="go('delivery/${order.id}')">Track delivery</button>` : ""}
       </div>
-      <div class="meta">${escapeHtml(SHOP_NAME)} updates each stage as your outfit is made.</div>
+      <div class="meta">${escapeHtml(designerName(order.designer_id))} updates each stage as your outfit is made.</div>
     </div>
     ${cNav("orders")}`;
 }
@@ -698,7 +697,7 @@ function screenDelivery(orderId) {
         <div class="selopt"><span class="fl">Courier</span><span>${escapeHtml(delivery.courier)}</span></div>
         <div class="selopt"><span class="fl">Tracking Number</span><span>${escapeHtml(delivery.tracking_number)}</span></div>
         <div class="selopt"><span class="fl">Estimated</span><span>${formatDate(delivery.eta)}</span></div>
-        ${deliveryTimeline(delivery)}` : `<div class="empty">Not dispatched yet. You'll get a tracking number when ${escapeHtml(SHOP_NAME)} sends your order.</div>`}
+        ${deliveryTimeline(delivery)}` : `<div class="empty">Not dispatched yet. You'll get a tracking number when ${escapeHtml(designerName(order.designer_id))} sends your order.</div>`}
     </div>
     ${cNav("orders")}`;
 }
@@ -756,7 +755,7 @@ function invoiceBody(order) {
   const paid = amountPaid(order.id);
   return `
     <div class="invoice">
-      <div class="row-between"><b class="serif">${escapeHtml(SHOP_NAME)}</b><span class="fl">via ${APP_NAME}</span></div>
+      <div class="row-between"><b class="serif">${escapeHtml(designerName(order.designer_id))}</b><span class="fl">via ${APP_NAME}</span></div>
       <div class="meta">Invoice ${escapeHtml(invoice ? invoice.id : "—")} · ${formatDate(invoice ? invoice.created_at : order.created_at)}</div>
       <div class="meta">Billed to ${escapeHtml(customer ? customer.name : "Customer")}${customer && customer.email ? " · " + escapeHtml(customer.email) : ""}</div>
       ${order.line_items.map(l => `<div class="qline"><span>${escapeHtml(l.label)}</span><span>${money(l.amount)}</span></div>`).join("")}
@@ -783,7 +782,7 @@ function screenInvoice(orderId) {
 
 function shareInvoice(orderId) {
   const order = findOrder(orderId);
-  const text = `${SHOP_NAME} invoice for order ${order.id}: ${order.outfit_type}, total ${money(order.quote_total)}, balance ${money(Math.max(balanceOwed(order), 0))}.`;
+  const text = `${designerName(order.designer_id)} invoice for order ${order.id}: ${order.outfit_type}, total ${money(order.quote_total)}, balance ${money(Math.max(balanceOwed(order), 0))}.`;
   if (navigator.share) {
     navigator.share({ title: `Invoice ${order.id}`, text }).catch(() => {});
   } else if (navigator.clipboard) {
@@ -794,54 +793,31 @@ function shareInvoice(orderId) {
 }
 
 // ---- Screens 21–22: Browse designers and designer profile ----
+// Now "Find tailors near me" and each tailor's public page (tailors.js).
+// The old addresses still work.
 
 function screenDesigners() {
-  const d = designer();
-  const r = designerRating();
-  return `
-    ${cTop("Designers Near You")}
-    <div class="content">
-      <button class="fab-card" onclick="go('designer')">
-        <div class="name">${escapeHtml(d.business_name)}</div>
-        <div class="meta">${escapeHtml(d.location)} · ⭐ ${r.rating} (${r.count} reviews)</div>
-        <div class="meta">${escapeHtml(d.speciality_tags.join(", "))}</div>
-      </button>
-      <div class="empty">${escapeHtml(SHOP_NAME)} is the first designer on ${APP_NAME}. More designers are joining soon.</div>
-      <button class="fab-card" onclick="go('market')">
-        <div class="name">Fabric Marketplace</div>
-        <div class="meta">${activeFabrics().filter(isOnMarket).length} fabrics from ${new Set(activeFabrics().filter(isOnMarket).map(f => f.supplier_id)).size} independent sellers</div>
-      </button>
-    </div>
-    ${cNav("designers")}`;
+  return screenTailors();
 }
 
-function screenDesigner() {
-  const d = designer();
-  const r = designerRating();
-  const reviews = recentReviews(3);
-  return `
-    ${cTop(escapeHtml(d.business_name), "designers")}
-    <div class="content">
-      <div class="stat"><div class="l">Rating</div><div class="n">⭐ ${r.rating} (${r.count} reviews)</div></div>
-      <div class="mrow"><span>Location</span><span>${escapeHtml(d.location)}</span></div>
-      <div class="mrow"><span>Delivery time</span><span>${escapeHtml(d.delivery_time)}</span></div>
-      <div class="mrow"><span>Speciality</span><span>${escapeHtml(d.speciality_tags.join(", "))}</span></div>
-      ${reviews.map(r => `<div class="review"><span class="gold">${"★".repeat(r.rating)}</span> ${escapeHtml(r.text || r.outfit)}<div class="fl">${escapeHtml(r.who)}${r.outfit ? " · " + escapeHtml(r.outfit) : ""}</div></div>`).join("")}
-      <button class="cta" onclick="go('outfit')">Request Custom Outfit</button>
-      <button class="btn-outline" onclick="go('rtw')">View Ready to Wear</button>
-    </div>
-    ${cNav("designers")}`;
+function screenDesigner(id) {
+  const d = designerById(id) || mainDesigner();
+  if (d && d.slug) { go("tailor/" + d.slug, true); return ""; }
+  return screenTailors();
 }
 
 // ---- Screen 18: Ready-to-wear shop (customer side) ----
 
-function screenRtw() {
+function screenRtw(designerId) {
+  const d = designerById(designerId) || mainDesigner();
+  const items = rtwOf(d.id);
   return `
-    ${cTop("Ready to Wear", "designer")}
+    ${cTop("Ready to Wear · " + escapeHtml(d.business_name), d.slug ? "tailor/" + d.slug : "tailors")}
     <div class="content">
       ${flash()}
+      ${items.length ? "" : `<div class="empty">${escapeHtml(d.business_name)} has no ready-to-wear pieces right now.</div>`}
       <div class="chip-grid">
-        ${db.ready_to_wear.map(item => `<div class="chip rtw">
+        ${items.map(item => `<div class="chip rtw">
           <div class="rtw-swatch" style="background:${item.color}"></div>
           ${escapeHtml(item.name)}<span class="chip-sub gold">${money(item.price)}</span>
           <span class="chip-sub">${item.stock > 0 ? item.stock + " in stock" : "Sold out"}</span>
@@ -849,7 +825,7 @@ function screenRtw() {
         </div>`).join("")}
       </div>
     </div>
-    ${cNav("designers")}`;
+    ${cNav("tailors")}`;
 }
 
 function buyRtw(itemId) {
@@ -860,7 +836,7 @@ function buyRtw(itemId) {
   db.rtw_sales.push({ id: newId("RS", db.rtw_sales), item_id: item.id, customer_id: db.session.customerId, price: item.price, cost: item.cost,
     date: today(), status: "awaiting_confirmation" });
   saveData();
-  flashMessage = `${item.name} ordered — your payment is awaiting confirmation. ${SHOP_NAME} will post it to you once it's confirmed.`;
+  flashMessage = `${item.name} ordered — your payment is awaiting confirmation. ${designerName(item.designer_id || (mainDesigner() || {}).id)} will post it to you once it's confirmed.`;
   renderAll();
 }
 
@@ -961,6 +937,9 @@ const CUSTOMER_SCREENS = {
   invoice: screenInvoice,
   designers: screenDesigners,
   designer: screenDesigner,
+  tailors: screenTailors,
+  tailor: screenTailorPage,
+  joinTailor: screenJoinTailor,
   rtw: screenRtw,
   profile: screenProfile,
   myMeasurements: screenMyMeasurements
@@ -976,6 +955,7 @@ function renderCustomer(screen, id) {
   const el = document.getElementById("customer-app");
   el.innerHTML = draw(id);
   el.classList.toggle("is-hero", screen === "home");
+  el.classList.toggle("is-wide", WIDE_SCREENS.includes(screen));
   el.classList.toggle("is-chat", screen === "chat");
   afterChatRender();
 }

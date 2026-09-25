@@ -105,3 +105,12 @@ Existing helper functions used by policies: `is_admin()`, `can_manage_designer(d
 - No Storage buckets for fabric photos, seller logos, or customer style photos.
 - Performance advisor warnings ("Auth RLS Initialization Plan"): policies call `auth.uid()` directly; wrap as `(select auth.uid())`.
 - Security note: while payments are a demo, a customer's browser must not be able to mark an order paid or move production stages. Deposits/stages should only be settable by the designer team (or later by a Stripe webhook).
+
+## Added by wearvia/supabase/tailors-near-me.sql
+
+- **designers** gains: slug, admin_status (pending / approved / hidden, kept in step with `approved`), admin_note, approved_at, country_code, city, postcode*, address_line*, show_exact_address, latitude*, longitude*, public_latitude, public_longitude, postcode_area, public_address, delivery_available, custom_orders, review_count, phone*, updated_at. (*private: not readable through the API except by the tailor's own team and the admin, via `wearvia_my_designers()`.)
+- **countries** (code, name, slug, flag, uses_miles, sort_order) and **specialities** (name, sort_order, active).
+- **price_list** gains designer_id (each tailor has their own list; the existing rows are Nebeda Threads').
+- **customers** gains added_by_designer_id; **designer_customer_notes** holds each tailor's own notes (the old shared `customers.notes` column is kept but no longer readable through the API).
+- Functions: `wearvia_search_tailors`, `wearvia_tailor_page`, `wearvia_register_designer`, `wearvia_my_designers`, `wearvia_set_designer_status`; `wearvia_bootstrap`, `wearvia_add_team_member`, `wearvia_team_logins`, the order/quote/chat functions now work per tailor.
+- Storage: public bucket `designer-photos` (logos and portfolios).

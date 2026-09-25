@@ -5,7 +5,7 @@
 
 // ---- Settings you can change ----
 const APP_NAME = "Wearvia";          // the platform name shown in the app
-const SHOP_NAME = "Nebeda Threads";  // the first shop (designer) using Wearvia
+const SHOP_NAME = "Nebeda Threads";  // the first shop (designer number one) on Wearvia; every tailor has their own name
 const CURRENCY = "£";
 const STORAGE_KEY = "wearvia-app-v2";
 const DEPOSIT_RATE = 0.6;            // 60% deposit, balance after quality control
@@ -349,7 +349,8 @@ function buildSampleData() {
       { id: "RS2", item_id: "R3", customer_id: "C1", price: 40, cost: 18, date: addDays(-5), status: "confirmed" }
     ],
 
-    prices: defaultPriceList(),
+    prices: defaultPriceList().map(p => Object.assign(p, { designer_id: "D1" })),
+    customer_notes: [],
 
     // What the customer app is doing right now
     session: { customerId: null },
@@ -425,6 +426,9 @@ function buildSampleData() {
   data.counters.invoice = 1008;
 
   addSampleQuoteRequests(data);
+  // Customers' notes are kept per tailor
+  data.customers.forEach(c => { if (c.notes) data.customer_notes.push({ designer_id: "D1", customer_id: c.id, notes: c.notes }); });
+  addDemoTailors(data);
   return data;
 }
 
@@ -519,14 +523,14 @@ function resetSampleData() {
 
 // ---- Lookups ----
 
-function findCustomer(id) { return db.customers.find(c => c.id === id); }
+// On the Business dashboard only the open tailor's own customers and orders can be found
+function findCustomer(id) { return (inBusiness() ? bizCustomers() : db.customers).find(c => c.id === id); }
 function findFabric(id) { return db.fabrics.find(f => f.id === id); }
 function findSupplier(id) { return db.suppliers.find(s => s.id === id); }
-function findOrder(id) { return db.orders.find(o => o.id === id); }
+function findOrder(id) { return db.orders.find(o => o.id === id && orderInScope(o)); }
 function findStaff(id) { return db.staff.find(s => s.id === id); }
 function findInvoice(orderId) { return db.invoices.find(i => i.order_id === orderId); }
 function findDelivery(orderId) { return db.deliveries.find(d => d.order_id === orderId); }
-function designer() { return db.designers[0]; }
 
 function customerName(id) {
   const customer = findCustomer(id);
@@ -553,9 +557,10 @@ function findProfile(profileId) {
 
 // Finds a customer by name, or creates a new one if they don't exist yet
 function findOrCreateCustomer(name, phone, email) {
-  let customer = db.customers.find(c => c.name.toLowerCase() === name.toLowerCase());
+  let customer = bizCustomers().find(c => c.name.toLowerCase() === name.toLowerCase());
   if (!customer) {
-    customer = { id: newId("C", db.customers), name, email: email || "", phone: phone || "", created_at: today(), notes: "", measurement_profiles: [] };
+    customer = { id: newId("C", db.customers), name, email: email || "", phone: phone || "", created_at: today(), notes: "", measurement_profiles: [],
+      added_by_designer_id: inBusiness() ? bizDesignerId() : null };
     db.customers.push(customer);
   } else {
     if (phone) customer.phone = phone;
@@ -596,7 +601,7 @@ function amountAwaiting(orderId) {
 }
 
 function paymentsAwaiting() {
-  return db.payments.filter(p => p.status === "awaiting_confirmation");
+  return bizPayments().filter(p => p.status === "awaiting_confirmation");
 }
 
 // Nothing is owed on a quote until the customer accepts it
@@ -698,12 +703,12 @@ function isPlaced(order) {
 
 // Orders being made (accepted quotes and walk-ins) — what production, payments and the dashboard count
 function placedOrders() {
-  return db.orders.filter(isPlaced);
+  return scopedOrders().filter(isPlaced);
 }
 
 // Customers waiting for the tailor, or deciding on a quote
 function quoteRequests() {
-  return db.orders.filter(o => !isPlaced(o));
+  return scopedOrders().filter(o => !isPlaced(o));
 }
 
 // True once the customer has paid (or the shop has recorded) any of the deposit
@@ -725,9 +730,12 @@ function fabricProblemText(fabric, yards) {
 function requestQuote(details) {
   if (Cloud.live) return Cloud.requestQuote(details);
   const fabric = details.fabric;
+  const tailor = designerById(details.designerId) || mainDesigner();
+  if (tailor.admin_status !== "approved") throw new Error(`${tailor.business_name} isn't taking orders on Wearvia right now. Please choose another tailor.`);
+  if (tailor.custom_orders === false) throw new Error(`${tailor.business_name} isn't taking custom orders at the moment.`);
   const id = nextOrderId();
   const order = {
-    id, customer_id: details.customerId, designer_id: designer().id,
+    id, customer_id: details.customerId, designer_id: tailor.id,
     outfit_type: details.outfit, colour: details.colour, embroidery: details.embroidery,
     sleeve_style: details.sleeve, neck_style: details.neck,
     concept_variation: details.variation || 1, concept_image_url: "",
@@ -743,7 +751,7 @@ function requestQuote(details) {
     due_date: addDays(14), created_at: today(), updated_at: today()
   };
   db.orders.push(order);
-  addSystemMessage(order, `Thanks — your request is with ${SHOP_NAME}. We'll look at your design, style photos and measurements, and chat with you here to agree how many yards of fabric you need. Then we'll send your quote. Nothing is bought or charged until you accept it.`);
+  addSystemMessage(order, `Thanks — your request is with ${tailor.business_name}. We'll look at your design, style photos and measurements, and chat with you here to agree how many yards of fabric you need. Then we'll send your quote. Nothing is bought or charged until you accept it.`);
   if (details.note) addChatMessage(order, "customer", details.note, []);
   return order;
 }
@@ -762,6 +770,7 @@ function sendQuote(order, fabricId, yards, note) {
   if (fabric.deleted_at || fabric.status !== "approved" || fabric.sold_out) throw new Error(`${fabric.name} isn't on sale any more. Choose another fabric.`);
   if (yards < (fabric.min_order_yards || 0)) throw new Error(`The smallest order for ${fabric.name} is ${fabric.min_order_yards} yd.`);
   if (yards > fabric.yards_available) throw new Error(`Only ${fabric.yards_available} yd of ${fabric.name} is left in stock.`);
+  usePricesOf(order.designer_id);   // the order's own tailor's price list
   const quote = computeQuote(order.outfit_type, order.embroidery, fabric, yards);
   const deposit = depositFor(quote.total);
   Object.assign(order, {
@@ -781,17 +790,18 @@ function sendQuote(order, fabricId, yards, note) {
 function acceptQuote(order) {
   if (Cloud.live) return Cloud.acceptQuote(order);
   if (isPlaced(order)) return { ok: true, already: true };
-  if (quoteStatus(order) !== "quoted") throw new Error(`There's no quote to accept yet. ${SHOP_NAME} will send it in the chat.`);
+  const shop = designerName(order.designer_id);
+  if (quoteStatus(order) !== "quoted") throw new Error(`There's no quote to accept yet. ${shop} will send it in the chat.`);
   const fabric = findFabric(order.fabric_id);
   const problem = fabricProblemText(fabric, order.fabric_yards);
   if (problem) {
     order.quote_status = "requested";
     order.fabric_problem = problem;
-    addSystemMessage(order, `Sorry — ${problem}, so this quote can't be accepted. Nothing has been charged. ${SHOP_NAME} will suggest another fabric here in the chat and send you a new quote.`);
-    return { ok: false, message: `Sorry — ${problem}. ${SHOP_NAME} will suggest another fabric in the chat.` };
+    addSystemMessage(order, `Sorry — ${problem}, so this quote can't be accepted. Nothing has been charged. ${shop} will suggest another fabric here in the chat and send you a new quote.`);
+    return { ok: false, message: `Sorry — ${problem}. ${shop} will suggest another fabric in the chat.` };
   }
   fabric.yards_available = Math.round((fabric.yards_available - order.fabric_yards) * 100) / 100;
-  const staff = autoAssignStaff();
+  const staff = autoAssignStaff(order.designer_id);
   STAFF_ROLES.forEach(role => { if (!order.assigned_staff[role.key]) order.assigned_staff[role.key] = staff[role.key]; });
   Object.assign(order, { quote_status: "accepted", accepted_at: today(), fabric_problem: null, updated_at: today() });
   if (!order.due_date || order.due_date < addDays(14)) order.due_date = addDays(14);
@@ -813,7 +823,7 @@ function noticeFabricProblems() {
     const wasQuoted = quoteStatus(order) === "quoted";
     order.fabric_problem = problem;
     order.quote_status = "requested";
-    addSystemMessage(order, `Sorry — ${problem}, so ${wasQuoted ? "this quote can't be accepted any more. " : ""}${SHOP_NAME} will suggest another fabric here in the chat and send you a new quote.`);
+    addSystemMessage(order, `Sorry — ${problem}, so ${wasQuoted ? "this quote can't be accepted any more. " : ""}${designerName(order.designer_id)} will suggest another fabric here in the chat and send you a new quote.`);
   });
 }
 
@@ -833,10 +843,11 @@ function staffForCurrentStep(order) {
 }
 
 // Pick the least busy person for each role when a new order comes in (step 8)
-function autoAssignStaff() {
+function autoAssignStaff(designerId) {
   const assigned = {};
+  const main = (mainDesigner() || {}).id;
   STAFF_ROLES.forEach(role => {
-    const people = db.staff.filter(s => s.role === role.key);
+    const people = db.staff.filter(s => s.role === role.key && (s.designer_id || main) === (designerId || main));
     if (!people.length) { assigned[role.key] = ""; return; }
     const load = person => db.orders.filter(o => isOpen(o) && o.assigned_staff[role.key] === person.id).length;
     people.sort((a, b) => load(a) - load(b));
@@ -858,7 +869,7 @@ function createPaidOrder(details) {
   if (Cloud.live) return Cloud.placeOrder(details);
   const id = nextOrderId();
   const order = {
-    id, customer_id: details.customerId, designer_id: designer().id,
+    id, customer_id: details.customerId, designer_id: bizDesignerId(),
     outfit_type: details.outfit, colour: details.colour, embroidery: details.embroidery,
     sleeve_style: details.sleeve, neck_style: details.neck,
     concept_variation: details.variation || 1, concept_image_url: "",
@@ -869,7 +880,7 @@ function createPaidOrder(details) {
     line_items: details.quote.lines, quote_total: details.quote.total,
     deposit_amount: details.deposit, deposit_paid_at: null, balance_paid_at: null,
     stage: "tailor_assigned",
-    assigned_staff: autoAssignStaff(),
+    assigned_staff: autoAssignStaff(bizDesignerId()),
     review_rating: null, review_text: "",
     quote_status: "accepted", quoted_at: null, accepted_at: today(), fabric_problem: null,
     due_date: details.dueDate || addDays(14), created_at: today(), updated_at: today()
@@ -942,42 +953,41 @@ function advanceDelivery(delivery) {
   }
 }
 
-// Designer rating including reviews left in the app
-function designerRating() {
-  const d = designer();
-  if (db.reviews) {
-    // Live mode: every review on Wearvia (customers can only see their own orders)
-    const count = db.reviews.length;
-    const rating = count ? db.reviews.reduce((t, r) => t + r.rating, 0) / count : d.rating;
-    return { rating: Number(rating).toFixed(1), count };
-  }
-  const reviews = db.orders.filter(o => o.review_rating);
-  const count = d.review_count + reviews.length;
-  const sum = d.rating * d.review_count + reviews.reduce((total, o) => total + o.review_rating, 0);
-  return { rating: (sum / count).toFixed(1), count };
+// A tailor's rating including reviews left in the app. In live mode the
+// database keeps rating and review_count up to date from the reviews table.
+function designerRating(designerId) {
+  const d = designerById(designerId) || designer();
+  if (Cloud.live) return { rating: d.review_count > 0 && d.rating ? Number(d.rating).toFixed(1) : "—", count: d.review_count || 0 };
+  const reviews = db.orders.filter(o => o.review_rating && o.designer_id === d.id);
+  const count = (d.review_count || 0) + reviews.length;
+  const sum = (d.rating || 0) * (d.review_count || 0) + reviews.reduce((total, o) => total + o.review_rating, 0);
+  return { rating: count ? (sum / count).toFixed(1) : "—", count };
 }
 
 // ---- Customer summaries (used by the profile and customer screens) ----
 
 function customerOrders(customerId) {
-  return db.orders.filter(o => o.customer_id === customerId);
+  return scopedOrders().filter(o => o.customer_id === customerId);
 }
 
-// The latest reviews, for the designer's page
-function recentReviews(count) {
+// The latest reviews of a tailor (demo mode; live pages get them from wearvia_tailor_page)
+function recentReviews(count, designerId) {
+  const id = designerId || designer().id;
   if (db.reviews) {
-    return db.reviews.slice(-count).reverse().map(r => {
+    return db.reviews.filter(r => r.designer_id === id).slice(-count).reverse().map(r => {
       const order = r.order_id ? findOrder(r.order_id) : null;
       return { rating: r.rating, text: r.review_text, who: order ? customerName(order.customer_id).split(" ")[0] : "A customer", outfit: order ? order.outfit_type : "" };
     });
   }
-  return db.orders.filter(o => o.review_rating).slice(-count).reverse().map(o =>
-    ({ rating: o.review_rating, text: o.review_text, who: customerName(o.customer_id).split(" ")[0], outfit: o.outfit_type }));
+  const d = designerById(id);
+  return db.orders.filter(o => o.review_rating && o.designer_id === id).slice(-count).reverse().map(o =>
+    ({ rating: o.review_rating, text: o.review_text, who: customerName(o.customer_id).split(" ")[0], outfit: o.outfit_type }))
+    .concat(d && d.sample_reviews ? d.sample_reviews : []).slice(0, count);
 }
 
 function customerSpend(customerId) {
   const orderPayments = customerOrders(customerId).reduce((total, o) => total + amountPaid(o.id), 0);
-  const shopSales = db.rtw_sales.filter(s => s.customer_id === customerId && isConfirmed(s)).reduce((total, s) => total + s.price, 0);
+  const shopSales = (inBusiness() ? bizRtwSales() : db.rtw_sales).filter(s => s.customer_id === customerId && isConfirmed(s)).reduce((total, s) => total + s.price, 0);
   return orderPayments + shopSales;
 }
 

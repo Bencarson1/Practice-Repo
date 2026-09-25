@@ -122,7 +122,7 @@ deliveries
 
 ## 7. Out of scope for v1
 
-- Public designer sign-up and discovery: start with Nebeda Threads as the only designer
+- (Done since v1: public tailor sign-up with admin approval, and "Find tailors near me" discovery — see wearvia/README.md)
 - AI body measurement from photos
 - Multi-designer commission payouts (needs Stripe Connect first)
 

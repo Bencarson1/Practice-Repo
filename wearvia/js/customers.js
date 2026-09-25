@@ -6,7 +6,7 @@
 function renderCustomers(customerId) {
   if (customerId) return renderCustomerDetail(customerId);
 
-  const rows = db.customers.map(c => {
+  const rows = bizCustomers().map(c => {
     const orders = customerOrders(c.id);
     const last = orders.slice().sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
     return `<tr class="clickable" onclick="go('biz/customers/${c.id}')">
@@ -47,9 +47,9 @@ function renderCustomerDetail(customerId) {
 
     <div class="two-col">
       <div class="card">
-        <h2>Notes &amp; preferences</h2>
+        <h2>Notes &amp; preferences <small class="muted">only your team sees these</small></h2>
         <form onsubmit="return saveCustomerNotes(event, '${c.id}')" class="stack">
-          <textarea name="notes" rows="3">${escapeHtml(c.notes)}</textarea>
+          <textarea name="notes" rows="3">${escapeHtml(customerNotes(c.id))}</textarea>
           <div><button type="submit">Save notes</button></div>
         </form>
       </div>
@@ -79,7 +79,7 @@ function renderCustomerDetail(customerId) {
 
 function saveCustomerNotes(event, customerId) {
   event.preventDefault();
-  findCustomer(customerId).notes = event.target.notes.value.trim();
+  setCustomerNotes(customerId, event.target.notes.value.trim());
   saveData();
   toast("Notes saved.");
   renderAll();

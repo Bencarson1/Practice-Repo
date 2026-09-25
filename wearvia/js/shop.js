@@ -4,7 +4,7 @@
 // ============================================================
 
 function renderShop() {
-  const rows = db.ready_to_wear.map(item => {
+  const rows = bizRtw().map(item => {
     const sold = db.rtw_sales.filter(s => s.item_id === item.id).length;
     return `<tr>
       <td><span class="dot" style="background:${escapeHtml(item.color)}"></span> ${escapeHtml(item.name)}</td>
@@ -19,12 +19,12 @@ function renderShop() {
     </tr>`;
   }).join("");
 
-  const sales = db.rtw_sales.slice().reverse().map(s => {
+  const sales = bizRtwSales().slice().reverse().map(s => {
     const item = db.ready_to_wear.find(i => i.id === s.item_id);
     return `<tr><td>${formatDate(s.date)}</td><td>${escapeHtml(item ? item.name : "Removed item")}</td><td>${escapeHtml(s.customer_id ? customerName(s.customer_id) : "Guest")}</td><td>${money(s.price)}</td>
       <td>${s.status === "awaiting_confirmation" ? `<button class="small gold" onclick="confirmRtwSale('${s.id}')">✓ Confirm payment</button>` : escapeHtml(PAYMENT_STATUS_LABELS[s.status] || "Confirmed")}</td></tr>`;
   }).join("");
-  const takings = db.rtw_sales.filter(isConfirmed).reduce((t, s) => t + s.price, 0);
+  const takings = bizRtwSales().filter(isConfirmed).reduce((t, s) => t + s.price, 0);
 
   return `
     ${bizHeader("Ready to Wear", "Non-bespoke pieces for direct sale. Customers see these on the shop page of the customer app.")}
@@ -75,9 +75,9 @@ function addRtwItem(event) {
   event.preventDefault();
   const form = event.target;
   const palette = COLOURS.map(c => c.hex);
-  const count = db.ready_to_wear.length;
+  const count = bizRtw().length;
   db.ready_to_wear.push({
-    id: newId("R", db.ready_to_wear), designer_id: designer().id, name: form.name.value.trim(), price: Number(form.price.value),
+    id: newId("R", db.ready_to_wear), designer_id: bizDesignerId(), name: form.name.value.trim(), price: Number(form.price.value),
     cost: Number(form.cost.value), stock: Number(form.stock.value), color: palette[count % palette.length]
   });
   saveData();

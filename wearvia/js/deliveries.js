@@ -14,7 +14,7 @@ function renderDeliveries() {
       <button type="submit" class="small">Dispatch</button></form></td>
   </tr>`).join("");
 
-  const rows = db.deliveries.slice().reverse().map(d => {
+  const rows = bizDeliveries().slice().reverse().map(d => {
     const order = findOrder(d.order_id);
     const next = DELIVERY_STATUSES[DELIVERY_STATUSES.indexOf(d.status) + 1];
     return `<tr>

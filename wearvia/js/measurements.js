@@ -11,7 +11,7 @@ function renderMeasurements() {
     </label>`).join("");
 
   // One card per customer that has measurements saved
-  const cards = db.customers.filter(c => c.measurement_profiles.length).map(customer => {
+  const cards = bizCustomers().filter(c => c.measurement_profiles.length).map(customer => {
     const m = latestProfile(customer);
     const years = customer.measurement_profiles.map(p => p.label).sort().join(", ");
     return `
@@ -24,7 +24,7 @@ function renderMeasurements() {
           <button class="small" onclick="editMeasurements('${customer.id}')">Edit</button>
         </div>
         <div class="measure-list">${MEASUREMENT_FIELDS.map(f => `<div><span>${f.label}</span><strong>${m[f.key] != null ? m[f.key] + '"' : "—"}</strong></div>`).join("")}</div>
-        ${customer.notes ? `<p class="notes">${escapeHtml(customer.notes)}</p>` : ""}
+        ${customerNotes(customer.id) ? `<p class="notes">${escapeHtml(customerNotes(customer.id))}</p>` : ""}
         ${customer.measurement_profiles.length > 1 ? `<p class="muted small-text">Profiles on file: ${escapeHtml(years)}</p>` : ""}
       </div>`;
   }).join("");
@@ -38,7 +38,7 @@ function renderMeasurements() {
       <form id="measure-form" class="form-grid" onsubmit="return saveMeasurements(event)">
         <label>Customer name
           <input name="customer" list="measure-customer-list" required>
-          <datalist id="measure-customer-list">${db.customers.map(c => `<option value="${escapeHtml(c.name)}"></option>`).join("")}</datalist>
+          <datalist id="measure-customer-list">${bizCustomers().map(c => `<option value="${escapeHtml(c.name)}"></option>`).join("")}</datalist>
         </label>
         <label>Phone<input name="phone" placeholder="Optional"></label>
         ${inputs}
@@ -58,7 +58,7 @@ function saveMeasurements(event) {
   const values = {};
   MEASUREMENT_FIELDS.forEach(field => { values[field.key] = form[field.key].value; });
   saveMeasurementProfile(customer, values);
-  if (form.notes.value.trim()) customer.notes = form.notes.value.trim();
+  if (form.notes.value.trim()) setCustomerNotes(customer.id, form.notes.value.trim());
   saveData();
   toast(`Saved ${customer.name}'s ${thisYear()} measurements.`);
   renderAll();
@@ -73,7 +73,7 @@ function editMeasurements(customerId) {
   if (!form) return;
   form.customer.value = customer.name;
   form.phone.value = customer.phone;
-  form.notes.value = customer.notes || "";
+  form.notes.value = customerNotes(customer.id);
   MEASUREMENT_FIELDS.forEach(field => { form[field.key].value = m && m[field.key] != null ? m[field.key] : ""; });
   form.scrollIntoView({ behavior: "smooth" });
 }

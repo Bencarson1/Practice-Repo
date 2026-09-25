@@ -62,7 +62,7 @@ function unreadBadge(count, label) {
 function addChatMessage(order, kind, body, photos) {
   if (!db.messages) db.messages = [];
   const customer = findCustomer(order.customer_id);
-  const name = kind === "team" ? SHOP_NAME : kind === "system" ? APP_NAME : (customer ? customer.name : "Customer");
+  const name = kind === "team" ? designerName(order.designer_id) : kind === "system" ? APP_NAME : (customer ? customer.name : "Customer");
   const message = { id: newId("MSG", db.messages, 3), order_id: order.id, sender_kind: kind, sender_name: name,
     body: String(body || "").trim().slice(0, CHAT_TEXT_MAX), photos: photos || [], created_at: nowIso() };
   db.messages.push(message);
@@ -111,7 +111,7 @@ function chatMessageHtml(m, side) {
       ${url ? `<img src="${url}" alt="" loading="lazy">` : `<span class="style-missing">Loading photo…</span>`}</button>`;
   }).join("");
   return `<div class="chat-msg ${cls}">
-    ${cls === "theirs" ? `<div class="chat-who">${escapeHtml(m.sender_name || (m.sender_kind === "team" ? SHOP_NAME : "Customer"))}</div>` : ""}
+    ${cls === "theirs" ? `<div class="chat-who">${escapeHtml(m.sender_name || (m.sender_kind === "team" ? designerName((findOrder(m.order_id) || {}).designer_id) : "Customer"))}</div>` : ""}
     ${cls === "system" ? `<div class="chat-who">${escapeHtml(APP_NAME)}</div>` : ""}
     ${photos ? `<div class="chat-photos">${photos}</div>` : ""}
     ${m.body ? `<div class="chat-text">${escapeHtml(m.body)}</div>` : ""}
@@ -123,10 +123,10 @@ function chatLogInner(order, side) {
   const all = orderMessages(order.id);
   const shown = chatShowAll[order.id] ? all : all.slice(-CHAT_SHOWN);
   const hidden = all.length - shown.length;
-  const other = side === "customer" ? SHOP_NAME : (findCustomer(order.customer_id) || { name: "the customer" }).name.split(" ")[0];
+  const other = side === "customer" ? designerName(order.designer_id) : (findCustomer(order.customer_id) || { name: "the customer" }).name.split(" ")[0];
   if (!all.length) {
     return `<div class="chat-empty">No messages yet. ${side === "customer"
-      ? `Ask ${escapeHtml(SHOP_NAME)} anything about your outfit — the fit, the fabric, fittings or delivery.`
+      ? `Ask ${escapeHtml(other)} anything about your outfit — the fit, the fabric, fittings or delivery.`
       : isPlaced(order) ? `Send ${escapeHtml(other)} a message — questions, fittings or updates on their outfit.`
         : `Say hello to ${escapeHtml(other)}, or ask what you need to know to agree the yards.`}</div>`;
   }
@@ -158,7 +158,7 @@ function chatPhotoStrip(orderId) {
 function chatComposerHtml(order, side) {
   const draftMsg = chatDraftFor(order.id);
   const room = CHAT_MAX_PHOTOS - draftMsg.photos.length - draftMsg.adding;
-  const to = side === "customer" ? SHOP_NAME : (findCustomer(order.customer_id) || { name: "customer" }).name.split(" ")[0];
+  const to = side === "customer" ? designerName(order.designer_id) : (findCustomer(order.customer_id) || { name: "customer" }).name.split(" ")[0];
   return `<form class="chat-composer" onsubmit="return sendChat(event, '${order.id}', '${side}')">
     <div class="chat-pending-row" id="chat-photos-${order.id}">${chatPhotoStrip(order.id)}</div>
     <div class="chat-compose-row">

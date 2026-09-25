@@ -12,7 +12,7 @@ function memberStatus(member) {
 }
 
 function renderWeddings() {
-  const events = db.wedding_orders.map(w => {
+  const events = bizWeddings().map(w => {
     const totalOutfits = w.members.reduce((t, m) => t + Number(m.outfits || 0), 0);
     const rows = w.members.map(m => {
       const order = m.order_id ? findOrder(m.order_id) : null;
@@ -69,7 +69,7 @@ function findWedding(id) {
 
 function addWedding(event) {
   event.preventDefault();
-  db.wedding_orders.push({ id: newId("W", db.wedding_orders), designer_id: designer().id, event_name: event.target.name.value.trim(), event_date: event.target.date.value, members: [] });
+  db.wedding_orders.push({ id: newId("W", db.wedding_orders), designer_id: bizDesignerId(), event_name: event.target.name.value.trim(), event_date: event.target.date.value, members: [] });
   saveData();
   renderAll();
   return false;

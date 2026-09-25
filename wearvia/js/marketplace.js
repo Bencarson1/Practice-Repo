@@ -93,7 +93,7 @@ function screenMarket() {
   return `
     ${cTop("Fabric Marketplace", "home")}
     <div class="content">
-      <div class="meta">Fabrics from independent sellers, checked by ${escapeHtml(SHOP_NAME)}. Tap a fabric to see every photo.</div>
+      <div class="meta">Fabrics from independent sellers, checked by Wearvia. Tap a fabric to see every photo.</div>
       ${marketFilterBar()}
       <div id="market-results" class="stack">${marketResults()}</div>
     </div>
@@ -155,7 +155,7 @@ function screenFabricView(fabricId) {
           <div>
             <div class="name">${escapeHtml(seller.name)}</div>
             <div class="meta">${escapeHtml(seller.location)} · ${escapeHtml(sellerRatingText(seller))}</div>
-            <div class="meta">Delivers to ${escapeHtml(SHOP_NAME)} in ${escapeHtml(seller.delivery_estimate)}</div>
+            <div class="meta">Delivers to your tailor in ${escapeHtml(seller.delivery_estimate)}</div>
           </div>
         </div>` : ""}
       ${others.length ? `

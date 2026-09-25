@@ -7,8 +7,10 @@
 //   #/seller/fabrics, #/seller/edit/F12      → fabric seller area
 // ============================================================
 
+// show: only for some people (the fabric marketplace and approving tailors are the admin's)
 const BIZ_TABS = [
   { key: "dashboard", label: "Dashboard", render: renderDashboard },
+  { key: "profile", label: "My profile", render: renderMyProfile, badge: () => (bizDesigner() || {}).admin_status === "approved" ? 0 : 1 },
   // Badges: quote requests that need the team; orders with unread customer messages
   { key: "quotes", label: "Quote requests", render: renderQuotes, badge: () => quotesNeedingTeam().length },
   { key: "orders", label: "Orders", render: renderOrdersTab, badge: () => placedOrders().filter(o => unreadCount(o.id, "team") > 0).length },
@@ -16,8 +18,9 @@ const BIZ_TABS = [
   { key: "team", label: "Tailor Team", render: renderTeam },
   { key: "customers", label: "Customers", render: renderCustomers },
   { key: "measurements", label: "Measurements", render: renderMeasurements },
-  { key: "fabrics", label: "Fabric Inventory", render: renderFabrics },
-  { key: "sellers", label: "Fabric Sellers", render: renderSellerFabrics },
+  { key: "fabrics", label: "Fabric Inventory", render: renderFabrics, show: isAdminUser },
+  { key: "sellers", label: "Fabric Sellers", render: renderSellerFabrics, show: isAdminUser },
+  { key: "tailors", label: "Tailors", render: renderTailorAdmin, show: isAdminUser, badge: () => db.designers.filter(d => d.admin_status === "pending").length },
   { key: "payments", label: "Payments", render: renderPayments },
   { key: "prices", label: "Prices", render: renderPrices },
   { key: "weddings", label: "Wedding Orders", render: renderWeddings },
@@ -65,6 +68,11 @@ function currentRoute() {
 function renderAll() {
   if (!db || !document.getElementById("auth-view").hidden) return; // still loading, or signing in
   const route = currentRoute();
+  // Without an account you can find tailors; anything else asks you to sign in
+  if (Cloud.isGuest() && (route.area !== "customer" || !Cloud.GUEST_SCREENS.includes(route.screen))) {
+    Auth.show("signIn");
+    return;
+  }
   if (!Cloud.canOpen(route.area)) {
     go(Cloud.homeRoute(), true);
     return;
@@ -79,24 +87,30 @@ function renderAll() {
   document.getElementById("mode-seller").classList.toggle("on", isSeller);
   document.getElementById("mode-business").classList.toggle("on", isBusiness);
   document.body.classList.toggle("in-business", isBusiness);
+  // Quotes and prices on screen use the right tailor's price list
+  usePricesOf(contextDesignerId());
+  const shop = isBusiness ? bizDesigner() : null;
+  document.getElementById("shop-pill").innerHTML = shop ? `Business: <b>${escapeHtml(shop.business_name)}</b>` : `Tailors near you · <b>${escapeHtml(APP_NAME)}</b>`;
   // On phones the customer app fills the screen below the top bar, whose height changes with its contents
   document.documentElement.style.setProperty("--appbar-h", document.querySelector(".appbar").offsetHeight + "px");
 
   if (isSeller) {
     renderSellerArea(route.screen, route.id);
   } else if (isBusiness) {
-    const tab = BIZ_TABS.find(t => t.key === route.screen) || BIZ_TABS[0];
+    const tabs = BIZ_TABS.filter(t => !t.show || t.show());
+    const tab = tabs.find(t => t.key === route.screen) || tabs[0];
     // The page first: opening a chat marks it read, so the badges are drawn after
-    document.getElementById("biz-content").innerHTML = tab.render(route.id);
+    document.getElementById("biz-content").innerHTML = bizSwitcher() + (tab.key === "profile" ? "" : tailorStatusBanner(bizDesigner())) + tab.render(route.id);
     afterChatRender();
-    document.getElementById("biz-tabs").innerHTML = BIZ_TABS.map(t => {
+    document.getElementById("biz-tabs").innerHTML = tabs.map(t => {
       const badge = t.badge ? t.badge() : 0;
       return `<a class="tab ${t.key === tab.key ? "active" : ""}" href="#/biz/${t.key}">${t.label}${badge ? `<span class="tab-badge" aria-label="${badge} need attention">${badge}</span>` : ""}</a>`;
     }).join("");
-    document.title = `${tab.label} · ${SHOP_NAME} · ${APP_NAME}`;
+    document.title = `${tab.label} · ${(bizDesigner() || {}).business_name || SHOP_NAME} · ${APP_NAME}`;
   } else {
     renderCustomer(route.screen, route.id);
-    document.title = APP_NAME;
+    const tailor = route.screen === "tailor" ? designerById((db.designers.find(d => d.slug === route.id) || {}).id) : null;
+    document.title = tailor ? `${tailor.business_name} · ${APP_NAME}` : route.screen === "tailors" ? `Find tailors near me · ${APP_NAME}` : APP_NAME;
   }
 }
 
@@ -116,6 +130,15 @@ function stageBadge(order) {
   const label = currentStepLabel(order);
   const cls = label === "Complete" ? "complete" : isLate(order) ? "late" : order.stage;
   return `<span class="badge stage-${cls}">${label === "Complete" ? "Complete" : escapeHtml(label)}</span>`;
+}
+
+// Which tailor's dashboard this is (only shown to people who work for more than one, and in the demo)
+function bizSwitcher() {
+  const list = managedDesigners();
+  if (list.length < 2) return "";
+  return `<div class="biz-switch"><label>Dashboard for
+    <select onchange="switchBizDesigner(this.value)">${list.map(d => `<option value="${d.id}" ${d.id === bizDesignerId() ? "selected" : ""}>${escapeHtml(d.business_name)}${d.admin_status !== "approved" ? " — " + TAILOR_STATUS_LABELS[d.admin_status].toLowerCase() : ""}</option>`).join("")}</select></label>
+    ${Cloud.live ? "" : `<span class="hint">Demo: switch tailor to see that each one only sees their own customers and orders.</span>`}</div>`;
 }
 
 function bizHeader(title, subtitle) {
@@ -140,12 +163,18 @@ window.addEventListener("hashchange", () => {
 });
 
 document.getElementById("app-name").textContent = APP_NAME;
-document.getElementById("shop-name").textContent = SHOP_NAME;
+
 Auth.loading();
 Cloud.start()
   .then(result => {
     if (result.recovery) return Auth.show("newPassword");
-    if (!result.signedIn) return Auth.show("signIn");
+    if (!result.signedIn) {
+      // Someone arriving at a tailor page (e.g. from Google) can look around first
+      if (Cloud.GUEST_SCREENS.includes(currentRoute().screen) && currentRoute().area === "customer") {
+        return Cloud.startGuest().then(() => { Auth.hide(); Auth.drawChrome(); renderAll(); });
+      }
+      return Auth.show("signIn");
+    }
     if (Cloud.live) return Auth.enterApp();
     // Demo mode
     Auth.hide();

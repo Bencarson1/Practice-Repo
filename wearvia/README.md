@@ -4,9 +4,10 @@ Wearvia is one web app for bespoke and ready-to-wear fashion:
 
 - **Customers** design an outfit, see a design concept, save their measurements, choose a fabric and send it all to the tailor. They chat with Nebeda Threads in the app to agree how many yards they need, accept the tailor's quote, pay a deposit, track production and leave a review.
 - **Fabric sellers** run a market stall of fabrics: photos, prices, stock, and the orders that use their fabric.
-- **The designer** runs orders, production, the tailor team, fabric inventory, payments, weddings, ready-to-wear, deliveries and invoices from the same data.
+- **Tailors and designers** each run their own Business dashboard: their quote requests, chats, orders, production, tailor team, prices, payments, weddings, ready-to-wear, deliveries and invoices. They only ever see their own.
+- **Customers find tailors near them** (📍 *Find tailors near me*): by their location or by country, city and postcode, filtered by distance, speciality, delivery, custom tailoring and rating. Each tailor has a public page with their portfolio and reviews, and *Request a quote* sends the order to that tailor.
 
-The first shop using Wearvia is **Nebeda Threads** (Gillingham, Kent). Prices are in **£ (GBP)**.
+The first shop on Wearvia is **Nebeda Threads** (Gillingham, Kent) — designer number one. New tailors join with *I'm a tailor or designer* and appear once the admin approves them. Prices are in **£ (GBP)**.
 
 It's plain HTML, CSS and JavaScript. There is nothing to install and no build step.
 The look and the customer order flow come from `wearvia-prototype.html`; the full plan is in [`WEARVIA-SPEC.md`](../WEARVIA-SPEC.md).
@@ -30,7 +31,24 @@ Then go to <http://localhost:8000>. Press `Ctrl + C` in the terminal to stop the
 
 The app opens on a **Sign in** page. To look around without an account, press **Try the demo** (or open the page with `?demo=1` on the end of the address, e.g. `index.html?demo=1`). The demo uses sample data kept in that browser only — nothing is sent to Supabase, so it's safe to show anyone.
 
-Use the switch at the top right to move between the **Customer app**, the **Fabric sellers** area and the **Business dashboard** (the Business tab only appears for the Nebeda Threads team).
+Use the switch at the top right to move between the **Customer app**, the **Fabric sellers** area and the **Business dashboard** (the Business tab only appears for tailors and their teams). In the demo, *Dashboard for* at the top of the Business dashboard switches between tailors, so you can see that each one only sees their own customers and orders.
+
+## Tailors near me
+
+- **Customers:** Home → **📍 Find tailors near me** → *Use my current location* (the browser asks permission), or search by country, city and postcode/area. Results show the distance (miles in the UK and US, km elsewhere — switchable), specialities and rating, nearest first or best rated. Filters: distance (5, 10, 25, 50), specialities, delivery, custom tailoring, minimum rating. With nothing found it offers to widen the distance or clear filters. Anyone can search without an account; requesting a quote asks them to sign in.
+- **A tailor's page:** logo, description, specialities, rating and reviews, portfolio, delivery / custom badges, their area (or full address if they show it) and the distance. **Request a quote** starts the usual order (design, style photos, measurements, fabric, *Send to tailor*) for that tailor, and the request and chat go to their dashboard.
+- **Joining:** *Create an account* → **I'm a tailor or designer** (business name, country, city). They land on **Business → My profile**: logo, description, specialities, delivery, custom orders, country, city, postcode, full address and *Show my exact address*, and portfolio photos. Saving looks up the map position from the postcode (UK: postcodes.io; elsewhere: OpenStreetMap Nominatim, one request at a time, cached, credited) — or *Use my current location*. They start with the default price list, which they change in Business → Prices.
+- **Approving:** the admin sees **Business → Tailors**: approve, hide (with a note the tailor sees) or put back, and add specialities. Until approved, a tailor can set everything up but customers can't find them or send them requests.
+- **Privacy:** a tailor who doesn't show their exact address is placed about 1 km from it and shown with only their postcode district (e.g. "SE15"); their exact address, postcode and position are never sent to anyone but them and the admin.
+- **Demo:** sample tailors in London, Manchester, Lagos and Abuja, marked *(demo)*, plus one waiting for approval. They only exist in the demo — never in the real database.
+
+## Pages for Google
+
+The app's addresses use `#`, which search engines mostly ignore, so `scripts/build-tailor-pages.mjs` writes ordinary pages from the approved tailors in Supabase (publishable key only): `wearvia/tailors/` (all countries), `wearvia/tailors/uk/london/`, `wearvia/tailors/nigeria/lagos/` and so on, and `wearvia/tailor/<web-address>/` for each tailor — each with its own title, description, heading, Open Graph tags and JSON-LD (LocalBusiness / ItemList), plus `sitemap.xml` and `robots.txt`. The pages also load the latest results live and link into the app. The GitHub Action `.github/workflows/tailor-pages.yml` rebuilds them every day and on every merge into `main`, and publishes the site to GitHub Pages. To build them yourself: `node scripts/build-tailor-pages.mjs` (or `OFFLINE=1 node scripts/build-tailor-pages.mjs` for just the standard city pages).
+
+## Install it on a phone
+
+Wearvia can be added to the home screen: on iPhone, Safari → Share → *Add to Home Screen*; on Android, Chrome → ⋮ → *Install app*. It opens full screen with its own icon. `sw.js` only stores the app's own files so it opens quickly; it never stores anything from Supabase (orders, chats, photos, sign-ins).
 
 ## The order steps
 
@@ -139,7 +157,7 @@ Who can do what is decided by the database, not by the browser (see `supabase/se
 
 The app is already pointed at the Wearvia Supabase project in `js/config.js` (the project URL and the *publishable* key — that key is meant to be public). **Never put the secret key in the app.**
 
-1. **Run the database scripts.** Supabase → *SQL Editor* → *New query* → paste all of `supabase/setup.sql` → *Run*. It adds the missing tables, columns, security rules and photo buckets without touching your existing data. Then open another *New query*, paste all of `supabase/yards.sql` → *Run*. It switches the fabric columns from metres to yards and converts what's in them (money already charged doesn't change). Then do the same with `supabase/prices.sql`: it adds the price list (Business → Prices), makes the database price every customer order, and removes old unused metre functions. Then `supabase/tailor-quote.sql`: customers' orders become quote requests that the tailor prices, adds the order chat and its private `chat-photos` bucket, and ends with a report where every line should say OK. All four are safe to run again — but if you ever re-run setup.sql or prices.sql, run tailor-quote.sql straight after them.
+1. **Run the database scripts.** Supabase → *SQL Editor* → *New query* → paste all of `supabase/setup.sql` → *Run*. It adds the missing tables, columns, security rules and photo buckets without touching your existing data. Then open another *New query*, paste all of `supabase/yards.sql` → *Run*. It switches the fabric columns from metres to yards and converts what's in them (money already charged doesn't change). Then do the same with `supabase/prices.sql`: it adds the price list (Business → Prices), makes the database price every customer order, and removes old unused metre functions. Then `supabase/tailor-quote.sql`: customers' orders become quote requests that the tailor prices, adds the order chat and its private `chat-photos` bucket, and ends with a report where every line should say OK. Then `supabase/tailors-near-me.sql`: many tailors (profiles, countries, specialities, per-tailor price lists and notes, approvals, the distance search, the `designer-photos` bucket, and security rules so each tailor only sees their own). It ends with a report where every line should say OK. All five are safe to run again — but if you ever re-run setup.sql, prices.sql or tailor-quote.sql, run the files after it again, in order.
 2. **Set the sign-in addresses.** Supabase → *Authentication* → *URL Configuration*: set *Site URL* to the address where the app is published, and add the same address under *Redirect URLs*. The links in sign-up and password emails go there.
 3. **Keep email confirmation on.** Supabase → *Authentication* → *Sign In / Providers* → *Email*: leave *Confirm email* switched on. Staff logins are only granted to confirmed emails.
 4. **Make yourself the owner.** Open the app, create an account with your email (choose *I want outfits made*) and confirm it. Then in the SQL Editor run
@@ -155,13 +173,23 @@ wearvia/
 │   ├── setup.sql        Run once in the Supabase SQL Editor: tables, security rules, photo buckets
 │   ├── yards.sql        Run after setup.sql: switches fabric from metres to yards
 │   ├── prices.sql       Run after yards.sql: the price list, and orders priced by the database
-│   └── tailor-quote.sql Run after prices.sql: quote requests, the tailor's quote, and the order chat
+│   ├── tailor-quote.sql Run after prices.sql: quote requests, the tailor's quote, and the order chat
+│   └── tailors-near-me.sql Run after tailor-quote.sql: many tailors, profiles, approvals, the distance search
+├── tailors/             Pages for Google, built by scripts/build-tailor-pages.mjs (plus seo.css / seo.js)
+├── tailor/              One page per approved tailor (built by the same script)
+├── manifest.webmanifest, sw.js, icons/   Installable app (home screen)
 ├── css/
 │   └── style.css        Colours, fonts and layout
 └── js/
     ├── vendor/supabase.js The Supabase library (kept here so there's still nothing to install)
     ├── config.js        The Supabase project address and publishable key
     ├── data.js          Settings, the 16 order steps, sample data, saving/loading, helpers
+    ├── tailors-data.js  Many tailors: lookups, each dashboard's own data and prices, demo tailors, demo search
+    ├── countries.js     The country list for the demo (the live one is in the database)
+    ├── geo.js           Location, distances, miles/km, postcode lookups (postcodes.io, OpenStreetMap)
+    ├── tailors.js       Find tailors near me, tailor pages, Join as a tailor
+    ├── tailor-admin.js  Business → My profile and Business → Tailors (approvals)
+    ├── pwa.js           Makes the app installable
     ├── cloud.js         Live mode: loading from and saving to Supabase, photo uploads
     ├── auth.js          Sign in, create an account, reset a password, demo mode
     ├── photos.js        Saves uploaded photos and logos, resizes them, draws the sample fabric photos
@@ -216,5 +244,5 @@ These parts work in the app but need real services before going live (see sectio
 - **Payments:** a demo checkout. No money is taken; every payment made in the app waits for Nebeda Threads to confirm it. Stripe goes here — when it does, a Stripe webhook should mark payments as confirmed instead of a person.
 - **Ask Wearvia AI:** answers a set of common questions from your data. It isn't a language model.
 - **Delivery tracking:** tracking numbers are made up. Connect Royal Mail, DHL or Shippo.
-- **Designers:** Nebeda Threads is the only designer for now, as the spec says for version 1. Everyone on the team can see every customer.
+- **Designers:** many tailors can join. Commission payouts between Wearvia and tailors need Stripe Connect first; the fabric marketplace (approving sellers' fabrics, stock) is run by the admin.
 
