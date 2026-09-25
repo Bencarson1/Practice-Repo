@@ -26,7 +26,7 @@ function renderWeddings() {
         <td>
           <select onchange="linkMemberOrder('${w.id}', '${m.id}', this.value)" aria-label="Linked order">
             <option value="">No linked order</option>
-            ${db.orders.map(o => `<option value="${o.id}" ${o.id === m.order_id ? "selected" : ""}>${o.id} · ${escapeHtml(customerName(o.customer_id))}</option>`).join("")}
+            ${placedOrders().map(o => `<option value="${o.id}" ${o.id === m.order_id ? "selected" : ""}>${o.id} · ${escapeHtml(customerName(o.customer_id))}</option>`).join("")}
           </select>
         </td>
         <td><button class="small danger" onclick="removeMember('${w.id}', '${m.id}')">Remove</button></td>

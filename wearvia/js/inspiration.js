@@ -273,13 +273,22 @@ function styleJobStrip(order) {
 
 let styleViewer = null;
 
+// key is "draft", an order id, or "msg:<id>" for the photos in a chat message (chat.js)
 function openStyleViewer(key, index) {
-  const insp = key === "draft" ? (db.draft && db.draft.inspiration) : (findOrder(key) || {}).inspiration;
+  let insp, title;
+  if (String(key).startsWith("msg:")) {
+    const message = (db.messages || []).find(m => m.id === key.slice(4));
+    insp = message ? { photos: message.photos || [] } : null;
+    title = message ? `Photo from ${message.sender_name || "the chat"}` : "";
+  } else {
+    insp = key === "draft" ? (db.draft && db.draft.inspiration) : (findOrder(key) || {}).inspiration;
+    title = key === "draft" ? "Your inspiration" : `${key} · customer's style`;
+  }
   if (!hasInspiration(insp)) return;
   styleViewer = {
     photos: insp.photos.slice(),
     index: Math.min(index, insp.photos.length - 1),
-    title: key === "draft" ? "Your inspiration" : `${key} · customer's style`,
+    title,
     returnFocus: document.activeElement
   };
   document.addEventListener("keydown", styleViewerKeys);

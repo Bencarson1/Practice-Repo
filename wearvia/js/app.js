@@ -9,7 +9,9 @@
 
 const BIZ_TABS = [
   { key: "dashboard", label: "Dashboard", render: renderDashboard },
-  { key: "orders", label: "Orders", render: renderOrdersTab },
+  // Badges: quote requests that need the team; orders with unread customer messages
+  { key: "quotes", label: "Quote requests", render: renderQuotes, badge: () => quotesNeedingTeam().length },
+  { key: "orders", label: "Orders", render: renderOrdersTab, badge: () => placedOrders().filter(o => unreadCount(o.id, "team") > 0).length },
   { key: "production", label: "Production", render: renderProduction },
   { key: "team", label: "Tailor Team", render: renderTeam },
   { key: "customers", label: "Customers", render: renderCustomers },
@@ -77,14 +79,20 @@ function renderAll() {
   document.getElementById("mode-seller").classList.toggle("on", isSeller);
   document.getElementById("mode-business").classList.toggle("on", isBusiness);
   document.body.classList.toggle("in-business", isBusiness);
+  // On phones the customer app fills the screen below the top bar, whose height changes with its contents
+  document.documentElement.style.setProperty("--appbar-h", document.querySelector(".appbar").offsetHeight + "px");
 
   if (isSeller) {
     renderSellerArea(route.screen, route.id);
   } else if (isBusiness) {
     const tab = BIZ_TABS.find(t => t.key === route.screen) || BIZ_TABS[0];
-    document.getElementById("biz-tabs").innerHTML = BIZ_TABS.map(t =>
-      `<a class="tab ${t.key === tab.key ? "active" : ""}" href="#/biz/${t.key}">${t.label}</a>`).join("");
+    // The page first: opening a chat marks it read, so the badges are drawn after
     document.getElementById("biz-content").innerHTML = tab.render(route.id);
+    afterChatRender();
+    document.getElementById("biz-tabs").innerHTML = BIZ_TABS.map(t => {
+      const badge = t.badge ? t.badge() : 0;
+      return `<a class="tab ${t.key === tab.key ? "active" : ""}" href="#/biz/${t.key}">${t.label}${badge ? `<span class="tab-badge" aria-label="${badge} need attention">${badge}</span>` : ""}</a>`;
+    }).join("");
     document.title = `${tab.label} · ${SHOP_NAME} · ${APP_NAME}`;
   } else {
     renderCustomer(route.screen, route.id);

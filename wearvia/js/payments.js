@@ -26,11 +26,11 @@ function confirmPaymentFromList(paymentId, accept) {
 
 function renderPayments() {
   // Only orders that still have money owed can take a payment
-  const orderOptions = db.orders.filter(o => balanceOwed(o) > 0).map(o =>
+  const orderOptions = placedOrders().filter(o => balanceOwed(o) > 0).map(o =>
     `<option value="${o.id}">${o.id} — ${escapeHtml(customerName(o.customer_id))} (owes ${money(balanceOwed(o))})</option>`).join("");
 
   let totalOwed = 0;
-  const balanceRows = db.orders.map(order => {
+  const balanceRows = placedOrders().map(order => {
     const paid = amountPaid(order.id);
     const balance = balanceOwed(order);
     if (balance > 0) totalOwed += balance;

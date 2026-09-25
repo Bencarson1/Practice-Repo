@@ -4,7 +4,7 @@
 // ============================================================
 
 function renderTeam() {
-  const open = db.orders.filter(isOpen);
+  const open = placedOrders().filter(isOpen);
 
   const groups = STAFF_ROLES.map(role => {
     const people = db.staff.filter(s => s.role === role.key).map(person => {

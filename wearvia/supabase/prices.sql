@@ -27,6 +27,9 @@
 -- apart from the old metre functions, and the money on existing orders,
 -- invoices and payments is never touched (the report checks this).
 -- Everything runs in one transaction: if any step fails, nothing is changed.
+--
+-- After this file, run tailor-quote.sql as well (again if it has run before):
+-- it replaces the "new order" rules so customers' orders become quote requests.
 -- =====================================================================
 
 begin;

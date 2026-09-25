@@ -15,14 +15,18 @@ const YARDS_PER_METRE = 1.0936;      // only used to convert data saved before W
 const METRES_PER_YARD = 0.9144;
 
 // ---- The confirmed order lifecycle (WEARVIA-SPEC.md, section 2) ----
-// Keep this sequence exactly.
+// Keep this sequence exactly. The yards of fabric can't be worked out from
+// the outfit or measurements alone, so the customer sends their order to the
+// tailor (step 4), the tailor agrees the yards with them in the order's chat
+// and sends a quote (step 5), and only when the customer accepts it is the
+// fabric bought (step 6).
 const LIFECYCLE = [
   "Outfit & design chosen",       // 1
   "AI design concept approved",   // 2
   "Measurements saved",           // 3
-  "Fabric selected",              // 4
-  "Fabric purchased",             // 5
-  "Quotation generated",          // 6
+  "Fabric selected",              // 4  → "Send to tailor"
+  "Tailor's quote",               // 5  the tailor decides the yards
+  "Quote accepted · fabric bought", // 6
   "Deposit paid",                 // 7
   "Tailor assigned",              // 8
   "Cutting",                      // 9
@@ -117,6 +121,8 @@ function applyPriceList(rows) {
 const SLEEVES = ["Wide", "Fitted"];
 const NECKS = ["Round", "V-neck"];
 const PAYMENT_METHODS = ["Card", "Apple Pay", "Bank transfer", "Cash"];
+// A customer's order starts as a request for a quote (see sendQuote and acceptQuote below)
+const QUOTE_STATUS_LABELS = { requested: "Waiting for tailor's quote", quoted: "Quote sent", accepted: "Accepted" };
 // Checkout is a demo: payments made in the customer app wait until the
 // Nebeda Threads team confirms them (Business → Payments)
 const PAYMENT_STATUS_LABELS = { awaiting_confirmation: "Awaiting confirmation", confirmed: "Confirmed", rejected: "Rejected" };
@@ -392,6 +398,7 @@ function buildSampleData() {
         embroidery: staffFor("embroidery"), finishing: staffFor("finishing"), quality_control: staffFor("quality_control")
       },
       review_rating: null, review_text: "",
+      quote_status: "accepted", quoted_at: null, accepted_at: created, fabric_problem: null,
       due_date: addDays(s.due), created_at: created, updated_at: addDays(Math.min(-1, s.created + stageIndex * 2))
     };
     data.orders.push(order);
@@ -417,7 +424,53 @@ function buildSampleData() {
   });
   data.counters.invoice = 1008;
 
+  addSampleQuoteRequests(data);
   return data;
+}
+
+// Two customers waiting on the tailor, and a chat on an order being made
+function addSampleQuoteRequests(data) {
+  const at = (days, time) => addDays(days) + "T" + time + ":00.000Z";
+  const shop = SHOP_NAME;
+  const request = (id, customer, outfit, colour, embroidery, sleeve, neck, fabric, created) => {
+    const profile = data.customers.find(c => c.id === customer).measurement_profiles.slice(-1)[0];
+    const f = data.fabrics.find(x => x.id === fabric);
+    return {
+      id, customer_id: customer, designer_id: "D1", outfit_type: outfit, colour, embroidery, sleeve_style: sleeve, neck_style: neck,
+      concept_variation: 1, concept_image_url: "", inspiration: null, measurement_profile_id: profile.id,
+      fabric_id: f.id, fabric_supplier_id: f.supplier_id, fabric_yards: 0, fabric_cost: 0, line_items: [], quote_total: 0,
+      deposit_amount: 0, deposit_paid_at: null, balance_paid_at: null, stage: "tailor_assigned",
+      assigned_staff: { cutting: "", sewing: "", embroidery: "", finishing: "", quality_control: "" },
+      review_rating: null, review_text: "", quote_status: "requested", quoted_at: null, accepted_at: null, fabric_problem: null,
+      due_date: addDays(14 + created), created_at: addDays(created), updated_at: addDays(created)
+    };
+  };
+  const tunde = request("NT-1009", "C2", "Agbada", "#1e2a44", "Gold", "Wide", "Round", "F8", -1);
+  const tosin = request("NT-1010", "C5", "Bubu", "#7c1f2e", "Silver", "Wide", "V-neck", "F6", -3);
+  data.orders.push(tunde, tosin);
+  // Tosin's quote has been sent: 6 yd of Sunburst Ankara
+  const f6 = data.fabrics.find(x => x.id === "F6");
+  const quote = computeQuote("Bubu", "Silver", f6, 6);
+  Object.assign(tosin, { fabric_yards: 6, fabric_cost: quote.fabricCost, line_items: quote.lines, quote_total: quote.total,
+    deposit_amount: depositFor(quote.total), quote_status: "quoted", quoted_at: addDays(-2) });
+
+  const welcome = `Thanks — your request is with ${shop}. We'll look at your design, style photos and measurements, and chat with you here to agree how many yards of fabric you need. Then we'll send your quote. Nothing is bought or charged until you accept it.`;
+  let n = 0;
+  const msg = (order, kind, name, body, when) => ({ id: "MSG" + (++n), order_id: order, sender_kind: kind, sender_name: name, body, photos: [], created_at: when });
+  data.messages = [
+    msg("NT-1010", "system", APP_NAME, welcome, at(-3, "10:02")),
+    msg("NT-1010", "customer", "Tosin Adeyemi", "I'd like the bubu to reach the floor, and wide sleeves that cover my elbows.", at(-3, "10:04")),
+    msg("NT-1010", "team", "Mary at " + shop, "Lovely! For a floor-length bubu at your height you'll need 6 yards of the Sunburst Ankara. Sending your quote now.", at(-2, "09:15")),
+    msg("NT-1010", "system", APP_NAME, `Your quote is ready: Sunburst Ankara, 6 yd × ${money(f6.price_per_yard)} = ${money(quote.fabricCost)} · tailoring ${money(quote.lines[1].amount)} · embroidery ${money(quote.lines[2].amount)} · delivery ${money(quote.lines[3].amount)}. Total ${money(quote.total)}, deposit ${money(depositFor(quote.total))} (60%). Tap "Accept quote" to go ahead, or ask us a question here.`, at(-2, "09:16")),
+    msg("NT-1009", "system", APP_NAME, welcome, at(-1, "18:40")),
+    msg("NT-1009", "customer", "Tunde Balogun", "It's for my brother's wedding in six weeks. I'm 6ft 3 — is 10 yards enough for a full agbada?", at(-1, "18:42")),
+    msg("NT-1008", "team", "Mary at " + shop, "Your fitting is booked for Saturday at 11am. Please bring the shoes you'll wear on the day.", at(-2, "12:30")),
+    msg("NT-1008", "customer", "David Johnson", "Perfect, see you Saturday.", at(-2, "13:05"))
+  ];
+  data.chat_reads = [
+    { order_id: "NT-1010", side: "team", last_read_at: at(-2, "09:16") },
+    { order_id: "NT-1008", side: "customer", last_read_at: at(-2, "13:05") }
+  ];
 }
 
 // ---- Load and save ----
@@ -444,6 +497,7 @@ function saveData() {
     Cloud.save();
     return;
   }
+  noticeFabricProblems(); // the database does this itself in live mode
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
   } catch (error) {
@@ -545,7 +599,9 @@ function paymentsAwaiting() {
   return db.payments.filter(p => p.status === "awaiting_confirmation");
 }
 
+// Nothing is owed on a quote until the customer accepts it
 function balanceOwed(order) {
+  if (!isPlaced(order)) return 0;
   return Math.round((order.quote_total - amountPaid(order.id)) * 100) / 100;
 }
 
@@ -610,15 +666,155 @@ function depositAwaiting(order) {
 
 // How many of the 16 lifecycle steps are complete
 function stepsDone(order) {
+  const status = quoteStatus(order);
+  if (status === "requested") return 4;                         // steps 1–4; waiting for the tailor's quote (step 5)
+  if (status === "quoted") return 5;                            // waiting for the customer to accept (step 6)
   if (depositAwaiting(order)) return FIRST_STEP_OF_STAGES - 1; // steps 1–6; the deposit (step 7) isn't confirmed yet
   return FIRST_STEP_OF_STAGES + stageIndex(order) + 1 + (order.review_rating ? 1 : 0);
 }
 
 // The step being worked on now, e.g. "Sewing" — or "Complete"
 function currentStepLabel(order) {
-  if (depositAwaiting(order)) return "Deposit awaiting confirmation";
+  const status = quoteStatus(order);
+  if (status === "requested") return order.fabric_problem ? "Fabric sold out — new quote coming" : QUOTE_STATUS_LABELS.requested;
+  if (status === "quoted") return "Quote ready to accept";
+  if (depositAwaiting(order)) return depositStarted(order) ? "Deposit awaiting confirmation" : "Waiting for deposit";
   const done = stepsDone(order);
   return done >= LIFECYCLE.length ? "Complete" : LIFECYCLE[done];
+}
+
+// ---- Quotes: the tailor decides the yards ----
+// A customer's order is a request until the tailor sends a quote and the
+// customer accepts it. Orders from before this change, and walk-in orders
+// the team takes, are "accepted" straight away.
+
+function quoteStatus(order) {
+  return order.quote_status || "accepted";
+}
+
+function isPlaced(order) {
+  return quoteStatus(order) === "accepted";
+}
+
+// Orders being made (accepted quotes and walk-ins) — what production, payments and the dashboard count
+function placedOrders() {
+  return db.orders.filter(isPlaced);
+}
+
+// Customers waiting for the tailor, or deciding on a quote
+function quoteRequests() {
+  return db.orders.filter(o => !isPlaced(o));
+}
+
+// True once the customer has paid (or the shop has recorded) any of the deposit
+function depositStarted(order) {
+  return !!order.deposit_paid_at || db.payments.some(p => p.order_id === order.id && p.status !== "rejected");
+}
+
+// "Italian Cashmere has sold out" — why a fabric can't be sold in this amount, or "" if it can
+function fabricProblemText(fabric, yards) {
+  if (!fabric || fabric.deleted_at || fabric.status !== "approved") return `${fabric ? fabric.name : "That fabric"} is no longer on sale`;
+  if (fabric.sold_out || fabric.yards_available < Math.max(fabric.min_order_yards || 0, 0.01)) return `${fabric.name} has sold out`;
+  if (yards && fabric.yards_available < yards) return `Only ${fabric.yards_available} yd of ${fabric.name} is left`;
+  return "";
+}
+
+// Step 4 → 5: the customer sends their design, photos, measurements and
+// chosen fabric to the tailor. Nothing is bought and there's no price yet.
+// In live mode the database makes the order, so this returns a Promise.
+function requestQuote(details) {
+  if (Cloud.live) return Cloud.requestQuote(details);
+  const fabric = details.fabric;
+  const id = nextOrderId();
+  const order = {
+    id, customer_id: details.customerId, designer_id: designer().id,
+    outfit_type: details.outfit, colour: details.colour, embroidery: details.embroidery,
+    sleeve_style: details.sleeve, neck_style: details.neck,
+    concept_variation: details.variation || 1, concept_image_url: "",
+    inspiration: details.inspiration || null,
+    measurement_profile_id: details.profileId || null,
+    fabric_id: fabric.id, fabric_supplier_id: fabric.supplier_id,
+    fabric_yards: 0, fabric_cost: 0, line_items: [], quote_total: 0,
+    deposit_amount: 0, deposit_paid_at: null, balance_paid_at: null,
+    stage: "tailor_assigned",
+    assigned_staff: { cutting: "", sewing: "", embroidery: "", finishing: "", quality_control: "" },
+    review_rating: null, review_text: "",
+    quote_status: "requested", quoted_at: null, accepted_at: null, fabric_problem: null,
+    due_date: addDays(14), created_at: today(), updated_at: today()
+  };
+  db.orders.push(order);
+  addSystemMessage(order, `Thanks — your request is with ${SHOP_NAME}. We'll look at your design, style photos and measurements, and chat with you here to agree how many yards of fabric you need. Then we'll send your quote. Nothing is bought or charged until you accept it.`);
+  if (details.note) addChatMessage(order, "customer", details.note, []);
+  return order;
+}
+
+// Step 5: the team sends the quote — the yards they agreed with the customer,
+// and another fabric if they agreed one. The price is yards × the seller's
+// price per yard + tailoring + embroidery + delivery from the price list.
+// The database does this in live mode (wearvia_send_quote), so this returns a Promise.
+function sendQuote(order, fabricId, yards, note) {
+  if (Cloud.live) return Cloud.sendQuote(order, fabricId, yards, note);
+  const fabric = findFabric(fabricId || order.fabric_id);
+  yards = Math.round(Number(yards) * 100) / 100;
+  if (isPlaced(order)) throw new Error(`The customer has already accepted the quote for ${order.id}. It can't be changed now.`);
+  if (!fabric) throw new Error("Choose a fabric for the quote.");
+  if (!(yards > 0) || yards > 100 || Math.round(yards * 4) !== yards * 4) throw new Error("Enter the yards needed, in quarter yards (for example 4.5 or 5.25).");
+  if (fabric.deleted_at || fabric.status !== "approved" || fabric.sold_out) throw new Error(`${fabric.name} isn't on sale any more. Choose another fabric.`);
+  if (yards < (fabric.min_order_yards || 0)) throw new Error(`The smallest order for ${fabric.name} is ${fabric.min_order_yards} yd.`);
+  if (yards > fabric.yards_available) throw new Error(`Only ${fabric.yards_available} yd of ${fabric.name} is left in stock.`);
+  const quote = computeQuote(order.outfit_type, order.embroidery, fabric, yards);
+  const deposit = depositFor(quote.total);
+  Object.assign(order, {
+    fabric_id: fabric.id, fabric_supplier_id: fabric.supplier_id, fabric_yards: yards, fabric_cost: quote.fabricCost,
+    line_items: quote.lines, quote_total: quote.total, deposit_amount: deposit,
+    quote_status: "quoted", quoted_at: today(), fabric_problem: null, updated_at: today()
+  });
+  if (note && note.trim()) addChatMessage(order, "team", note.trim(), []);
+  addSystemMessage(order, `Your quote is ready: ${fabric.name}, ${yards} yd × ${money(fabric.price_per_yard)} = ${money(quote.fabricCost)} · tailoring ${money(quote.lines[1].amount)} · embroidery ${money(quote.lines[2].amount)} · delivery ${money(quote.lines[3].amount)}. Total ${money(quote.total)}, deposit ${money(deposit)} (60%). Tap "Accept quote" to go ahead, or ask us a question here.`);
+  return order;
+}
+
+// Step 6: the customer accepts. Only now is the fabric taken out of stock,
+// the seller's order line and the invoice made, and tailors assigned. If the
+// fabric sold out in the meantime, the customer is told in the chat and the
+// request goes back to the tailor. Returns { ok, message } (a Promise in live mode).
+function acceptQuote(order) {
+  if (Cloud.live) return Cloud.acceptQuote(order);
+  if (isPlaced(order)) return { ok: true, already: true };
+  if (quoteStatus(order) !== "quoted") throw new Error(`There's no quote to accept yet. ${SHOP_NAME} will send it in the chat.`);
+  const fabric = findFabric(order.fabric_id);
+  const problem = fabricProblemText(fabric, order.fabric_yards);
+  if (problem) {
+    order.quote_status = "requested";
+    order.fabric_problem = problem;
+    addSystemMessage(order, `Sorry — ${problem}, so this quote can't be accepted. Nothing has been charged. ${SHOP_NAME} will suggest another fabric here in the chat and send you a new quote.`);
+    return { ok: false, message: `Sorry — ${problem}. ${SHOP_NAME} will suggest another fabric in the chat.` };
+  }
+  fabric.yards_available = Math.round((fabric.yards_available - order.fabric_yards) * 100) / 100;
+  const staff = autoAssignStaff();
+  STAFF_ROLES.forEach(role => { if (!order.assigned_staff[role.key]) order.assigned_staff[role.key] = staff[role.key]; });
+  Object.assign(order, { quote_status: "accepted", accepted_at: today(), fabric_problem: null, updated_at: today() });
+  if (!order.due_date || order.due_date < addDays(14)) order.due_date = addDays(14);
+  recordFabricOrder(order); // the fabric seller sees it in their orders
+  if (!findInvoice(order.id)) db.invoices.push({ id: "INV-" + order.id.split("-")[1], order_id: order.id, line_items: order.line_items, total: order.quote_total, created_at: today() });
+  addSystemMessage(order, `Quote accepted. ${order.fabric_yards} yd of ${fabric.name} is bought for your outfit. Next: pay your deposit of ${money(order.deposit_amount)} and we'll start making it.`);
+  return { ok: true };
+}
+
+// Demo mode: if a fabric sells out while a customer waits for (or decides on)
+// a quote, tell them in the chat and send the request back to the tailor.
+// The database does this in live mode.
+function noticeFabricProblems() {
+  if (!db || !db.orders) return;
+  quoteRequests().forEach(order => {
+    if (order.fabric_problem) return;
+    const problem = fabricProblemText(findFabric(order.fabric_id), quoteStatus(order) === "quoted" ? order.fabric_yards : 0);
+    if (!problem) return;
+    const wasQuoted = quoteStatus(order) === "quoted";
+    order.fabric_problem = problem;
+    order.quote_status = "requested";
+    addSystemMessage(order, `Sorry — ${problem}, so ${wasQuoted ? "this quote can't be accepted any more. " : ""}${SHOP_NAME} will suggest another fabric here in the chat and send you a new quote.`);
+  });
 }
 
 function isOpen(order) {
@@ -626,7 +822,7 @@ function isOpen(order) {
 }
 
 function isLate(order) {
-  return isOpen(order) && order.due_date < today();
+  return isPlaced(order) && isOpen(order) && order.due_date < today();
 }
 
 // Staff member responsible for the step in progress (if it's a production step)
@@ -654,9 +850,9 @@ function nextOrderId() {
   return "NT-" + (highest + 1);
 }
 
-// Creates an order once the deposit is paid (step 7) and assigns a tailor (step 8).
-// details.confirmed is true when the team takes the deposit itself (a walk-in order);
-// a deposit paid in the customer app waits for the team to confirm it.
+// A walk-in order taken by the team: the yards are entered directly, the
+// fabric is bought and the deposit taken straight away, and a tailor assigned.
+// (Customers' orders go through requestQuote → sendQuote → acceptQuote instead.)
 // In live mode the database creates the order, so this returns a Promise.
 function createPaidOrder(details) {
   if (Cloud.live) return Cloud.placeOrder(details);
@@ -675,6 +871,7 @@ function createPaidOrder(details) {
     stage: "tailor_assigned",
     assigned_staff: autoAssignStaff(),
     review_rating: null, review_text: "",
+    quote_status: "accepted", quoted_at: null, accepted_at: today(), fabric_problem: null,
     due_date: details.dueDate || addDays(14), created_at: today(), updated_at: today()
   };
   db.orders.push(order);

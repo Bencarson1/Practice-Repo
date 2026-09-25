@@ -17,9 +17,9 @@ Keep this sequence exactly:
 1. Customer chooses outfit type and design options
 2. AI generates a design concept; customer approves or regenerates
 3. Measurements saved to the customer's profile
-4. Fabric selected from the marketplace (multiple suppliers)
-5. Fabric purchased (stock goes down)
-6. Instant quotation generated
+4. Fabric selected from the marketplace (multiple suppliers), then sent to the tailor (no stock taken, no price yet)
+5. Tailor's quote: the tailor agrees the yards with the customer in the order chat, then sends the quote (yards × the seller's price per yard + tailoring + embroidery + delivery)
+6. Quote accepted by the customer: only now is the fabric purchased (stock goes down)
 7. Deposit paid
 8. Tailor assigned
 9. Cutting
@@ -41,8 +41,8 @@ Keep this sequence exactly:
 | 4 | AI design concept | Customer | AI preview from selections; approve or regenerate |
 | 5 | Measurements | Customer | Chest, waist, shoulder, sleeve, trouser length, neck; versioned by year |
 | 6 | Fabric marketplace | Customer/Designer | Browse by type; supplier, price per yard, live stock, delivery time |
-| 7 | Fabric purchase confirmation | Customer | Confirms quantity and supplier; reduces stock |
-| 8 | Quotation | Customer | Itemised: fabric, tailoring, embroidery, delivery → total |
+| 7 | Send to tailor | Customer | Sends design, style photos, measurements and chosen fabric; no stock taken |
+| 8 | Quotation | Customer/Designer | The tailor enters the yards and sends it; itemised: fabric, tailoring, embroidery, delivery → total; the customer accepts (fabric bought) or asks a question |
 | 9 | Payment | Customer | Deposit now, balance later; card / Apple Pay / bank transfer |
 | 10 | Order tracking | Customer | Visual pipeline through all production stages |
 | 11 | Review | Customer | Star rating after delivery |
@@ -57,6 +57,8 @@ Keep this sequence exactly:
 | 20 | Delivery tracking | Customer | Courier tracking number and status |
 | 21 | Browse designers | Customer | Discover designers by rating, location, speciality |
 | 22 | Designer profile (public) | Customer | Portfolio, rating, speciality; leads into that designer's order flow |
+| 23 | Order chat | Customer/Designer | Text and photos on every order for its whole life; unread badges on both sides |
+| 24 | Quote requests | Designer | Requests waiting for a quote, with the chat, style photos and measurements side by side |
 
 ## 4. Data model (minimum viable)
 

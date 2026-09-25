@@ -10,20 +10,22 @@ function businessTotals() {
   const orderRevenue = db.payments.filter(isConfirmed).reduce((total, p) => total + p.amount, 0);
   const shopRevenue = db.rtw_sales.filter(isConfirmed).reduce((total, s) => total + s.price, 0);
   // Estimated profit = order value minus fabric and delivery costs, plus ready-to-wear margin
-  const orderProfit = db.orders.reduce((total, o) => total + o.quote_total - o.fabric_cost - deliveryCostOf(o), 0);
+  const orderProfit = placedOrders().reduce((total, o) => total + o.quote_total - o.fabric_cost - deliveryCostOf(o), 0);
   const shopProfit = db.rtw_sales.filter(isConfirmed).reduce((total, s) => total + s.price - s.cost, 0);
-  const pending = db.orders.reduce((total, o) => total + Math.max(balanceOwed(o), 0), 0);
+  const pending = placedOrders().reduce((total, o) => total + Math.max(balanceOwed(o), 0), 0);
   return { revenue: orderRevenue + shopRevenue, profit: orderProfit + shopProfit, pending };
 }
 
 function renderDashboard() {
   const totals = businessTotals();
-  const open = db.orders.filter(isOpen);
+  const open = placedOrders().filter(isOpen);
   const late = open.filter(isLate);
   const lowStock = activeFabrics().filter(f => f.status === "approved" && f.yards_available < LOW_STOCK_YARDS);
   const waitingFabrics = activeFabrics().filter(f => f.status === "pending");
-  const awaitingReview = db.orders.filter(o => o.stage === "delivered" && !o.review_rating);
+  const awaitingReview = placedOrders().filter(o => o.stage === "delivered" && !o.review_rating);
   const waitingPayments = paymentsAwaiting();
+  const waitingQuotes = quoteRequests().filter(o => quoteStatus(o) === "requested");
+  const unreadChats = db.orders.filter(o => unreadCount(o.id, "team") > 0);
 
   const dueSoon = open.slice().sort((a, b) => a.due_date.localeCompare(b.due_date)).slice(0, 6);
   const rows = dueSoon.map(o => {
@@ -38,13 +40,15 @@ function renderDashboard() {
     ${bizHeader(`${escapeHtml(SHOP_NAME)} — Business Dashboard`, `Welcome back! Here is how the shop is doing today, ${formatDate(today())}.`)}
 
     <div class="statgrid">
-      <div class="stat"><div class="l">Total Orders</div><div class="n">${db.orders.length}</div><div class="l">${open.length} in progress</div></div>
+      <div class="stat"><div class="l">Total Orders</div><div class="n">${placedOrders().length}</div><div class="l">${open.length} in progress</div></div>
       <div class="stat"><div class="l">Revenue</div><div class="n">${money(totals.revenue)}</div><div class="l">payments + ready-to-wear</div></div>
       <div class="stat"><div class="l">Est. Profit</div><div class="n">${money(totals.profit)}</div><div class="l">after fabric &amp; delivery</div></div>
       <div class="stat"><div class="l">Pending Payments</div><div class="n">${money(totals.pending)}</div><div class="l">balances owed</div></div>
     </div>
 
-    ${late.length || lowStock.length || awaitingReview.length || waitingFabrics.length || waitingPayments.length ? `<div class="alerts">
+    ${late.length || lowStock.length || awaitingReview.length || waitingFabrics.length || waitingPayments.length || waitingQuotes.length || unreadChats.length ? `<div class="alerts">
+      ${waitingQuotes.length ? `<a class="alert" href="#/biz/quotes">📝 ${waitingQuotes.length} customer${waitingQuotes.length > 1 ? "s" : ""} waiting for a quote</a>` : ""}
+      ${unreadChats.length ? `<a class="alert" href="#/biz/${isPlaced(unreadChats[0]) ? "orders" : "quotes"}/${unreadChats[0].id}">💬 New messages on ${unreadChats.map(o => o.id).join(", ")}</a>` : ""}
       ${waitingPayments.length ? `<a class="alert" href="#/biz/payments">💷 ${waitingPayments.length} payment${waitingPayments.length > 1 ? "s" : ""} to confirm</a>` : ""}
       ${waitingFabrics.length ? `<a class="alert" href="#/biz/sellers">🧶 ${waitingFabrics.length} seller fabric${waitingFabrics.length > 1 ? "s" : ""} to approve</a>` : ""}
       ${late.length ? `<a class="alert" href="#/biz/orders">⚠ ${late.length} late order${late.length > 1 ? "s" : ""}</a>` : ""}
@@ -53,6 +57,7 @@ function renderDashboard() {
     </div>` : ""}
 
     <div class="optbtns quick">
+      <a class="optbtn" href="#/biz/quotes">Quote requests</a>
       <a class="optbtn" href="#/biz/orders">All Orders (live)</a>
       <a class="optbtn" href="#/biz/team">Tailor Team</a>
       <a class="optbtn" href="#/biz/fabrics">Inventory</a>
@@ -97,7 +102,7 @@ function askAI(event) {
 // Answers simple questions from the shop's own data
 function answerQuestion(question) {
   const q = question.toLowerCase();
-  const open = db.orders.filter(isOpen);
+  const open = placedOrders().filter(isOpen);
   const list = orders => orders.map(o => `#${o.id} (${escapeHtml(customerName(o.customer_id))}, ${escapeHtml(o.outfit_type)})`).join(", ");
   const daysLate = o => Math.round((new Date(today()) - new Date(o.due_date)) / 86400000);
 
@@ -111,7 +116,7 @@ function answerQuestion(question) {
     return low.length ? `Running low: ${low.map(f => `${escapeHtml(f.name)} (${f.yards_available} yd)`).join(", ")}. Restock from Fabric Inventory.` : `Every fabric has at least ${LOW_STOCK_YARDS} yd in stock.`;
   }
   if (q.includes("owe") || q.includes("balance") || q.includes("pending") || q.includes("payment") || q.includes("unpaid")) {
-    const owing = db.orders.filter(o => balanceOwed(o) > 0);
+    const owing = placedOrders().filter(o => balanceOwed(o) > 0);
     if (!owing.length) return "Every order is paid in full.";
     return `${money(businessTotals().pending)} is owed across ${owing.length} orders: ${owing.map(o => `#${o.id} ${escapeHtml(customerName(o.customer_id))} ${money(balanceOwed(o))}`).join(", ")}.`;
   }
