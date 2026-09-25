@@ -28,6 +28,7 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { createRequire } from "module";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const APP_DIR = path.join(ROOT, "wearvia");
@@ -44,8 +45,15 @@ if (/sb_secret_|service_role/.test(KEY || "")) {
 
 // Pages that always exist, even before any tailor has joined there
 const FEATURED = [["GB", "London"], ["GB", "Manchester"], ["GB", "Birmingham"], ["NG", "Lagos"], ["NG", "Abuja"], ["GH", "Accra"], ["US", "Houston"]];
-const PUBLIC_COLUMNS = "id,slug,business_name,profile_image_url,description,country_code,city,postcode_area,public_address,location,"
-  + "speciality_tags,delivery_available,custom_orders,rating,review_count,delivery_estimate,public_latitude,public_longitude,show_exact_address,updated_at";
+// Only what the public may see: business name, area, specialities, photos,
+// rating and reviews. No address, phone, email, website or social links.
+const PUBLIC_COLUMNS = "id,slug,business_name,profile_image_url,description,country_code,city,postcode_area,location,"
+  + "speciality_tags,delivery_available,custom_orders,rating,review_count,delivery_estimate,public_latitude,public_longitude,updated_at";
+// The same contact-details filter as the app and the database, as a second check on what's published
+const { hideContactDetails } = createRequire(import.meta.url)(path.join(APP_DIR, "js", "no-leakage.js"));
+const clean = t => Object.assign({}, t, Object.fromEntries(["business_name", "description", "city", "location", "delivery_estimate"]
+  .map(k => [k, t[k] == null ? t[k] : hideContactDetails(t[k]).text])),
+  { speciality_tags: (t.speciality_tags || []).filter(s => !hideContactDetails(s).hidden) });
 
 // ---- Reading from Supabase (publishable key only) ----
 
@@ -76,7 +84,7 @@ async function loadData() {
     getAll("countries", "select=code,name,slug,flag&order=sort_order,name"),
     getAll("designers", `select=${PUBLIC_COLUMNS}&admin_status=eq.approved&order=business_name`)
   ]);
-  return { countries, tailors };
+  return { countries, tailors: tailors.map(clean) };
 }
 
 // ---- Small helpers ----
@@ -87,7 +95,7 @@ const slugify = s => String(s || "").normalize("NFKD").replace(/[̀-ͯ]/g, "").t
 const cut = (s, n) => { s = String(s || "").replace(/\s+/g, " ").trim(); return s.length > n ? s.slice(0, n - 1).replace(/\s\S*$/, "") + "…" : s; };
 const json = obj => JSON.stringify(obj).replace(/</g, "\\u003c");
 const ratingText = t => t.review_count > 0 && t.rating ? `${Number(t.rating).toFixed(1)}★ (${t.review_count} review${t.review_count === 1 ? "" : "s"})` : "New on Wearvia";
-const areaText = t => t.public_address ? `${t.public_address}${t.city ? ", " + t.city : ""}` : [t.city || t.location, t.postcode_area].filter(Boolean).join(" · ");
+const areaText = t => [t.city || t.location, t.postcode_area].filter(Boolean).join(" · ");
 
 function write(rel, html) {
   const file = path.join(APP_DIR, rel);
@@ -168,13 +176,12 @@ function localBusiness(t, country) {
     "@type": ["LocalBusiness", "ClothingStore"], "@id": url, name: t.business_name, url,
     description: cut(t.description || `${t.business_name}, a tailor on Wearvia.`, 300),
     address: Object.assign({ "@type": "PostalAddress", addressCountry: t.country_code || undefined, addressLocality: t.city || undefined },
-      t.postcode_area ? { postalCode: t.postcode_area } : {}, t.public_address ? { streetAddress: t.public_address } : {}),
+      t.postcode_area ? { postalCode: t.postcode_area } : {}),
     areaServed: t.city ? { "@type": "City", name: t.city } : undefined,
     knowsAbout: (t.speciality_tags || []).length ? t.speciality_tags : undefined
   };
   if (t.profile_image_url) data.image = t.profile_image_url;
-  // An exact position only when the tailor chose to show their address
-  if (t.show_exact_address && t.public_latitude != null) data.geo = { "@type": "GeoCoordinates", latitude: t.public_latitude, longitude: t.public_longitude };
+  // No street address or exact position: customers get those in the app once their deposit is confirmed
   if (t.review_count > 0 && t.rating) data.aggregateRating = { "@type": "AggregateRating", ratingValue: Number(t.rating).toFixed(1), reviewCount: t.review_count, bestRating: 5, worstRating: 1 };
   return JSON.parse(JSON.stringify(data));
 }

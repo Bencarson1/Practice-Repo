@@ -117,7 +117,7 @@ function renderQuoteDetail(orderId) {
 
   return `
     <p><a href="#/biz/quotes">← Quote requests</a></p>
-    ${bizHeader(`Quote request ${order.id} ${quoteStatusBadge(order)}`, `${escapeHtml(order.outfit_type)} for <a href="#/biz/customers/${order.customer_id}">${escapeHtml(customer ? customer.name : "Unknown")}</a> · sent ${formatDate(order.created_at)}${customer && customer.phone ? ` · <a href="tel:${escapeHtml(customer.phone.replace(/\s/g, ""))}">📞 ${escapeHtml(customer.phone)}</a>` : ""}`)}
+    ${bizHeader(`Quote request ${order.id} ${quoteStatusBadge(order)}`, `${escapeHtml(order.outfit_type)} for <a href="#/biz/customers/${order.customer_id}">${escapeHtml(customer ? customer.name : "Unknown")}</a> · sent ${formatDate(order.created_at)} · chat below — contact details stay on ${APP_NAME}`)}
     ${order.fabric_problem ? `<div class="card attention"><b>⚠ ${escapeHtml(order.fabric_problem)}.</b> The customer has been told in the chat. Suggest another fabric, then choose it below and send a new quote.</div>` : ""}
 
     <div class="quote-layout">

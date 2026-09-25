@@ -444,6 +444,66 @@ function sendToTailor() {
     .finally(() => { sendingRequest = false; });
 }
 
+// ---- Keeping orders on Wearvia ----
+
+function payProtectionLine() {
+  return `<p class="protect-line">🛡️ ${escapeHtml(PAY_PROTECTION_LINE)}</p>`;
+}
+
+// The tailor's business address and the customer's delivery address. The
+// database only hands them over once the deposit is CONFIRMED (supabase/
+// no-leakage.sql: wearvia_delivery_details); the demo follows the same rule.
+function deliveryDetails(order) {
+  if (Cloud.live) {
+    return (db.delivery_details || []).find(x => x.order_id === order.id)
+      || { unlocked: !!order.deposit_paid_at, tailor_address: "", delivery_address: "" };
+  }
+  const d = designerById(order.designer_id) || {};
+  const country = countryByCode(d.country_code);
+  return {
+    unlocked: !!order.deposit_paid_at,
+    tailor_address: order.deposit_paid_at ? [d.address_line, d.city, d.postcode, country && country.name].filter(Boolean).join(", ") : "",
+    delivery_address: order.delivery_address || ""
+  };
+}
+
+function deliveryBoxHtml(order, side) {
+  if (!isPlaced(order)) return "";
+  const x = deliveryDetails(order);
+  const tailor = escapeHtml(designerName(order.designer_id));
+  if (!x.unlocked) {
+    return `<div class="handover locked"><b>🔒 Delivery and fitting details</b>
+      <p class="meta">${side === "customer" ? `${tailor}'s business address and your delivery address` : "Your business address and the customer's delivery address"}
+      appear here for both of you once the deposit is confirmed.</p></div>`;
+  }
+  const form = side === "customer" ? `<form class="inline-form" onsubmit="return saveDeliveryAddress(event, '${order.id}')">
+      <input name="address" maxlength="300" value="${escapeHtml(x.delivery_address)}" placeholder="House number, street, town, postcode" aria-label="Your delivery address" autocomplete="street-address">
+      <button type="submit" class="optbtn sel">${x.delivery_address ? "Update" : "Save"}</button></form>` : "";
+  return `<div class="handover">
+    <b>📦 Delivery and fitting details</b>
+    <div class="mrow"><span>${side === "customer" ? tailor : "Your business address"}</span><span>${x.tailor_address ? escapeHtml(x.tailor_address) : side === "customer" ? "Not added yet — ask in the chat" : `Not added yet — add it in <a href="#/biz/profile">My profile</a>`}</span></div>
+    <div class="mrow"><span>${side === "customer" ? "Your delivery address" : "Customer's delivery address"}</span><span>${x.delivery_address ? escapeHtml(x.delivery_address) : side === "customer" ? "Add it below" : "The customer hasn't added it yet"}</span></div>
+    ${form}
+    <p class="meta">Shared because the deposit is confirmed — for delivery and fittings only. Keep payments and changes on ${APP_NAME} so you're protected.</p>
+  </div>`;
+}
+
+function saveDeliveryAddress(event, orderId) {
+  event.preventDefault();
+  const order = findOrder(orderId);
+  const address = event.target.address.value.trim();
+  if (!order) return false;
+  if (Cloud.live) {
+    Cloud.setDeliveryAddress(order, address).then(() => { toast("Delivery address saved."); renderAll(); }, error => toast(error.message));
+    return false;
+  }
+  order.delivery_address = hideContactDetails(address).text;
+  saveData();
+  toast("Delivery address saved.");
+  renderAll();
+  return false;
+}
+
 // ---- Screen 8: the tailor's quote (steps 5 and 6) ----
 
 function quoteLinesHtml(order) {
@@ -476,6 +536,7 @@ function quoteBlock(order) {
       <button id="accept-quote" class="cta" onclick="acceptQuoteFromApp('${order.id}')">Accept quote</button>
       <button class="btn-outline" onclick="go('chat/${order.id}')">Ask a question</button>
       <div class="meta">When you accept, the fabric is bought for your outfit and you pay the ${Math.round(DEPOSIT_RATE * 100)}% deposit.</div>
+      ${payProtectionLine()}
     </div>`;
   }
   return "";
@@ -531,6 +592,9 @@ function screenPay(orderId) {
         <span class="optbtns">${["Card", "Apple Pay", "Bank transfer"].map(m =>
           `<button class="optbtn ${depositMethod === m ? "sel" : ""}" onclick="depositMethod='${m}';renderAll()">${m}</button>`).join("")}</span>
       </div>
+      <label class="field">Delivery address <small>(optional — shared with ${escapeHtml(designerName(order.designer_id))} once your deposit is confirmed)</small>
+        <input id="pay-address" maxlength="300" value="${escapeHtml(deliveryDetails(order).delivery_address)}" placeholder="House number, street, town, postcode" autocomplete="street-address"></label>
+      ${payProtectionLine()}
       <div class="meta">Demo checkout — no real money is taken. Your deposit shows as <b>awaiting confirmation</b> until ${escapeHtml(designerName(order.designer_id))} confirms it. Stripe connects here in the full version.</div>
       <button id="pay-deposit" class="cta" onclick="payDeposit('${order.id}')">Pay ${money(deposit)} Deposit</button>
     </div>`;
@@ -540,6 +604,10 @@ function screenPay(orderId) {
 function payDeposit(orderId) {
   const order = findOrder(orderId);
   if (!order || !isPlaced(order) || depositStarted(order)) return;
+  const addressBox = document.getElementById("pay-address");
+  const address = addressBox ? addressBox.value.trim() : "";
+  if (address && Cloud.live) Cloud.setDeliveryAddress(order, address).catch(error => toast(error.message));
+  else if (address) order.delivery_address = hideContactDetails(address).text;
   db.payments.push({
     id: nextPaymentId(), order_id: order.id, amount: order.deposit_amount, method: depositMethod, kind: "Deposit",
     date: today(), status: "awaiting_confirmation"
@@ -631,7 +699,8 @@ function screenTracking(orderId) {
     action = `
       <div class="selopt"><span class="fl">Pay by</span><span class="optbtns">${["Card", "Apple Pay", "Bank transfer"].map(m =>
         `<button class="optbtn ${balanceMethod === m ? "sel" : ""}" onclick="balanceMethod='${m}';renderAll()">${m}</button>`).join("")}</span></div>
-      <button class="cta" onclick="payBalance('${order.id}')">Pay ${money(due)} Balance</button>`;
+      <button class="cta" onclick="payBalance('${order.id}')">Pay ${money(due)} Balance</button>
+      ${payProtectionLine()}`;
   }
   return `
     ${cTop("Order #" + order.id, "orders")}
@@ -652,6 +721,7 @@ function screenTracking(orderId) {
       </div>
       ${action}
       ${placed || quoteStatus(order) === "quoted" ? chatButton(order, false) : ""}
+      ${deliveryBoxHtml(order, "customer")}
       ${inspirationBlock(order.id, order.inspiration)}
       ${lifecycleList(order)}
       ${order.review_rating ? `<div class="meta">Your review: ${"★".repeat(order.review_rating)} ${escapeHtml(order.review_text)}</div>` : ""}
@@ -733,7 +803,7 @@ function submitReview(event, orderId) {
   event.preventDefault();
   const order = findOrder(orderId);
   order.review_rating = reviewStars;
-  order.review_text = event.target.text.value.trim();
+  order.review_text = hideContactDetails(event.target.text.value.trim()).text;   // the database does the same
   order.updated_at = today();
   if (db.reviews) {
     // Live mode: reviews are their own table; the database copies it onto the order

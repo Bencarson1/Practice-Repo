@@ -426,6 +426,18 @@ function requestQuoteFrom(designerId) {
   });
 }
 
+// ---- The tailor terms (sign-up, Join as a tailor, My profile) ----
+
+function tailorTermsHtml(open) {
+  return `<details class="terms-box" ${open ? "open" : ""}><summary>${APP_NAME} tailor terms — keeping customers on ${APP_NAME}</summary>
+    <ol>${TAILOR_TERMS.map(t => `<li>${escapeHtml(t)}</li>`).join("")}</ol></details>`;
+}
+
+function tailorTermsCheckbox() {
+  return `<label class="check terms-check"><input type="checkbox" name="acceptTerms" value="yes" required>
+    I agree to the ${APP_NAME} tailor terms: I won't take ${APP_NAME} customers off the platform.</label>`;
+}
+
 // ---- Join as a tailor (for someone already signed in, or in the demo) ----
 
 function screenJoinTailor() {
@@ -450,6 +462,8 @@ function screenJoinTailor() {
         <label class="field">Country<select name="country" required>${countryOptions("", "Choose your country")}</select></label>
         <label class="field">City or town<input name="city" required maxlength="60" placeholder="e.g. Manchester"></label>
         <label class="field">Phone <small>(only the ${APP_NAME} team sees it)</small><input name="phone" type="tel" maxlength="20"></label>
+        ${tailorTermsHtml(false)}
+        ${tailorTermsCheckbox()}
         <p id="join-error" class="form-error" role="alert"></p>
         <button class="cta" type="submit">Create my tailor profile</button>
       </form>
@@ -459,8 +473,11 @@ function screenJoinTailor() {
 function joinAsTailor(event) {
   event.preventDefault();
   const form = event.target;
-  const details = { businessName: form.business.value.trim(), country: form.country.value, city: form.city.value.trim(), phone: form.phone.value.trim() };
+  const details = { businessName: form.business.value.trim(), country: form.country.value, city: form.city.value.trim(), phone: form.phone.value.trim(),
+                    acceptTerms: form.acceptTerms.checked };
   if (details.businessName.length < 2) return formError("join-error", "Enter your business name.");
+  if (hideContactDetails(details.businessName).hidden) return formError("join-error", "Your business name can't include a phone number, email, website or social handle.");
+  if (!details.acceptTerms) return formError("join-error", "Please tick the box to agree to the tailor terms.");
   if (!details.country) return formError("join-error", "Choose your country.");
   const button = form.querySelector("button[type=submit]");
   button.disabled = true;
@@ -477,7 +494,7 @@ function joinAsTailor(event) {
     id, business_name: details.businessName, country_code: details.country, city: details.city, postcode: "", address_line: "",
     latitude: null, longitude: null, show_exact_address: false, speciality_tags: [], delivery_available: false, custom_orders: true,
     rating: null, review_count: 0, profile_image: null, description: "", delivery_time: "7–14 days", admin_status: "pending",
-    admin_note: "", portfolio: [], phone: details.phone, location: "", demo: true
+    admin_note: "", portfolio: [], phone: details.phone, location: "", demo: true, tailor_terms_accepted_at: new Date().toISOString()
   });
   db.designers.push(d);
   db.prices = db.prices.concat(newPriceListFor(id));

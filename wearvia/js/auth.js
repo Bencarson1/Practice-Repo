@@ -88,6 +88,7 @@ const Auth = (() => {
           ${field("Phone <small>(optional)</small>", "phone", "tel", 'autocomplete="tel" maxlength="20"')}
           ${field("Email", "email", "email", 'required autocomplete="email"')}
           ${field("Password <small>(at least 8 characters)</small>", "password", "password", 'required minlength="8" autocomplete="new-password"')}
+          ${tailor ? tailorTermsHtml(false) + tailorTermsCheckbox() : ""}
           ${notes()}
           <button class="cta" type="submit" ${busy ? "disabled" : ""}>${busy ? "Creating your account…" : "Create account"}</button>
         </form>
@@ -158,6 +159,7 @@ const Auth = (() => {
     const values = {};
     Array.from(form.elements).forEach(input => { if (input.name) values[input.name] = input.value.trim(); });
     if (values.password !== undefined) values.password = form.password.value; // passwords may start or end with spaces
+    if (form.acceptTerms) values.acceptTerms = form.acceptTerms.checked;
     if ((screen === "signUp" || screen === "newPassword") && values.password.length < 8) {
       setError("Use at least 8 characters for your password.");
       return false;
@@ -178,8 +180,15 @@ const Auth = (() => {
         if (button) { button.disabled = false; button.textContent = "Create account"; }
         return false;
       }
+      if (accountType === "designer" && (!values.acceptTerms || hideContactDetails(values.businessName).hidden)) {
+        busy = false;
+        setError(values.acceptTerms ? "Your business name can't include a phone number, email, website or social handle."
+          : "Please tick the box to agree to the tailor terms.");
+        if (button) { button.disabled = false; button.textContent = "Create account"; }
+        return false;
+      }
       work = Cloud.signUp({ email: values.email, password: values.password, name: values.name, phone: values.phone, accountType,
-                            businessName: values.businessName, country: values.country, city: values.city })
+                            businessName: values.businessName, country: values.country, city: values.city, acceptTerms: !!values.acceptTerms })
         .then(result => {
           if (result.needsConfirmation) {
             message = `Nearly done! We've sent a link to ${values.email}. Open it to confirm your email, then sign in here.`;

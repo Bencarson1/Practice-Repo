@@ -202,18 +202,23 @@ function setCustomerNotes(customerId, notes, designerId) {
 }
 
 // ---- Public position: the same rules the database uses ----
-// Tailors who hide their address are shown about 1 km away from it (rounded
-// to 2 decimal places), with only the postcode district (e.g. "SE15").
+// Every tailor is shown about 1 km away from their address (rounded to 2
+// decimal places), with only the postcode district (e.g. "SE15"). The full
+// address is only shared with a customer once their deposit is confirmed.
+// Public texts go through the contact-details filter (no-leakage.js).
 
 function refreshDesignerPublic(d) {
   const hasSpot = d.latitude != null && d.longitude != null && d.latitude !== "" && d.longitude !== "";
   const round2 = x => Math.round(Number(x) * 100) / 100;
-  d.public_latitude = !hasSpot ? null : d.show_exact_address ? Number(d.latitude) : round2(d.latitude);
-  d.public_longitude = !hasSpot ? null : d.show_exact_address ? Number(d.longitude) : round2(d.longitude);
+  d.show_exact_address = false;
+  d.public_latitude = !hasSpot ? null : round2(d.latitude);
+  d.public_longitude = !hasSpot ? null : round2(d.longitude);
   const pc = (d.postcode || "").trim().toUpperCase().replace(/\s+/g, " ");
-  d.postcode_area = !pc ? null : d.show_exact_address ? pc
-    : d.country_code === "GB" ? pc.replace(/\s*[0-9][A-Z]{2}$/, "").trim() || null : null;
-  d.public_address = d.show_exact_address && d.address_line ? d.address_line + (pc ? ", " + pc : "") : null;
+  d.postcode_area = !pc ? null : d.country_code === "GB" ? pc.replace(/\s*[0-9][A-Z]{2}$/, "").trim() || null : null;
+  d.public_address = null;
+  ["business_name", "description", "city", "location"].forEach(k => { if (d[k]) d[k] = hideContactDetails(d[k]).text; });
+  d.speciality_tags = (d.speciality_tags || []).filter(t => !hideContactDetails(t).hidden);
+  (d.portfolio || []).forEach(p => { if (p.title) p.title = hideContactDetails(p.title).text; });
   if (!d.location && d.city) {
     const country = countryByCode(d.country_code);
     d.location = d.city + (country ? ", " + country.name : "");
@@ -237,7 +242,6 @@ function uniqueSlug(name, id) {
 
 // What a tailor's area looks like to customers: "Peckham, London · SE15"
 function tailorAreaText(d) {
-  if (d.public_address) return d.public_address + (d.city ? ", " + d.city : "");
   return [d.city || d.location, d.postcode_area].filter(Boolean).join(" · ") || d.location || "";
 }
 
@@ -344,6 +348,7 @@ function demoTailor(t) {
   const d = Object.assign({
     location: "", profile_image: `logo:${initialsOf(t.business_name.replace(/\(.*\)/, ""))}:${hexNoHash(t.pattern[1][0])}`,
     delivery_time: "7–14 days", starting_price: null, commission_rate: 0, admin_status: "approved", admin_note: "", demo: true,
+    tailor_terms_accepted_at: "2026-09-01T09:00:00Z",
     portfolio: samplePhotos(t.pattern[0], t.pattern[1], 3).map((image, i) => ({ id: `${t.id}-P${i + 1}`, image, title: ["Made to measure", "Detail", "Finished look"][i] })),
     sample_reviews: t.review_count ? DEMO_REVIEW_TEXTS.slice(0, Math.min(3, t.review_count)).map(([text, who], i) => ({ rating: Math.max(3, Math.round(t.rating) - (i === 2 ? 1 : 0)), text, who })) : []
   }, t);

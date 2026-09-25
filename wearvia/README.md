@@ -42,6 +42,18 @@ Use the switch at the top right to move between the **Customer app**, the **Fabr
 - **Privacy:** a tailor who doesn't show their exact address is placed about 1 km from it and shown with only their postcode district (e.g. "SE15"); their exact address, postcode and position are never sent to anyone but them and the admin.
 - **Demo:** sample tailors in London, Manchester, Lagos and Abuja, marked *(demo)*, plus one waiting for approval. They only exist in the demo — never in the real database.
 
+## Keeping orders on Wearvia
+
+So customers and tailors are protected, orders stay in the app (`supabase/no-leakage.sql` does this in the database, so it can't be got round; `js/no-leakage.js` uses the same rules for the demo and the screens):
+
+- **Public profiles, search and the Google pages** show only the business name, area (e.g. "Gillingham · ME7"), specialities, photos, rating, reviews and *Request a quote*. No address, phone, email, website or social links. A tailor's position is always rounded to about 1 km (the old "show my exact address" switch is gone).
+- **The contact-details filter** hides phone numbers, email addresses, website links, WhatsApp / Instagram / social handles and "call me on…" / "pay me directly" / "outside the app" messages, replacing them with *[contact details hidden]*. It runs on every chat message (both sides), tailor descriptions, portfolio captions, services, reviews and the customer's style note. Measurements, dates, yards and prices are left alone.
+- **In the chat** a message that had contact details shows *"Contact details are hidden. Please keep your order on Wearvia so you're protected."* — and the same warning appears while typing. The original is kept for safety: only the Wearvia admin can read it (*Original* under the message).
+- **Delivery and fitting details:** once the customer's deposit is **confirmed**, both sides see a box with the tailor's business address and the customer's delivery address (the customer adds it on the deposit screen or in the box). Before that, neither side sees them.
+- **Customers' phone numbers and emails** aren't shown to tailors (only for walk-in customers the tailor added themselves). Everything goes through the chat.
+- **Quote and payment screens** say: *"Pay through Wearvia to be protected: your money is safe until your outfit is delivered."*
+- **Tailor terms:** tailors tick *I agree to the Wearvia tailor terms* when they sign up (or join, or in Business → My profile). The admin can't approve a new tailor until they have.
+
 ## Pages for Google
 
 The app's addresses use `#`, which search engines mostly ignore, so `scripts/build-tailor-pages.mjs` writes ordinary pages from the approved tailors in Supabase (publishable key only): `wearvia/tailors/` (all countries), `wearvia/tailors/uk/london/`, `wearvia/tailors/nigeria/lagos/` and so on, and `wearvia/tailor/<web-address>/` for each tailor — each with its own title, description, heading, Open Graph tags and JSON-LD (LocalBusiness / ItemList), plus `sitemap.xml` and `robots.txt`. The pages also load the latest results live and link into the app. The GitHub Action `.github/workflows/tailor-pages.yml` rebuilds them every day and on every merge into `main`, and publishes the site to GitHub Pages. To build them yourself: `node scripts/build-tailor-pages.mjs` (or `OFFLINE=1 node scripts/build-tailor-pages.mjs` for just the standard city pages).
@@ -157,7 +169,7 @@ Who can do what is decided by the database, not by the browser (see `supabase/se
 
 The app is already pointed at the Wearvia Supabase project in `js/config.js` (the project URL and the *publishable* key — that key is meant to be public). **Never put the secret key in the app.**
 
-1. **Run the database scripts.** Supabase → *SQL Editor* → *New query* → paste all of `supabase/setup.sql` → *Run*. It adds the missing tables, columns, security rules and photo buckets without touching your existing data. Then open another *New query*, paste all of `supabase/yards.sql` → *Run*. It switches the fabric columns from metres to yards and converts what's in them (money already charged doesn't change). Then do the same with `supabase/prices.sql`: it adds the price list (Business → Prices), makes the database price every customer order, and removes old unused metre functions. Then `supabase/tailor-quote.sql`: customers' orders become quote requests that the tailor prices, adds the order chat and its private `chat-photos` bucket, and ends with a report where every line should say OK. Then `supabase/tailors-near-me.sql`: many tailors (profiles, countries, specialities, per-tailor price lists and notes, approvals, the distance search, the `designer-photos` bucket, and security rules so each tailor only sees their own). It ends with a report where every line should say OK. All five are safe to run again — but if you ever re-run setup.sql, prices.sql or tailor-quote.sql, run the files after it again, in order.
+1. **Run the database scripts.** Supabase → *SQL Editor* → *New query* → paste all of `supabase/setup.sql` → *Run*. It adds the missing tables, columns, security rules and photo buckets without touching your existing data. Then open another *New query*, paste all of `supabase/yards.sql` → *Run*. It switches the fabric columns from metres to yards and converts what's in them (money already charged doesn't change). Then do the same with `supabase/prices.sql`: it adds the price list (Business → Prices), makes the database price every customer order, and removes old unused metre functions. Then `supabase/tailor-quote.sql`: customers' orders become quote requests that the tailor prices, adds the order chat and its private `chat-photos` bucket, and ends with a report where every line should say OK. Then `supabase/tailors-near-me.sql`: many tailors (profiles, countries, specialities, per-tailor price lists and notes, approvals, the distance search, the `designer-photos` bucket, and security rules so each tailor only sees their own). It ends with a report where every line should say OK. Then `supabase/no-leakage.sql`: the contact-details filter on chats, profiles and portfolios (the originals are kept for the admin), no public addresses, customers' contact details kept from tailors, the delivery and fitting details after a confirmed deposit, and the tailor terms — merge the app update straight after it. It ends with a report where every line should say OK. All six are safe to run again — but if you ever re-run setup.sql, prices.sql or tailor-quote.sql, run the files after it again, in order.
 2. **Set the sign-in addresses.** Supabase → *Authentication* → *URL Configuration*: set *Site URL* to the address where the app is published, and add the same address under *Redirect URLs*. The links in sign-up and password emails go there.
 3. **Keep email confirmation on.** Supabase → *Authentication* → *Sign In / Providers* → *Email*: leave *Confirm email* switched on. Staff logins are only granted to confirmed emails.
 4. **Make yourself the owner.** Open the app, create an account with your email (choose *I want outfits made*) and confirm it. Then in the SQL Editor run
@@ -174,7 +186,8 @@ wearvia/
 │   ├── yards.sql        Run after setup.sql: switches fabric from metres to yards
 │   ├── prices.sql       Run after yards.sql: the price list, and orders priced by the database
 │   ├── tailor-quote.sql Run after prices.sql: quote requests, the tailor's quote, and the order chat
-│   └── tailors-near-me.sql Run after tailor-quote.sql: many tailors, profiles, approvals, the distance search
+│   ├── tailors-near-me.sql Run after tailor-quote.sql: many tailors, profiles, approvals, the distance search
+│   └── no-leakage.sql   Run last: hides contact details, delivery details after the deposit, tailor terms
 ├── tailors/             Pages for Google, built by scripts/build-tailor-pages.mjs (plus seo.css / seo.js)
 ├── tailor/              One page per approved tailor (built by the same script)
 ├── manifest.webmanifest, sw.js, icons/   Installable app (home screen)
@@ -183,6 +196,7 @@ wearvia/
 └── js/
     ├── vendor/supabase.js The Supabase library (kept here so there's still nothing to install)
     ├── config.js        The Supabase project address and publishable key
+    ├── no-leakage.js    The contact-details filter (same rules as the database), the tailor terms and the pay line
     ├── data.js          Settings, the 16 order steps, sample data, saving/loading, helpers
     ├── tailors-data.js  Many tailors: lookups, each dashboard's own data and prices, demo tailors, demo search
     ├── countries.js     The country list for the demo (the live one is in the database)

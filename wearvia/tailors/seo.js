@@ -23,7 +23,7 @@
       if (!rows.length) return;
       list.innerHTML = rows.map(t => `<li class="card"><a href="${P.root}tailor/${esc(t.slug)}/">
         ${t.profile_image_url ? `<img src="${esc(t.profile_image_url)}" alt="" loading="lazy" width="56" height="56">` : `<span class="initials" aria-hidden="true">${esc(initials(t.business_name))}</span>`}
-        <span class="card-text"><b>${esc(t.business_name)}</b><span>${esc(t.public_address || [t.city, t.postcode_area].filter(Boolean).join(" · "))}</span>
+        <span class="card-text"><b>${esc(t.business_name)}</b><span>${esc([t.city, t.postcode_area].filter(Boolean).join(" · "))}</span>
           <span>${esc((t.speciality_tags || []).join(", ") || "Tailoring")}</span>
           <span class="gold">${esc(rating(t))}${t.delivery_available ? " · Delivers" : ""}${t.custom_orders ? " · Custom orders" : ""}</span></span></a></li>`).join("");
     }).catch(() => { /* the list built into the page stays */ });
