@@ -40,7 +40,7 @@ Keep this sequence exactly:
 | 3 | Design & customise | Customer | Colour, embroidery, sleeve style, neck style |
 | 4 | AI design concept | Customer | AI preview from selections; approve or regenerate |
 | 5 | Measurements | Customer | Chest, waist, shoulder, sleeve, trouser length, neck; versioned by year |
-| 6 | Fabric marketplace | Customer/Designer | Browse by type; supplier, price per metre, live stock, delivery time |
+| 6 | Fabric marketplace | Customer/Designer | Browse by type; supplier, price per yard, live stock, delivery time |
 | 7 | Fabric purchase confirmation | Customer | Confirms quantity and supplier; reduces stock |
 | 8 | Quotation | Customer | Itemised: fabric, tailoring, embroidery, delivery → total |
 | 9 | Payment | Customer | Deposit now, balance later; card / Apple Pay / bank transfer |
@@ -73,7 +73,7 @@ orders
   outfit_type, colour, embroidery, sleeve_style, neck_style
   concept_image_url
   measurement_profile_id
-  fabric_id, fabric_supplier_id, fabric_metres, fabric_cost
+  fabric_id, fabric_supplier_id, fabric_yards, fabric_cost
   quote_total, deposit_amount, deposit_paid_at, balance_paid_at
   stage (tailor_assigned → cutting → sewing → embroidery → fitting →
          quality_control → balance_paid → delivered)
@@ -86,7 +86,7 @@ wedding_orders
   members: [{ role, name, order_id, status }]
 
 fabrics
-  id, name, category, price_per_metre, supplier_id, metres_available, min_order_metres
+  id, name, category, price_per_yard, supplier_id, yards_available, min_order_yards
 
 suppliers
   id, name, location, delivery_estimate, rating

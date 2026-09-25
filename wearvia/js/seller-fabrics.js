@@ -28,7 +28,7 @@ function renderSellerFabrics() {
         <div class="review-body">
           <div class="row-between wrap"><h3>${escapeHtml(f.name)}</h3>${sellerStatusBadge(f)}</div>
           <p class="muted">${escapeHtml(f.category)} · ${escapeHtml(f.colour_name)} · ${photos.length} photo${photos.length === 1 ? "" : "s"}${f.photos && f.photos.length ? "" : " (no photos — showing a swatch)"}</p>
-          <p><strong class="gold">${money(f.price_per_metre)}</strong> per metre · ${f.metres_available} m in stock · min ${f.min_order_metres} m</p>
+          <p><strong class="gold">${money(f.price_per_yard)}</strong> per yard · ${f.yards_available} yd in stock · min ${f.min_order_yards} yd</p>
           <p>Seller: <b>${escapeHtml(seller ? seller.name : "—")}</b>${seller ? ` · ${escapeHtml(seller.location)} · ${escapeHtml(seller.phone || "")}` : ""}</p>
           ${f.description ? `<p class="desc">${escapeHtml(f.description)}</p>` : ""}
           ${f.status === "hidden" && f.review_note ? `<p class="review-note">Reason given: “${escapeHtml(f.review_note)}”</p>` : ""}

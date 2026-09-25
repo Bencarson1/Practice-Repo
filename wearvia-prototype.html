@@ -304,7 +304,7 @@ const SCREENS = {
         const stockLabel = stock===undefined ? "Checking stock…" : `${stock}m left${stock<10?' · low stock':''}`;
         return `<button class="fab-card ${state.fabric===n?'sel':''}" onclick="selectFabric('${n}',${p},'${supplier}')">
           <div class="swatch" style="background:${c}"></div>
-          <div class="name">${n}</div><div class="price">£${p} / metre</div><div class="meta">Sold by ${supplier} · ${delivery}</div>
+          <div class="name">${n}</div><div class="price">£${p} / yard</div><div class="meta">Sold by ${supplier} · ${delivery}</div>
           <div class="meta" style="color:${stock<10?'#a33':'var(--gold)'}">${stockLabel}</div>
         </button>`;}).join("")}
       <button class="cta" onclick="buyFabric()">Buy Fabric →</button>
@@ -320,7 +320,7 @@ const SCREENS = {
         <div class="n">${state.fabric}</div>
         <div class="l">from ${state.fabricSupplier}</div>
       </div>
-      <div class="qline"><span>7 metres × £${state.fabricPrice}</span><span>£${state.fabricPrice*7}</span></div>
+      <div class="qline"><span>7 yards × £${state.fabricPrice}</span><span>£${state.fabricPrice*7}</span></div>
       <div class="meta">Remaining stock: ${fabricStock[state.fabric]!==undefined ? fabricStock[state.fabric]+'m' : '—'}</div>
       <button class="cta" onclick="go('quote')">Continue to Quotation →</button>
     </div>`,
@@ -457,7 +457,7 @@ const SCREENS = {
     ${statusbar}${topbar("Fabric Inventory — Live")}
     <div class="content">
       ${Object.entries(fabricStock).length ? Object.entries(fabricStock).map(([n,m])=>
-        `<div class="selopt"><span><b>${n}</b><br><span class="fl" style="${m<10?'color:#a33':''}">${m} metres${m<10?' — low stock!':''}</span></span><span>›</span></div>`).join("")
+        `<div class="selopt"><span><b>${n}</b><br><span class="fl" style="${m<10?'color:#a33':''}">${m} yards${m<10?' — low stock!':''}</span></span><span>›</span></div>`).join("")
         : `<div class="meta" style="text-align:center;padding:20px 0">Loading stock…</div>`}
     </div>
     ${nav()}`,

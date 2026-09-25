@@ -56,7 +56,7 @@ function currentSeller() {
 }
 
 function isSoldOut(fabric) {
-  return !!fabric.sold_out || fabric.metres_available < (fabric.min_order_metres || 0.5);
+  return !!fabric.sold_out || fabric.yards_available < (fabric.min_order_yards || 0.5);
 }
 
 // Customers can see approved fabrics; they can buy them if they are also in stock
@@ -114,10 +114,10 @@ function nextFabricId(data) {
 
 const PRICE_BANDS = [
   { key: "any", label: "Any price", test: () => true },
-  { key: "u10", label: "Under £10/m", test: p => p < 10 },
-  { key: "10-25", label: "£10–£25/m", test: p => p >= 10 && p <= 25 },
-  { key: "25-50", label: "£25–£50/m", test: p => p > 25 && p <= 50 },
-  { key: "50", label: "Over £50/m", test: p => p > 50 }
+  { key: "u10", label: "Under £10/yd", test: p => p < 10 },
+  { key: "10-25", label: "£10–£25/yd", test: p => p >= 10 && p <= 25 },
+  { key: "25-50", label: "£25–£50/yd", test: p => p > 25 && p <= 50 },
+  { key: "50", label: "Over £50/yd", test: p => p > 50 }
 ];
 
 const MARKET_SORTS = [
@@ -136,7 +136,7 @@ function marketFabrics(filters) {
     if (f.colour && f.colour !== "All" && fabric.colour_name !== f.colour) return false;
     if (f.seller && f.seller !== "All" && fabric.supplier_id !== f.seller) return false;
     if (f.inStock && isSoldOut(fabric)) return false;
-    if (!band.test(fabric.price_per_metre)) return false;
+    if (!band.test(fabric.price_per_yard)) return false;
     if (words.length) {
       const seller = findSupplier(fabric.supplier_id);
       const text = [fabric.name, fabric.category, fabric.colour_name, fabric.description, seller && seller.name, seller && seller.location].join(" ").toLowerCase();
@@ -146,8 +146,8 @@ function marketFabrics(filters) {
   });
   const sorters = {
     new: (a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")) || (Number(b.id.slice(1)) || 0) - (Number(a.id.slice(1)) || 0),
-    low: (a, b) => a.price_per_metre - b.price_per_metre,
-    high: (a, b) => b.price_per_metre - a.price_per_metre
+    low: (a, b) => a.price_per_yard - b.price_per_yard,
+    high: (a, b) => b.price_per_yard - a.price_per_yard
   };
   // Sold-out fabrics go to the end so customers see what they can buy first
   return list.sort((a, b) => (isSoldOut(a) - isSoldOut(b)) || (sorters[f.sort] || sorters.new)(a, b));
@@ -186,8 +186,8 @@ function saveSellerFabric(sellerId, fabricId, values) {
     (fabric.description || "") !== values.description || JSON.stringify(fabric.photos || []) !== JSON.stringify(values.photos));
   Object.assign(fabric, {
     name: values.name, category: values.category, colour_name: values.colour_name, color: colourFamilyHex(values.colour_name),
-    price_per_metre: values.price_per_metre, metres_available: values.metres_available,
-    min_order_metres: values.min_order_metres, description: values.description, photos: values.photos,
+    price_per_yard: values.price_per_yard, yards_available: values.yards_available,
+    min_order_yards: values.min_order_yards, description: values.description, photos: values.photos,
     updated_at: today()
   });
   // A hidden fabric that's been fixed goes back for checking too
@@ -234,8 +234,8 @@ function fabricOrderFor(order) {
   const fabric = findFabric(order.fabric_id);
   return {
     id: "FO-" + order.id.split("-")[1], order_id: order.id, seller_id: fabric ? fabric.supplier_id : order.fabric_supplier_id,
-    fabric_id: order.fabric_id, fabric_name: fabric ? fabric.name : "Fabric", metres: order.fabric_metres,
-    price_per_metre: fabric ? fabric.price_per_metre : order.fabric_cost / order.fabric_metres, total: order.fabric_cost,
+    fabric_id: order.fabric_id, fabric_name: fabric ? fabric.name : "Fabric", yards: order.fabric_yards,
+    price_per_yard: fabric ? fabric.price_per_yard : order.fabric_cost / order.fabric_yards, total: order.fabric_cost,
     customer_id: order.customer_id, deliver_to: `${SHOP_NAME}, ${designer().location}`,
     status: "new", created_at: order.created_at, sent_at: null
   };
@@ -272,30 +272,30 @@ function sampleSellers() {
 
 function sampleSellerFabrics() {
   const f = (id, seller, name, type, colour, price, stock, min, kind, colours, description, extra) => Object.assign({
-    id, name, category: type, colour_name: colour, color: colours[0], price_per_metre: price, supplier_id: seller,
-    metres_available: stock, min_order_metres: min, description, photos: samplePhotos(kind, colours, 3),
+    id, name, category: type, colour_name: colour, color: colours[0], price_per_yard: price, supplier_id: seller,
+    yards_available: stock, min_order_yards: min, description, photos: samplePhotos(kind, colours, 3),
     status: "approved", sold_out: false, deleted_at: null, created_at: addDays(-Number(id.slice(1))), review_note: ""
   }, extra || {});
   return [
-    f("F11", "S9", "Blue Harvest Ankara", "Ankara", "Blue", 9.5, 60, 2, "ankara", ["#1e3a5f", "#e8871e", "#f4f1ea"],
-      "Bright Dutch-style wax print with orange rings on deep blue. 100% cotton, 116 cm wide. Holds its colour wash after wash."),
-    f("F12", "S9", "Sunset Swirl Ankara", "Ankara", "Orange", 11, 35, 2, "ankara", ["#e8871e", "#7c1f2e", "#e8c21e"],
-      "Warm orange and burgundy swirls. Lovely for Bubu, two pieces and headwraps. Cotton, 116 cm wide."),
-    f("F13", "S9", "Kola Nut Wax Print", "Ankara", "Green", 12, 6, 2, "ankara", ["#2d4f3a", "#c9a24a", "#efe6d2"],
+    f("F11", "S9", "Blue Harvest Ankara", "Ankara", "Blue", 8.5, 65, 2, "ankara", ["#1e3a5f", "#e8871e", "#f4f1ea"],
+      "Bright Dutch-style wax print with orange rings on deep blue. 100% cotton, 46 inches wide. Holds its colour wash after wash."),
+    f("F12", "S9", "Sunset Swirl Ankara", "Ankara", "Orange", 10, 38, 2, "ankara", ["#e8871e", "#7c1f2e", "#e8c21e"],
+      "Warm orange and burgundy swirls. Lovely for Bubu, two pieces and headwraps. Cotton, 46 inches wide."),
+    f("F13", "S9", "Kola Nut Wax Print", "Ankara", "Green", 11, 6, 2, "ankara", ["#2d4f3a", "#c9a24a", "#efe6d2"],
       "Green and gold kola nut print. Our best seller — back soon.", { sold_out: true }),
-    f("F14", "S10", "Royal Kente Strip", "Kente", "Gold", 32, 25, 2, "kente", ["#c9a227", "#1d7a5a", "#a3242e"],
+    f("F14", "S10", "Royal Kente Strip", "Kente", "Gold", 29, 27, 2, "kente", ["#c9a227", "#1d7a5a", "#a3242e"],
       "Hand-woven kente strips in gold, green and red, sewn into full-width cloth. Ideal for weddings and naming ceremonies."),
-    f("F15", "S10", "Emerald Kente", "Kente", "Green", 34, 8, 2, "kente", ["#1d7a5a", "#c9a227", "#1b1b1b"],
-      "Emerald and gold kente with black accents. Only a few metres left from this weave."),
-    f("F16", "S11", "Indigo Adire Eleko", "Adire", "Blue", 14, 30, 2, "adire", ["#1f2a5f", "#dfe6f4", "#f4f1ea"],
-      "Hand-dyed indigo adire using the starch-resist method. Every metre is slightly different. Cotton, 110 cm wide."),
-    f("F17", "S11", "Midnight Adire Oniko", "Adire", "Navy", 15, 22, 2, "adire", ["#141b3a", "#8fa3cf", "#f4f1ea"],
+    f("F15", "S10", "Emerald Kente", "Kente", "Green", 31, 9, 2, "kente", ["#1d7a5a", "#c9a227", "#1b1b1b"],
+      "Emerald and gold kente with black accents. Only a few yards left from this weave."),
+    f("F16", "S11", "Indigo Adire Eleko", "Adire", "Blue", 13, 33, 2, "adire", ["#1f2a5f", "#dfe6f4", "#f4f1ea"],
+      "Hand-dyed indigo adire using the starch-resist method. Every yard is slightly different. Cotton, 43 inches wide."),
+    f("F17", "S11", "Midnight Adire Oniko", "Adire", "Navy", 14, 24, 2, "adire", ["#141b3a", "#8fa3cf", "#f4f1ea"],
       "Tie-dyed oniko circles on midnight indigo. Soft cotton that gets better with every wash.", { status: "pending" }),
-    f("F18", "S12", "Ivory Cord Lace", "Lace", "Ivory", 28, 18, 1, "lace", ["#efe6d2", "#ffffff", "#c9a24a"],
-      "Ivory cord lace with a scalloped edge. Perfect for bridal and engagement outfits. 130 cm wide."),
-    f("F19", "S12", "Rose Gold Beaded Lace", "Lace", "Pink", 65, 12, 1, "lace", ["#d98aa0", "#c9a24a", "#fff4f0"],
+    f("F18", "S12", "Ivory Cord Lace", "Lace", "Ivory", 25.5, 20, 1, "lace", ["#efe6d2", "#ffffff", "#c9a24a"],
+      "Ivory cord lace with a scalloped edge. Perfect for bridal and engagement outfits. 51 inches wide."),
+    f("F19", "S12", "Rose Gold Beaded Lace", "Lace", "Pink", 59, 13, 1, "lace", ["#d98aa0", "#c9a24a", "#fff4f0"],
       "Heavy beaded lace with rose-gold sequins, hand-finished. For statement aso ebi and evening wear."),
-    f("F20", "S12", "Champagne French Lace", "Lace", "Gold", 48, 15, 1, "lace", ["#d8c089", "#fff8e8", "#8a6d1f"],
+    f("F20", "S12", "Champagne French Lace", "Lace", "Gold", 44, 16, 1, "lace", ["#d8c089", "#fff8e8", "#8a6d1f"],
       "Light French lace in champagne.", { status: "hidden", review_note: "Photos don't show the fabric clearly. Please add a close-up." })
   ];
 }
@@ -303,11 +303,11 @@ function sampleSellerFabrics() {
 // Descriptions and photos for the first ten sample fabrics
 const FIRST_FABRIC_DETAILS = {
   F1:  ["Blue", "plain", ["#1e3a5f", "#3b5b85", "#c9a24a"], "Soft Italian cashmere with a gentle drape. Warm without being heavy — ideal for kaftans and winter senators."],
-  F2:  ["Gold", "ankara", ["#c9a24a", "#1e2a44", "#efe6d2"], "Classic gold and navy wax print. 100% cotton, 116 cm wide."],
+  F2:  ["Gold", "ankara", ["#c9a24a", "#1e2a44", "#efe6d2"], "Classic gold and navy wax print. 100% cotton, 46 inches wide."],
   F3:  ["Burgundy", "aso_oke", ["#7c1f2e", "#c9a24a", "#efe6d2"], "Hand-loomed aso oke from Iseyin in deep burgundy with gold threads. Traditional for weddings."],
   F4:  ["Gold", "lace", ["#8a6d1f", "#e8c77a", "#fff2cc"], "Gold cord lace with a scalloped border. A favourite for bubu and aso ebi."],
   F5:  ["Navy", "plain", ["#20304a", "#3d5070", "#c9a24a"], "Smooth navy senator material. Crease-resistant, easy to wear all day."],
-  F6:  ["Orange", "ankara", ["#e8871e", "#7c1f2e", "#f4e3a1"], "Sunburst print in orange and burgundy. Cotton, 116 cm wide."],
+  F6:  ["Orange", "ankara", ["#e8871e", "#7c1f2e", "#f4e3a1"], "Sunburst print in orange and burgundy. Cotton, 46 inches wide."],
   F7:  ["Navy", "plain", ["#1f2a44", "#2f3c5a", "#8a8a8a"], "Fine Scottish wool suiting in midnight navy. Sharp tailoring, keeps its shape."],
   F8:  ["Gold", "aso_oke", ["#c9a227", "#7c1f2e", "#fff2cc"], "Royal gold aso oke, hand-woven. Stiff enough for a grand agbada."],
   F9:  ["White", "linen", ["#f4f1ea", "#c8bfa8", "#a89c80"], "Breathable Irish linen. Cool in summer, softens with every wash."],
@@ -325,9 +325,68 @@ function addSampleSellers(data) {
   });
 }
 
+// ---- Switching from metres to yards ----
+// Wearvia sold fabric by the metre before version 4. Demo data saved in the
+// browser (and a half-finished order) is converted with the same rules as
+// supabase/yards.sql: prices × 0.9144, lengths × 1.0936, stock rounded down
+// to 0.1 yd, the smallest order to the nearest 0.5 yd. Money already charged
+// never changes.
+
+function metresToYards(metres) { return Math.round(metres * YARDS_PER_METRE * 100) / 100; }
+function stockMetresToYards(metres) { return Math.floor(metres * YARDS_PER_METRE * 10 + 1e-6) / 10; }
+function minOrderMetresToYards(metres) { return Math.max(0.5, Math.round(metres * YARDS_PER_METRE * 2) / 2); }
+function pricePerYardFromMetre(price) { return Math.round(price * METRES_PER_YARD * 100) / 100; }
+
+// "Fabric — Aso Oke (8 m × £25)" → "Fabric — Aso Oke (8.75 yd × £22.86)". The price per
+// yard is worked out from what was charged, so the line still adds up to the same amount.
+function yardsLineItems(lines) {
+  return (lines || []).map(line => {
+    const match = /\(([\d.]+) m × \D*([\d,]+(?:\.\d+)?)\)$/.exec(line.label || "");
+    if (!match) return line;
+    const yards = metresToYards(Number(match[1]));
+    const price = yards > 0 ? Math.round(line.amount / yards * 100) / 100 : pricePerYardFromMetre(Number(match[2].replace(/,/g, "")));
+    return Object.assign({}, line, { label: line.label.slice(0, match.index) + `(${yards} yd × ${money(price)})` });
+  });
+}
+
+function upgradeDraftToYards(d) {
+  if (d && d.metres !== undefined) {
+    // Bought fabric keeps its exact length (it's already out of stock in demo mode)
+    d.yards = d.purchased ? metresToYards(d.metres) : minOrderMetresToYards(d.metres);
+    delete d.metres;
+  }
+  return d;
+}
+
+function upgradeDataToYards(data) {
+  const samples = sampleSellerFabrics();
+  data.fabrics.forEach(f => {
+    // The sample sellers' descriptions talked about metres and cm
+    const sample = f.price_per_metre !== undefined && samples.find(s => s.id === f.id && s.name === f.name && s.supplier_id === f.supplier_id);
+    if (sample) f.description = sample.description;
+    if (f.price_per_metre !== undefined) { f.price_per_yard = pricePerYardFromMetre(f.price_per_metre); delete f.price_per_metre; }
+    if (f.metres_available !== undefined) { f.yards_available = stockMetresToYards(f.metres_available); delete f.metres_available; }
+    if (f.min_order_metres !== undefined) { f.min_order_yards = minOrderMetresToYards(f.min_order_metres); delete f.min_order_metres; }
+  });
+  data.orders.forEach(o => {
+    if (o.fabric_metres !== undefined) { o.fabric_yards = metresToYards(o.fabric_metres); delete o.fabric_metres; }
+    o.line_items = yardsLineItems(o.line_items);
+  });
+  data.invoices.forEach(i => { i.line_items = yardsLineItems(i.line_items); });
+  (data.fabric_orders || []).forEach(l => {
+    if (l.metres === undefined) return;
+    l.yards = metresToYards(l.metres);
+    l.price_per_yard = l.yards > 0 ? Math.round(l.total / l.yards * 100) / 100 : pricePerYardFromMetre(l.price_per_metre || 0);
+    delete l.metres;
+    delete l.price_per_metre;
+  });
+  data.draft = upgradeDraftToYards(data.draft);
+}
+
 // Brings any saved data up to date with the fields this version uses.
 // Safe to run more than once.
 function upgradeData(data) {
+  upgradeDataToYards(data);
   data.session = data.session || {};
   if (data.session.sellerId === undefined) data.session.sellerId = null;
 
@@ -368,6 +427,6 @@ function upgradeData(data) {
     });
     db = previous;
   }
-  data.version = 3;
+  data.version = 4;
   return data;
 }

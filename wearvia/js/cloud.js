@@ -236,8 +236,8 @@ const Cloud = (() => {
       fabrics: r.fabrics.map(f => ({
         id: f.id, supplier_id: f.supplier_id, name: f.name || "Fabric", category: f.category || "Other",
         colour_name: f.colour_name || nearestColourName(f.colour_hex || "#1e2a44"), color: f.colour_hex || colourFamilyHex(f.colour_name),
-        price_per_metre: num(f.price_per_metre) || 0, metres_available: num(f.metres_available) || 0,
-        min_order_metres: num(f.min_order_metres) || 1, description: f.description || "",
+        price_per_yard: num(f.price_per_yard) || 0, yards_available: num(f.yards_available) || 0,
+        min_order_yards: num(f.min_order_yards) || 1, description: f.description || "",
         photos: (f.photos || []).map(p => `sb:${FABRIC_PHOTOS}/${p}`),
         status: f.status || "approved", review_note: f.review_note || "", reviewed_at: day(f.reviewed_at),
         sold_out: !!f.sold_out, deleted_at: day(f.deleted_at), created_at: iso(f.created_at), updated_at: day(f.updated_at)
@@ -265,7 +265,7 @@ const Cloud = (() => {
           concept_variation: o.concept_variation || 1, concept_image_url: o.concept_image_url || "",
           inspiration: photos.length ? { photos: photos.map(p => `sb:${STYLE}/${p}`), link: o.inspiration_link || "", note: o.inspiration_note || "" } : null,
           measurement_profile_id: o.measurement_profile_id, fabric_id: o.fabric_id, fabric_supplier_id: o.fabric_supplier_id,
-          fabric_metres: num(o.fabric_metres) || 0, fabric_cost: num(o.fabric_cost) || 0,
+          fabric_yards: num(o.fabric_yards) || 0, fabric_cost: num(o.fabric_cost) || 0,
           line_items: o.line_items || (invoice && invoice.line_items) || [
             { label: "Fabric", amount: num(o.fabric_cost) || 0 }, { label: "Tailoring", amount: num(o.tailoring_cost) || 0 },
             { label: "Embroidery", amount: num(o.embroidery_cost) || 0 }, { label: "Delivery", amount: num(o.delivery_cost) || 0 }],
@@ -299,8 +299,8 @@ const Cloud = (() => {
 
       fabric_orders: r.fabric_order_lines.map(l => ({
         id: l.id, ref: "FO-" + String(l.order_number || "").replace(/^\D+/, ""), order_id: numberOf.get(l.order_id) || l.order_number,
-        seller_id: l.supplier_id, fabric_id: l.fabric_id, fabric_name: l.fabric_name, metres: num(l.metres),
-        price_per_metre: num(l.price_per_metre), total: num(l.total), customer_first_name: l.customer_first_name || "",
+        seller_id: l.supplier_id, fabric_id: l.fabric_id, fabric_name: l.fabric_name, yards: num(l.yards),
+        price_per_yard: num(l.price_per_yard), total: num(l.total), customer_first_name: l.customer_first_name || "",
         deliver_to: l.deliver_to || "", status: l.status, created_at: day(l.created_at), sent_at: day(l.sent_at)
       })),
 
@@ -331,7 +331,7 @@ const Cloud = (() => {
       draft: previous ? previous.draft : loadDraft(),
       counters: { order: 0, payment: 0, invoice: 0 },
       sample_sellers_added: true,
-      version: 3
+      version: 4
     };
     // Someone who signed up as a seller but hasn't opened their shop yet
     if (data.session.sellerId && !data.suppliers.some(s => s.id === data.session.sellerId)) data.session.sellerId = null;
@@ -347,7 +347,7 @@ const Cloud = (() => {
   function draftKey() { return "wearvia-draft-" + (state.me ? state.me.user_id : "anon"); }
 
   function loadDraft() {
-    try { return JSON.parse(localStorage.getItem(draftKey()) || "null"); } catch (e) { return null; }
+    try { return upgradeDraftToYards(JSON.parse(localStorage.getItem(draftKey()) || "null")); } catch (e) { return null; }
   }
 
   function saveDraft() {
@@ -372,8 +372,8 @@ const Cloud = (() => {
         logo_url: s.logo || null, owner_user_id: s.owner_user_id || null })) },
     { table: "fabrics", rows: d => d.fabrics.map(f => ({
         id: f.id, supplier_id: f.supplier_id, name: f.name, category: f.category, colour_name: f.colour_name || null,
-        colour_hex: f.color || null, price_per_metre: f.price_per_metre, metres_available: f.metres_available,
-        min_order_metres: f.min_order_metres, description: f.description || "",
+        colour_hex: f.color || null, price_per_yard: f.price_per_yard, yards_available: f.yards_available,
+        min_order_yards: f.min_order_yards, description: f.description || "",
         photos: (f.photos || []).map(ref => photoPath(ref, FABRIC_PHOTOS)).filter(Boolean),
         status: f.status, review_note: f.review_note || "", sold_out: !!f.sold_out,
         deleted_at: f.deleted_at ? new Date(f.deleted_at + "T12:00:00Z").toISOString() : null })) },
@@ -570,7 +570,7 @@ const Cloud = (() => {
         outfit_type: details.outfit, colour: details.colour, embroidery: details.embroidery,
         sleeve_style: details.sleeve, neck_style: details.neck, concept_variation: details.variation || 1,
         measurement_profile_id: details.profileId || null,
-        fabric_id: details.fabric.id, fabric_metres: details.metres, fabric_cost: details.quote.fabricCost,
+        fabric_id: details.fabric.id, fabric_yards: details.yards, fabric_cost: details.quote.fabricCost,
         tailoring_cost: lines[1].amount, embroidery_cost: lines[2].amount, delivery_cost: lines[3].amount,
         quote_total: details.quote.total, deposit_amount: details.deposit, line_items: lines,
         inspiration_photos: insp ? insp.photos.map(ref => photoPath(ref, STYLE)).filter(Boolean) : [],
