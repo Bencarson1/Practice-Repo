@@ -47,7 +47,7 @@ function renderOrdersTab(orderId) {
       <form id="order-form" class="form-grid" onsubmit="return createWalkInOrder(event)">
         <label>Customer name
           <input name="customer" list="customer-list" required placeholder="Type a name">
-          <datalist id="customer-list">${db.customers.map(c => `<option value="${escapeHtml(c.name)}"></option>`).join("")}</datalist>
+          <datalist id="customer-list">${bizCustomers().map(c => `<option value="${escapeHtml(c.name)}"></option>`).join("")}</datalist>
         </label>
         <label>Phone (for new customers)<input name="phone" placeholder="Optional"></label>
         <label>Outfit<select name="outfit" onchange="this.form.yards.value = findOutfit(this.value).yards; showListPrices(this.form)">${OUTFITS.map(o =>
@@ -201,7 +201,7 @@ function renderOrderDetail(orderId) {
     <label>${role.label}
       <select onchange="assignStaff('${order.id}', '${role.key}', this.value)">
         <option value="">— unassigned —</option>
-        ${db.staff.filter(s => s.role === role.key).map(s => `<option value="${s.id}" ${order.assigned_staff[role.key] === s.id ? "selected" : ""}>${escapeHtml(s.name)}</option>`).join("")}
+        ${bizStaff().filter(s => s.role === role.key).map(s => `<option value="${s.id}" ${order.assigned_staff[role.key] === s.id ? "selected" : ""}>${escapeHtml(s.name)}</option>`).join("")}
       </select>
     </label>`).join("");
 

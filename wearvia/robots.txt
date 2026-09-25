@@ -1,0 +1,4 @@
+# Wearvia
+User-agent: *
+Allow: /
+Sitemap: https://bencarson1.github.io/Practice-Repo/wearvia/sitemap.xml

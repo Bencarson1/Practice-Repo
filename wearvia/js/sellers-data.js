@@ -236,7 +236,7 @@ function fabricOrderFor(order) {
     id: "FO-" + order.id.split("-")[1], order_id: order.id, seller_id: fabric ? fabric.supplier_id : order.fabric_supplier_id,
     fabric_id: order.fabric_id, fabric_name: fabric ? fabric.name : "Fabric", yards: order.fabric_yards,
     price_per_yard: fabric ? fabric.price_per_yard : order.fabric_cost / order.fabric_yards, total: order.fabric_cost,
-    customer_id: order.customer_id, deliver_to: `${SHOP_NAME}, ${designer().location}`,
+    customer_id: order.customer_id, deliver_to: `${designerName(order.designer_id)}, ${(designerById(order.designer_id) || { location: "" }).location}`,
     status: "new", created_at: order.created_at, sent_at: null
   };
 }
@@ -388,7 +388,14 @@ function upgradeDataToYards(data) {
 function upgradeData(data) {
   upgradeDataToYards(data);
   if (!data.prices) data.prices = defaultPriceList();
-  applyPriceList(data.prices);
+  // Every tailor has their own price list; the first one was Nebeda Threads'
+  const mainId = (data.designers[0] || {}).id;
+  data.prices.forEach(p => { if (!p.designer_id) p.designer_id = mainId; });
+  // Customers' notes are kept per tailor
+  if (!data.customer_notes) {
+    data.customer_notes = data.customers.filter(c => c.notes).map(c => ({ designer_id: mainId, customer_id: c.id, notes: c.notes }));
+  }
+  if (!data.demo_tailors_added) addDemoTailors(data);
   data.session = data.session || {};
   if (data.session.sellerId === undefined) data.session.sellerId = null;
 

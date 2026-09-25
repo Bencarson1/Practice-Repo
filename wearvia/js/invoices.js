@@ -18,7 +18,7 @@ function renderInvoices(orderId) {
       </div>`;
   }
 
-  const rows = db.invoices.slice().reverse().map(inv => {
+  const rows = bizInvoices().slice().reverse().map(inv => {
     const order = findOrder(inv.order_id);
     if (!order) return "";
     const balance = balanceOwed(order);

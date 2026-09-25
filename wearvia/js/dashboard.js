@@ -7,11 +7,11 @@ let aiQuestion = "Which orders are late?";
 
 function businessTotals() {
   // Only confirmed money counts
-  const orderRevenue = db.payments.filter(isConfirmed).reduce((total, p) => total + p.amount, 0);
-  const shopRevenue = db.rtw_sales.filter(isConfirmed).reduce((total, s) => total + s.price, 0);
+  const orderRevenue = bizPayments().filter(isConfirmed).reduce((total, p) => total + p.amount, 0);
+  const shopRevenue = bizRtwSales().filter(isConfirmed).reduce((total, s) => total + s.price, 0);
   // Estimated profit = order value minus fabric and delivery costs, plus ready-to-wear margin
   const orderProfit = placedOrders().reduce((total, o) => total + o.quote_total - o.fabric_cost - deliveryCostOf(o), 0);
-  const shopProfit = db.rtw_sales.filter(isConfirmed).reduce((total, s) => total + s.price - s.cost, 0);
+  const shopProfit = bizRtwSales().filter(isConfirmed).reduce((total, s) => total + s.price - s.cost, 0);
   const pending = placedOrders().reduce((total, o) => total + Math.max(balanceOwed(o), 0), 0);
   return { revenue: orderRevenue + shopRevenue, profit: orderProfit + shopProfit, pending };
 }
@@ -20,12 +20,14 @@ function renderDashboard() {
   const totals = businessTotals();
   const open = placedOrders().filter(isOpen);
   const late = open.filter(isLate);
-  const lowStock = activeFabrics().filter(f => f.status === "approved" && f.yards_available < LOW_STOCK_YARDS);
-  const waitingFabrics = activeFabrics().filter(f => f.status === "pending");
+  // The fabric marketplace and new tailors are the admin's to look after
+  const lowStock = isAdminUser() ? activeFabrics().filter(f => f.status === "approved" && f.yards_available < LOW_STOCK_YARDS) : [];
+  const waitingFabrics = isAdminUser() ? activeFabrics().filter(f => f.status === "pending") : [];
+  const waitingTailors = isAdminUser() ? db.designers.filter(d => d.admin_status === "pending") : [];
   const awaitingReview = placedOrders().filter(o => o.stage === "delivered" && !o.review_rating);
   const waitingPayments = paymentsAwaiting();
   const waitingQuotes = quoteRequests().filter(o => quoteStatus(o) === "requested");
-  const unreadChats = db.orders.filter(o => unreadCount(o.id, "team") > 0);
+  const unreadChats = scopedOrders().filter(o => unreadCount(o.id, "team") > 0);
 
   const dueSoon = open.slice().sort((a, b) => a.due_date.localeCompare(b.due_date)).slice(0, 6);
   const rows = dueSoon.map(o => {
@@ -37,7 +39,7 @@ function renderDashboard() {
   }).join("");
 
   return `
-    ${bizHeader(`${escapeHtml(SHOP_NAME)} — Business Dashboard`, `Welcome back! Here is how the shop is doing today, ${formatDate(today())}.`)}
+    ${bizHeader(`${escapeHtml(bizDesigner().business_name)} — Business Dashboard`, `Welcome back! Here is how the shop is doing today, ${formatDate(today())}.`)}
 
     <div class="statgrid">
       <div class="stat"><div class="l">Total Orders</div><div class="n">${placedOrders().length}</div><div class="l">${open.length} in progress</div></div>
@@ -46,7 +48,8 @@ function renderDashboard() {
       <div class="stat"><div class="l">Pending Payments</div><div class="n">${money(totals.pending)}</div><div class="l">balances owed</div></div>
     </div>
 
-    ${late.length || lowStock.length || awaitingReview.length || waitingFabrics.length || waitingPayments.length || waitingQuotes.length || unreadChats.length ? `<div class="alerts">
+    ${late.length || lowStock.length || awaitingReview.length || waitingFabrics.length || waitingPayments.length || waitingQuotes.length || unreadChats.length || waitingTailors.length ? `<div class="alerts">
+      ${waitingTailors.length ? `<a class="alert" href="#/biz/tailors">🧵 ${waitingTailors.length} new tailor${waitingTailors.length > 1 ? "s" : ""} waiting for your approval</a>` : ""}
       ${waitingQuotes.length ? `<a class="alert" href="#/biz/quotes">📝 ${waitingQuotes.length} customer${waitingQuotes.length > 1 ? "s" : ""} waiting for a quote</a>` : ""}
       ${unreadChats.length ? `<a class="alert" href="#/biz/${isPlaced(unreadChats[0]) ? "orders" : "quotes"}/${unreadChats[0].id}">💬 New messages on ${unreadChats.map(o => o.id).join(", ")}</a>` : ""}
       ${waitingPayments.length ? `<a class="alert" href="#/biz/payments">💷 ${waitingPayments.length} payment${waitingPayments.length > 1 ? "s" : ""} to confirm</a>` : ""}
@@ -60,8 +63,10 @@ function renderDashboard() {
       <a class="optbtn" href="#/biz/quotes">Quote requests</a>
       <a class="optbtn" href="#/biz/orders">All Orders (live)</a>
       <a class="optbtn" href="#/biz/team">Tailor Team</a>
-      <a class="optbtn" href="#/biz/fabrics">Inventory</a>
+      <a class="optbtn" href="#/biz/profile">My profile</a>
+      ${isAdminUser() ? `<a class="optbtn" href="#/biz/fabrics">Inventory</a>
       <a class="optbtn" href="#/biz/sellers">Fabric Sellers</a>
+      <a class="optbtn" href="#/biz/tailors">Tailors</a>` : ""}
       <a class="optbtn" href="#/biz/customers">Customers</a>
       <a class="optbtn" href="#/biz/weddings">Wedding Order</a>
       <a class="optbtn" href="#/biz/shop">Ready to Wear</a>
@@ -121,7 +126,7 @@ function answerQuestion(question) {
     return `${money(businessTotals().pending)} is owed across ${owing.length} orders: ${owing.map(o => `#${o.id} ${escapeHtml(customerName(o.customer_id))} ${money(balanceOwed(o))}`).join(", ")}.`;
   }
   if (q.includes("staff") || q.includes("tailor") || q.includes("team") || q.includes("busy") || q.includes("workload")) {
-    return db.staff.map(s => {
+    return bizStaff().map(s => {
       const jobs = open.filter(o => { const who = staffForCurrentStep(o); return who && who.id === s.id; });
       return `${escapeHtml(s.name)}: ${jobs.length} job${jobs.length === 1 ? "" : "s"}`;
     }).join(" · ");
@@ -135,8 +140,8 @@ function answerQuestion(question) {
     return `Revenue so far ${money(t.revenue)}, estimated profit ${money(t.profit)}, and ${money(t.pending)} still to collect.`;
   }
   if (q.includes("review") || q.includes("rating")) {
-    const r = designerRating();
-    return `${escapeHtml(SHOP_NAME)} is rated ${r.rating} from ${r.count} reviews.`;
+    const r = designerRating(bizDesignerId());
+    return `${escapeHtml(bizDesigner().business_name)} is rated ${r.rating} from ${r.count} reviews.`;
   }
   return "I can answer questions about late orders, low stock, who owes money, staff workload, what's due this week, revenue and reviews.";
 }

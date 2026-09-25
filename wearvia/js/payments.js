@@ -57,7 +57,7 @@ function renderPayments() {
     </tr>`;
   }).join("");
 
-  const historyRows = db.payments.slice().reverse().map(p => {
+  const historyRows = bizPayments().slice().reverse().map(p => {
     const order = findOrder(p.order_id);
     return `<tr>
       <td>${formatDate(p.date)}</td>

@@ -129,7 +129,7 @@ function screenInspiration() {
     ${cTop("Upload a Style", "outfit")}
     <div class="content">
       ${flowBar("design")}
-      <div class="meta">Add up to ${MAX_STYLE_PHOTOS} photos of the style you want — screenshots from Instagram, TikTok or Pinterest, or pictures from your camera. ${escapeHtml(SHOP_NAME)}'s tailors will copy it.</div>
+      <div class="meta">Add up to ${MAX_STYLE_PHOTOS} photos of the style you want — screenshots from Instagram, TikTok or Pinterest, or pictures from your camera. ${escapeHtml(draftDesigner().business_name)} will copy it.</div>
       <div class="selopt"><span class="fl">Outfit type</span>
         <span><b>${escapeHtml(d.outfit)}</b> <button class="linkish" onclick="go('outfit')">Change</button></span></div>
       <div id="style-slots" class="photo-slots style-slots">${styleSlots()}</div>

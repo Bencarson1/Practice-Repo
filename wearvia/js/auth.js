@@ -69,15 +69,21 @@ const Auth = (() => {
         <p class="auth-switch">New to ${APP_NAME}? <button class="linkish strong" onclick="Auth.show('signUp')">Create an account</button></p>`;
     } else if (screen === "signUp") {
       const seller = accountType === "seller";
+      const tailor = accountType === "designer";
+      const type = (value, label) => `<button type="button" role="radio" aria-checked="${accountType === value}" class="optbtn ${accountType === value ? "sel" : ""}" onclick="Auth.setType('${value}')">${label}</button>`;
       body = `
-        <div class="optbtns two" role="radiogroup" aria-label="Account type">
-          <button type="button" role="radio" aria-checked="${!seller}" class="optbtn ${seller ? "" : "sel"}" onclick="Auth.setType('customer')">I want outfits made</button>
-          <button type="button" role="radio" aria-checked="${seller}" class="optbtn ${seller ? "sel" : ""}" onclick="Auth.setType('seller')">I sell fabric</button>
+        <div class="optbtns three" role="radiogroup" aria-label="Account type">
+          ${type("customer", "I want outfits made")}${type("designer", "I'm a tailor or designer")}${type("seller", "I sell fabric")}
         </div>
         <p class="meta">${seller
-          ? `Fabric sellers put their fabrics on ${APP_NAME} for ${escapeHtml(SHOP_NAME)}'s customers. You'll set up your shop next.`
-          : `Design, order and track outfits from ${escapeHtml(SHOP_NAME)}.`}</p>
+          ? `Fabric sellers put their fabrics on ${APP_NAME} for tailors' customers. You'll set up your shop next.`
+          : tailor
+            ? `Get found by customers near you and run quotes, chats, orders and payments from your own dashboard. New tailors are checked by the ${APP_NAME} team before customers can see them.`
+            : `Find tailors near you, then design, order and track your outfits.`}</p>
         <form class="stack" onsubmit="return Auth.submit(event)">
+          ${tailor ? `${field("Business name", "businessName", "text", 'required maxlength="80" autocomplete="organization"')}
+          <label class="field">Country<select name="country" required>${countryOptions("", "Choose your country")}</select></label>
+          ${field("City or town", "city", "text", 'required maxlength="60" autocomplete="address-level2"')}` : ""}
           ${field("Your name", "name", "text", 'required autocomplete="name" maxlength="80"')}
           ${field("Phone <small>(optional)</small>", "phone", "tel", 'autocomplete="tel" maxlength="20"')}
           ${field("Email", "email", "email", 'required autocomplete="email"')}
@@ -86,7 +92,7 @@ const Auth = (() => {
           <button class="cta" type="submit" ${busy ? "disabled" : ""}>${busy ? "Creating your account…" : "Create account"}</button>
         </form>
         <p class="auth-switch">Already have an account? <button class="linkish strong" onclick="Auth.show('signIn')">Sign in</button></p>
-        <p class="meta auth-staff">Work at ${escapeHtml(SHOP_NAME)}? Ask the owner to add your email under Tailor Team, then create an account here with that email.</p>`;
+        <p class="meta auth-staff">Work for a tailor on ${APP_NAME}? Ask the owner to add your email under Tailor Team, then create an account here with that email.</p>`;
     } else if (screen === "forgot") {
       body = `
         <form class="stack" onsubmit="return Auth.submit(event)">
@@ -107,10 +113,11 @@ const Auth = (() => {
     el.innerHTML = `
       <div class="auth-card">
         <div class="auth-brand">WEARVIA</div>
-        <div class="auth-tag">Bespoke · Ready to Wear · ${escapeHtml(SHOP_NAME)}</div>
+        <div class="auth-tag">Bespoke · Ready to Wear · Tailors near you</div>
         <h1>${title}</h1>
         ${body}
       </div>
+      ${screen === "newPassword" ? "" : `<button type="button" class="btn-outline find-tailors-link" onclick="Auth.browseTailors()">📍 Just looking? Find tailors near me</button>`}
       ${screen === "newPassword" ? "" : demoBox()}`;
     document.title = `${title} · ${APP_NAME}`;
   }
@@ -124,6 +131,18 @@ const Auth = (() => {
       const again = document.querySelector("#auth-view form");
       Object.keys(kept).forEach(k => { again[k].value = kept[k]; });
     }
+  }
+
+  function startSignUp(type) {
+    accountType = type || "customer";
+    show("signUp");
+  }
+
+  // Look at tailors without an account
+  function browseTailors() {
+    const open = () => { hide(); drawChrome(); go("tailors"); };
+    if (db) return open();
+    Cloud.startGuest().then(open);
   }
 
   function setError(text) {
@@ -153,7 +172,14 @@ const Auth = (() => {
     if (screen === "signIn") {
       work = Cloud.signIn(values.email, values.password).then(() => enterApp());
     } else if (screen === "signUp") {
-      work = Cloud.signUp({ email: values.email, password: values.password, name: values.name, phone: values.phone, accountType })
+      if (accountType === "designer" && (!values.businessName || !values.country || !values.city)) {
+        busy = false;
+        setError("Enter your business name, country and city.");
+        if (button) { button.disabled = false; button.textContent = "Create account"; }
+        return false;
+      }
+      work = Cloud.signUp({ email: values.email, password: values.password, name: values.name, phone: values.phone, accountType,
+                            businessName: values.businessName, country: values.country, city: values.city })
         .then(result => {
           if (result.needsConfirmation) {
             message = `Nearly done! We've sent a link to ${values.email}. Open it to confirm your email, then sign in here.`;
@@ -193,7 +219,10 @@ const Auth = (() => {
     hide();
     drawChrome();
     const route = currentRoute();
-    if (!location.hash || location.hash === "#/home" || !Cloud.canOpen(route.area)) go(Cloud.homeRoute(), true);
+    let after = null;
+    try { after = sessionStorage.getItem("wearvia-after-sign-in"); sessionStorage.removeItem("wearvia-after-sign-in"); } catch (e) { /* private browsing */ }
+    if (after) go(after, true);
+    else if (!location.hash || location.hash === "#/home" || !Cloud.canOpen(route.area)) go(Cloud.homeRoute(), true);
     else renderAll();
   }
 
@@ -209,15 +238,18 @@ const Auth = (() => {
       footer.innerHTML = `Demo mode: sample data, saved in this browser only.
         <button class="link-button" onclick="resetSampleData()">Reset to sample data</button> ·
         <button class="link-button" onclick="Cloud.leaveDemo()">Leave demo</button>`;
+    } else if (Cloud.isGuest()) {
+      account.innerHTML = `<button class="chip-button" onclick="Auth.show('signIn')">Sign in</button>`;
+      footer.innerHTML = `${APP_NAME} · Tailors near you. <button class="link-button" onclick="Auth.show('signIn')">Sign in</button> to order.`;
     } else if (Cloud.me) {
       const me = Cloud.me;
-      account.innerHTML = `<span class="who" title="${escapeHtml(me.email)}">${escapeHtml(me.name || me.email)}${me.is_team ? ` · <b>${me.is_owner ? "Owner" : "Team"}</b>` : ""}</span>
+      account.innerHTML = `<span class="who" title="${escapeHtml(me.email)}">${escapeHtml(me.name || me.email)}${me.is_admin ? ` · <b>Admin</b>` : me.is_team ? ` · <b>${me.is_owner ? "Owner" : "Team"}</b>` : ""}</span>
         <button class="chip-button" onclick="Auth.signOut()">Sign out</button>`;
       footer.innerHTML = `Signed in as ${escapeHtml(me.email)}. Your data is saved securely online and shared across your devices.
         <button class="link-button" onclick="Cloud.enterDemo()">Open the demo</button>`;
     } else {
       account.innerHTML = "";
-      footer.innerHTML = `${APP_NAME} · ${escapeHtml(SHOP_NAME)}`;
+      footer.innerHTML = `${APP_NAME} · Bespoke outfits from tailors near you`;
     }
   }
 
@@ -225,5 +257,5 @@ const Auth = (() => {
     Cloud.signOut().catch(problem => toast(problem.message));
   }
 
-  return { show, hide, flash, loading, submit, setType, enterApp, drawChrome, signOut };
+  return { show, hide, flash, loading, submit, setType, startSignUp, browseTailors, enterApp, drawChrome, signOut };
 })();

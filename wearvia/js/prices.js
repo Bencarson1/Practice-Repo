@@ -7,8 +7,9 @@
 // ============================================================
 
 function renderPrices() {
-  const head = bizHeader("Prices", "What customers pay for tailoring, embroidery and delivery. Fabric is priced per yard by each fabric seller.");
-  if (!db.prices || !db.prices.length) {
+  const head = bizHeader(`Prices · ${escapeHtml(bizDesigner().business_name)}`, "Your own price list: what your customers pay for tailoring, embroidery and delivery. Fabric is priced per yard by each fabric seller.");
+  const list = bizPrices();
+  if (!list.length) {
     return `${head}
       <div class="card attention">
         <h2>The price list isn't in the database yet</h2>
@@ -17,9 +18,9 @@ function renderPrices() {
   }
   const priceInput = p => `<input name="price-${p.id}" type="number" inputmode="decimal" min="0" max="100000" step="0.01" required
     value="${p.price}" aria-label="${escapeHtml(p.name)} price in pounds">`;
-  const outfits = db.prices.filter(p => p.kind === "outfit");
-  const embroidery = db.prices.filter(p => p.kind === "embroidery");
-  const delivery = db.prices.filter(p => p.kind === "delivery");
+  const outfits = list.filter(p => p.kind === "outfit");
+  const embroidery = list.filter(p => p.kind === "embroidery");
+  const delivery = list.filter(p => p.kind === "delivery");
 
   return `
     ${head}
@@ -66,7 +67,7 @@ function savePrices(event) {
   const form = event.target;
   const field = name => form.elements.namedItem(name);
   const updates = [];
-  for (const p of db.prices) {
+  for (const p of bizPrices()) {
     const price = Math.round(Number(field("price-" + p.id).value) * 100) / 100;
     if (field("price-" + p.id).value === "" || !(price >= 0)) {
       alert(`Enter a price for ${p.name} (0 or more).`);
@@ -87,7 +88,7 @@ function savePrices(event) {
     return false;
   }
   updates.forEach(u => { u.p.price = u.price; u.p.yards = u.yards; });
-  applyPriceList(db.prices);
+  usePricesOf(bizDesignerId());
   saveData();
   toast(`${updates.length} price${updates.length === 1 ? "" : "s"} saved. New quotes use them straight away.`);
   renderAll();

@@ -1,0 +1,22 @@
+{
+  "name": "Wearvia — tailors near you",
+  "short_name": "Wearvia",
+  "description": "Find tailors near you, then design, order and track bespoke outfits.",
+  "start_url": "./index.html#/home",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0c1220",
+  "theme_color": "#0c1220",
+  "lang": "en-GB",
+  "categories": ["shopping", "lifestyle", "business"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Find tailors near me", "url": "./index.html#/tailors", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "My orders", "url": "./index.html#/orders", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

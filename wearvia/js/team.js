@@ -7,10 +7,10 @@ function renderTeam() {
   const open = placedOrders().filter(isOpen);
 
   const groups = STAFF_ROLES.map(role => {
-    const people = db.staff.filter(s => s.role === role.key).map(person => {
+    const people = bizStaff().filter(s => s.role === role.key).map(person => {
       const jobs = open.filter(o => { const who = staffForCurrentStep(o); return who && who.id === person.id; });
       const assigned = open.filter(o => o.assigned_staff[role.key] === person.id);
-      const others = db.staff.filter(s => s.role === role.key && s.id !== person.id);
+      const others = bizStaff().filter(s => s.role === role.key && s.id !== person.id);
       return `
         <div class="person">
           <div class="row-between">
@@ -102,7 +102,7 @@ function removeTeamLogin(kind, id) {
 function addStaff(event) {
   event.preventDefault();
   const form = event.target;
-  db.staff.push({ id: newId("T", db.staff), designer_id: designer().id, name: form.name.value.trim(), role: form.role.value, phone: form.phone.value.trim() });
+  db.staff.push({ id: newId("T", db.staff), designer_id: bizDesignerId(), name: form.name.value.trim(), role: form.role.value, phone: form.phone.value.trim() });
   saveData();
   renderAll();
   return false;

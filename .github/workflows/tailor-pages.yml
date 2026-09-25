@@ -1,0 +1,74 @@
+# Builds the public tailor pages (for Google) from the approved tailors in
+# Supabase, then publishes the site to GitHub Pages.
+#
+# Runs every day, on every merge into main, and when you press
+# "Run workflow" (Actions → Tailor pages → Run workflow).
+#
+# One-off setting: Settings → Pages → "Build and deployment" → Source:
+# "GitHub Actions". Optional: Settings → Secrets and variables → Actions →
+# Variables → SITE_URL (only if you use your own domain, e.g. https://wearvia.com).
+#
+# Only the PUBLISHABLE key is used (it's already public in wearvia/js/config.js).
+# Never add the secret key here.
+
+name: Tailor pages
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 5 * * *"      # every day at 05:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build the tailor pages from Supabase
+        env:
+          SITE_URL: ${{ vars.SITE_URL || format('https://{0}.github.io/{1}', github.repository_owner, github.event.repository.name) }}
+        run: node scripts/build-tailor-pages.mjs
+
+      - name: Put the site together
+        run: |
+          mkdir -p _site
+          cp -R wearvia _site/wearvia
+          cp wearvia-prototype.html _site/ 2>/dev/null || true
+          # The site's front door goes to the app
+          printf '<!DOCTYPE html><meta charset="utf-8"><title>Wearvia</title><meta http-equiv="refresh" content="0; url=wearvia/"><link rel="canonical" href="wearvia/"><a href="wearvia/">Open Wearvia</a>\n' > _site/index.html
+          # robots.txt only counts at the top of a website (it's used as-is with your own domain)
+          cp wearvia/robots.txt _site/robots.txt
+          cp wearvia/sitemap.xml _site/sitemap.xml
+          rm -rf _site/wearvia/supabase
+          touch _site/.nojekyll
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}wearvia/
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
