@@ -5,15 +5,19 @@
 // It stays open for the whole order: agreeing the yards before the quote,
 // then questions, fittings and updates while the outfit is made.
 //
-//   db.messages:   { id, order_id, sender_kind, sender_name, body, photos, created_at }
+//   db.messages:   { id, order_id, sender_kind, sender_name, body, photos, created_at,
+//                    contact_hidden, original_body }
 //                  sender_kind is "customer", "team" or "system" (Wearvia's own
-//                  notes, e.g. "Your quote is ready")
+//                  notes, e.g. "Your quote is ready"). Phone numbers, emails,
+//                  links and social handles are hidden (contact_hidden); only
+//                  the Wearvia admin gets original_body, for safety.
 //   db.chat_reads: { order_id, side, last_read_at } — when the customer / the
 //                  team last read each chat, for the unread badges
 //
 // Live mode: the order_messages and order_chat_reads tables and the private
 // "chat-photos" bucket (supabase/tailor-quote.sql). The database fills in who
-// sent each message, so nobody can write as someone else.
+// sent each message, so nobody can write as someone else, and hides contact
+// details (supabase/no-leakage.sql) — the demo does the same with no-leakage.js.
 // ============================================================
 
 const CHAT_SHOWN = 40;          // newest messages shown; "Show earlier messages" shows the rest
@@ -63,8 +67,11 @@ function addChatMessage(order, kind, body, photos) {
   if (!db.messages) db.messages = [];
   const customer = findCustomer(order.customer_id);
   const name = kind === "team" ? designerName(order.designer_id) : kind === "system" ? APP_NAME : (customer ? customer.name : "Customer");
+  const text = String(body || "").trim().slice(0, CHAT_TEXT_MAX);
+  const filtered = kind === "system" ? { text, hidden: false } : hideContactDetails(text);
   const message = { id: newId("MSG", db.messages, 3), order_id: order.id, sender_kind: kind, sender_name: name,
-    body: String(body || "").trim().slice(0, CHAT_TEXT_MAX), photos: photos || [], created_at: nowIso() };
+    body: filtered.text, photos: photos || [], created_at: nowIso(), contact_hidden: filtered.hidden };
+  if (filtered.hidden) message.original_body = text;
   db.messages.push(message);
   if (kind !== "system") setChatRead(order.id, kind);
   return message;
@@ -115,6 +122,8 @@ function chatMessageHtml(m, side) {
     ${cls === "system" ? `<div class="chat-who">${escapeHtml(APP_NAME)}</div>` : ""}
     ${photos ? `<div class="chat-photos">${photos}</div>` : ""}
     ${m.body ? `<div class="chat-text">${escapeHtml(m.body)}</div>` : ""}
+    ${m.contact_hidden ? `<div class="chat-hidden-note">🔒 ${escapeHtml(CONTACT_HIDDEN_NOTICE)}</div>` : ""}
+    ${m.contact_hidden && m.original_body && isAdminUser() ? `<details class="chat-original"><summary>Original (only the ${escapeHtml(APP_NAME)} admin sees this)</summary>${escapeHtml(m.original_body)}</details>` : ""}
     <div class="chat-when">${chatTime(m.created_at)}</div>
   </div>`;
 }
@@ -168,6 +177,7 @@ function chatComposerHtml(order, side) {
         aria-label="Message ${escapeHtml(to)}" oninput="chatTyped('${order.id}', this)" onkeydown="chatKey(event, '${order.id}', '${side}')">${escapeHtml(draftMsg.text)}</textarea>
       <button type="submit" class="chat-send" aria-label="Send">Send</button>
     </div>
+    <p class="chat-leak-hint" id="chat-hint-${order.id}" role="status" ${hideContactDetails(draftMsg.text).hidden ? "" : "hidden"}>🔒 ${escapeHtml(CONTACT_HIDDEN_NOTICE)}</p>
   </form>`;
 }
 
@@ -186,6 +196,9 @@ function showEarlierMessages(orderId) {
 
 function chatTyped(orderId, textarea) {
   chatDraftFor(orderId).text = textarea.value;
+  // Phone numbers, emails, links and handles will be hidden: say so before it's sent
+  const hint = document.getElementById("chat-hint-" + orderId);
+  if (hint) hint.hidden = !hideContactDetails(textarea.value).hidden;
   // Grow with the text, up to a few lines
   textarea.style.height = "auto";
   textarea.style.height = Math.min(textarea.scrollHeight, 140) + "px";
@@ -253,6 +266,7 @@ function sendChat(event, orderId, side) {
   if (button) button.disabled = true;
   const sent = Cloud.live ? Cloud.sendMessage(order, text, photos) : Promise.resolve(addChatMessage(order, side, text, photos));
   sent.then(() => {
+    if (hideContactDetails(text).hidden) toast(CONTACT_HIDDEN_NOTICE);
     chatDrafts[orderId] = { text: "", photos: [], adding: 0 };
     chatPinned[orderId] = true;
     if (!Cloud.live) saveData();

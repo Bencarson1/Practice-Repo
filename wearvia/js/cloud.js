@@ -140,7 +140,8 @@ const Cloud = (() => {
       password: details.password,
       options: {
         data: { full_name: details.name, phone: details.phone || "", account_type: details.accountType,
-                business_name: details.businessName || "", country_code: details.country || "", city: details.city || "" },
+                business_name: details.businessName || "", country_code: details.country || "", city: details.city || "",
+                tailor_terms: details.accountType === "designer" && details.acceptTerms ? TAILOR_TERMS_VERSION : "" },
         emailRedirectTo: location.origin + location.pathname
       }
     });
@@ -210,10 +211,14 @@ const Cloud = (() => {
   const STYLE = "style-photos", FABRIC_PHOTOS = "fabric-photos", LOGOS = "seller-logos", CHAT = "chat-photos", DESIGNER_PHOTOS = "designer-photos";
   // The tailor columns everyone may read. The exact address, postcode and map
   // position are private: owners read their own through wearvia_my_designers().
+  // (public_address is always empty now: the address is only shared with a
+  // customer once their deposit is confirmed — wearvia_delivery_details.)
   const DESIGNER_PUBLIC = "id, business_name, slug, location, rating, review_count, speciality_tags, owner_user_id, admin_status, "
     + "profile_image_url, description, starting_price, delivery_estimate, country_code, city, postcode_area, public_address, "
     + "public_latitude, public_longitude, show_exact_address, delivery_available, custom_orders, created_at, updated_at";
-  const CUSTOMER_COLUMNS = "id, auth_user_id, name, email, phone, created_at, added_by_designer_id";
+  // Phone and email aren't readable from the table (supabase/no-leakage.sql):
+  // wearvia_customer_contacts() gives your own, and your walk-in customers'
+  const CUSTOMER_COLUMNS = "id, auth_user_id, name, created_at, added_by_designer_id";
   const PRIVATE_BUCKETS = [STYLE, CHAT];
 
   async function fetchAll(table, order, columns, filter) {
@@ -248,10 +253,17 @@ const Cloud = (() => {
     const rows = {};
     const results = await Promise.all(tables.map(t => fetchAll(t, sortBy[t] || "created_at"))
       .concat([fetchAll("customers", "created_at", CUSTOMER_COLUMNS),
-               state.me && state.me.is_team ? rpcRows("wearvia_my_designers") : Promise.resolve([])]));
+               state.me && state.me.is_team ? rpcRows("wearvia_my_designers") : Promise.resolve([]),
+               rpcRows("wearvia_customer_contacts"),
+               rpcRows("wearvia_delivery_details"),
+               state.me && state.me.is_admin ? fetchAll("hidden_contact_details", "created_at", "source, source_id, original", q => q.eq("source", "chat")) : Promise.resolve([])]));
     tables.forEach((t, i) => { rows[t] = results[i]; });
     rows.customers = results[tables.length];
     rows.my_designers = results[tables.length + 1];
+    const contacts = new Map(results[tables.length + 2].map(c => [c.id, c]));
+    rows.customers.forEach(c => Object.assign(c, { email: (contacts.get(c.id) || {}).email || null, phone: (contacts.get(c.id) || {}).phone || null }));
+    rows.delivery_details = results[tables.length + 3];
+    rows.hidden_originals = results[tables.length + 4];
 
     // Only the tailors this person needs: their own, their orders' tailors,
     // Nebeda Threads, and the one they're ordering from now
@@ -296,6 +308,7 @@ const Cloud = (() => {
       postcode: full ? full.postcode || "" : undefined, address_line: full ? full.address_line || "" : undefined,
       latitude: full ? num(full.latitude) : undefined, longitude: full ? num(full.longitude) : undefined,
       phone: full ? full.phone || "" : undefined, is_mine: !!full,
+      tailor_terms_accepted_at: full ? iso(full.tailor_terms_accepted_at) : undefined,
       portfolio: (portfolio || []).filter(p => p.designer_id === d.id).map(p => ({ id: p.id, image: p.image_url, title: p.title || p.caption || "" }))
     };
   }
@@ -411,7 +424,9 @@ const Cloud = (() => {
       // Empty until supabase/prices.sql has been run; the starting prices are used until then
       prices: r.price_list.map(p => ({ id: p.id, designer_id: p.designer_id, kind: p.kind, name: p.name, price: num(p.price), yards: num(p.yards) })),
 
-      messages: messagesFrom(r.order_messages, numberOf),
+      messages: messagesFrom(r.order_messages, numberOf, r.hidden_originals),
+      delivery_details: (r.delivery_details || []).filter(x => numberOf.has(x.order_id)).map(x => ({
+        order_id: numberOf.get(x.order_id), unlocked: !!x.unlocked, tailor_address: x.tailor_address || "", delivery_address: x.delivery_address || "" })),
       chat_reads: keepLocalReads(readsFrom(r.order_chat_reads, numberOf), previous && previous.chat_reads),
 
       reviews: r.reviews.map(v => ({
@@ -443,10 +458,13 @@ const Cloud = (() => {
 
   // ---- Order chats ----
 
-  function messagesFrom(rows, numberOf) {
+  // originals: only loaded for the Wearvia admin (the database gives nobody else any)
+  function messagesFrom(rows, numberOf, originals) {
+    const original = new Map((originals || []).map(o => [o.source_id, o.original]));
     return rows.filter(m => numberOf.has(m.order_id)).map(m => ({
       id: m.id, order_id: numberOf.get(m.order_id), sender_kind: m.sender_kind, sender_name: m.sender_name || "",
-      body: m.body || "", photos: (m.photos || []).map(p => `sb:${CHAT}/${p}`), created_at: new Date(m.created_at).toISOString()
+      body: m.body || "", photos: (m.photos || []).map(p => `sb:${CHAT}/${p}`), created_at: new Date(m.created_at).toISOString(),
+      contact_hidden: !!m.contact_hidden, original_body: original.get(m.id) || undefined
     }));
   }
 
@@ -476,7 +494,8 @@ const Cloud = (() => {
     if (messages.error || reads.error || !db) return false;
     const numberOf = new Map(db.orders.map(o => [o._uuid, o.id]));
     const before = JSON.stringify([db.messages, db.chat_reads]);
-    db.messages = messagesFrom(messages.data || [], numberOf);
+    const originals = new Map((db.messages || []).filter(m => m.original_body).map(m => [m.id, { source_id: m.id, original: m.original_body }]));
+    db.messages = messagesFrom(messages.data || [], numberOf, Array.from(originals.values()));
     db.chat_reads = keepLocalReads(readsFrom(reads.data || [], numberOf), db.chat_reads);
     return JSON.stringify([db.messages, db.chat_reads]) !== before;
   }
@@ -489,10 +508,18 @@ const Cloud = (() => {
       if (error) throw new Error(friendly(error));
       photoRefs.forEach(ref => state.localPhotos.delete(ref));
       await refreshChat();
+      if (state.me && state.me.is_admin) await loadHiddenOriginals();
       const side = isTeam() ? "team" : "customer";
       if (!db.chat_reads.some(r => r.order_id === order.id && r.side === side)) db.chat_reads.push({ order_id: order.id, side, last_read_at: "" });
       db.chat_reads.find(r => r.order_id === order.id && r.side === side).last_read_at = new Date().toISOString();
     });
+  }
+
+  // The Wearvia admin sees what was hidden, for safety
+  async function loadHiddenOriginals() {
+    const rows = await fetchAll("hidden_contact_details", "created_at", "source, source_id, original", q => q.eq("source", "chat")).catch(() => []);
+    const original = new Map(rows.map(o => [o.source_id, o.original]));
+    (db.messages || []).forEach(m => { if (original.has(m.id)) m.original_body = original.get(m.id); });
   }
 
   function markChatRead(order) {
@@ -939,10 +966,28 @@ const Cloud = (() => {
       p_business_name: details.businessName, p_country_code: details.country || null, p_city: details.city || null, p_phone: details.phone || null
     });
     if (error) throw new Error(friendly(error));
+    if (details.acceptTerms) await acceptTailorTerms(data, true);
     state.teamLogins = null;
     await afterSignIn();
     if (db) db.session.designerId = data;
     return data;
+  }
+
+  // The tailor agrees not to take Wearvia customers off the platform
+  async function acceptTailorTerms(designerId, quiet) {
+    const { error } = await state.client.rpc("wearvia_accept_tailor_terms", { p_designer_id: designerId, p_version: TAILOR_TERMS_VERSION });
+    if (error) throw new Error(friendly(error));
+    if (!quiet) await load();
+  }
+
+  // The customer's delivery address for an order. Both sides see it (with the
+  // tailor's business address) once the deposit is confirmed.
+  function setDeliveryAddress(order, address) {
+    return run(async () => {
+      const { error } = await state.client.rpc("wearvia_set_delivery_address", { p_order_id: order._uuid, p_address: address });
+      if (error) throw new Error(friendly(error));
+      await load();
+    });
   }
 
   // The owner saves their profile. The database works out what the public sees.
@@ -1054,7 +1099,7 @@ const Cloud = (() => {
     requestQuote, sendQuote, acceptQuote, sendMessage, markChatRead, refreshChat,
     uploadPhoto, removePhoto, photoUrl,
     loadTeamLogins, addTeamLogin, removeTeamLogin,
-    registerDesigner, saveDesignerProfile, addPortfolioItem, removePortfolioItem, setDesignerStatus, addSpeciality,
+    registerDesigner, acceptTailorTerms, setDeliveryAddress, saveDesignerProfile, addPortfolioItem, removePortfolioItem, setDesignerStatus, addSpeciality,
     saveCustomerNotes, searchTailors, tailorPage, ensurePrices, loadPublicLists
   };
 })();
