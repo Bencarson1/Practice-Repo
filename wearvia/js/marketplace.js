@@ -105,7 +105,7 @@ function screenMarket() {
 // True when the customer is on step 4 of an order and can pick a fabric now
 function choosingFabricForOrder() {
   const d = db.draft;
-  return !!(d && d.designDone && d.conceptApproved && d.profileId && !d.purchased);
+  return !!(d && d.designDone && d.conceptApproved && d.profileId);
 }
 
 function screenFabricView(fabricId) {
@@ -123,9 +123,8 @@ function screenFabricView(fabricId) {
   if (soldOut) {
     action = `<button class="cta" disabled>Sold out</button>`;
   } else if (inFlow) {
-    action = `<button class="cta" onclick="chooseMarketFabric('${fabric.id}')">${d.fabricId === fabric.id ? "✓ Chosen — continue" : "Choose this fabric"} →</button>`;
-  } else if (d && d.purchased) {
-    action = `<div class="meta">You've already bought fabric for your ${escapeHtml(d.outfit)} order.</div>`;
+    action = `<button class="cta" onclick="chooseMarketFabric('${fabric.id}')">${d.fabricId === fabric.id ? "✓ Chosen — continue" : "Choose this fabric"} →</button>
+      <div class="meta">Your tailor works out how many yards you need with you. Nothing is bought until you accept their quote.</div>`;
   } else {
     action = `<button class="cta" onclick="chooseMarketFabric('${fabric.id}')">Design an outfit in this fabric →</button>`;
   }
@@ -186,9 +185,7 @@ function chooseMarketFabric(fabricId) {
     return;
   }
   const d = draft();
-  if (d.purchased) return;
   d.fabricId = fabricId;
-  d.yards = suggestedYards(d, fabric);
   saveData();
   if (choosingFabricForOrder()) {
     go("fabric");
@@ -198,7 +195,3 @@ function chooseMarketFabric(fabricId) {
   }
 }
 
-// Enough for the outfit, at least the seller's minimum, no more than they have
-function suggestedYards(d, fabric) {
-  return Math.min(Math.max(findOutfit(d.outfit).yards, fabric.min_order_yards), fabric.yards_available);
-}

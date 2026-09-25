@@ -1,19 +1,21 @@
 // ============================================================
-// customer.js — the customer app: design, order, pay, track, review
+// customer.js — the customer app: design, send to the tailor, chat,
+// accept the quote, pay, track, review
 // Follows the order lifecycle in WEARVIA-SPEC.md exactly:
-//   1 outfit & design → 2 AI concept → 3 measurements → 4 fabric →
-//   5 purchase → 6 quotation → 7 deposit → (8–15 production) → 16 review
+//   1 outfit & design → 2 AI concept → 3 measurements → 4 fabric → send to tailor →
+//   5 tailor's quote (the tailor decides the yards in the chat) → 6 accept (fabric bought) →
+//   7 deposit → (8–15 production) → 16 review
 // ============================================================
 
-// The first seven steps happen in the customer app, one screen each
+// Steps 1–4 happen in the customer app, one screen each, ending with "Send to tailor".
+// Nothing is bought and there's no price yet: the tailor agrees the yards with
+// the customer in the order's chat, then sends the quote.
 const FLOW = [
   { screen: "design", label: "Design" },
   { screen: "concept", label: "Concept" },
   { screen: "measurements", label: "Measure" },
   { screen: "fabric", label: "Fabric" },
-  { screen: "fabricPurchase", label: "Buy" },
-  { screen: "quote", label: "Quote" },
-  { screen: "payment", label: "Deposit" }
+  { screen: "send", label: "Send" }
 ];
 
 // What must be done before each screen can open, and where to send the customer if it isn't
@@ -21,13 +23,12 @@ const FLOW_REQUIRES = {
   concept: ["designDone"],
   measurements: ["designDone", "conceptApproved"],
   fabric: ["designDone", "conceptApproved", "profileId"],
-  fabricPurchase: ["designDone", "conceptApproved", "profileId", "purchased"],
-  quote: ["designDone", "conceptApproved", "profileId", "purchased"],
-  payment: ["designDone", "conceptApproved", "profileId", "purchased", "quoteReady"]
+  send: ["designDone", "conceptApproved", "profileId", "fabricId"]
 };
-const FLAG_SCREEN = { designDone: "design", conceptApproved: "concept", profileId: "measurements", purchased: "fabric", quoteReady: "quote" };
+const FLAG_SCREEN = { designDone: "design", conceptApproved: "concept", profileId: "measurements", fabricId: "fabric" };
 
 let balanceMethod = "Card";
+let depositMethod = "Card";
 let reviewStars = 5;
 let flashMessage = "";
 
@@ -35,8 +36,7 @@ function newDraft() {
   return {
     outfit: "Agbada", colour: "#1e2a44", embroidery: "Gold", sleeve: "Wide", neck: "Round",
     variation: 1, designDone: false, conceptApproved: false, profileId: null,
-    fabricId: null, yards: findOutfit("Agbada").yards, purchased: false, quoteReady: false,
-    payMethod: "Card", fabricFilter: "All", inspiration: null
+    fabricId: null, fabricFilter: "All", inspiration: null, tailorNote: ""
   };
 }
 
@@ -68,11 +68,13 @@ function cTop(title, backTo) {
 }
 
 function cNav(active) {
-  const item = (screen, icon, label) =>
-    `<button class="item ${active === screen ? "on" : ""}" onclick="go('${screen}')"><span aria-hidden="true">${icon}</span>${label}</button>`;
+  const customer = currentCustomer();
+  const unread = customer ? unreadTotal(customerOrders(customer.id), "customer") : 0;
+  const item = (screen, icon, label, badge) =>
+    `<button class="item ${active === screen ? "on" : ""}" onclick="go('${screen}')"><span aria-hidden="true">${icon}</span>${label}${badge || ""}</button>`;
   return `<nav class="bottomnav" aria-label="Customer menu">
     ${item("home", "🏠", "Home")}
-    ${item("orders", "📦", "Orders")}
+    ${item("orders", "📦", "Orders", unreadBadge(unread, "in your orders"))}
     <button class="plus" onclick="go('outfit')" aria-label="Start an order">+</button>
     ${item("market", "🧶", "Fabrics")}
     ${item("designers", "🧵", "Shop")}
@@ -95,34 +97,18 @@ function flash() {
 }
 
 // ---- Changing earlier choices undoes later steps ----
-
-// Puts purchased fabric back in stock if the customer changes their mind.
-// (In live mode stock only goes down when the deposit is paid, so there's nothing to put back.)
-function returnDraftFabric() {
-  const d = draft();
-  if (!d.purchased) return;
-  const fabric = findFabric(d.fabricId);
-  if (fabric && !Cloud.live) {
-    fabric.yards_available = Math.round((fabric.yards_available + d.yards) * 10) / 10;
-    toast(`${d.yards} yd of ${fabric.name} returned to stock.`);
-  }
-  d.purchased = false;
-  d.quoteReady = false;
-}
+// (Nothing is bought while choosing, so there's no stock to put back.)
 
 function resetAfterDesign() {
   const d = draft();
-  returnDraftFabric();
   d.conceptApproved = false;
   d.profileId = null;
-  d.quoteReady = false;
 }
 
 function setDesign(key, value) {
   const d = draft();
   if (d[key] === value) return;
   d[key] = value;
-  if (key === "outfit") d.yards = findOutfit(value).yards;
   if (d.conceptApproved) resetAfterDesign();
   saveData();
   renderAll();
@@ -130,7 +116,6 @@ function setDesign(key, value) {
 
 function startOver() {
   if (!confirm("Start a new order? Your current choices will be cleared.")) return;
-  returnDraftFabric();
   clearDraftInspiration();
   db.draft = newDraft();
   saveData();
@@ -326,21 +311,12 @@ function saveFlowMeasurements(event) {
 }
 
 // ---- Screen 6: Fabric marketplace (step 4) ----
-// The photo grid and filters are in marketplace.js
+// The photo grid and filters are in marketplace.js. The customer only
+// chooses the fabric: how many yards they need depends on their size and the
+// style, so the tailor works it out with them after they send the order.
 
 function screenFabric() {
   const d = draft();
-  if (d.purchased) {
-    const fabric = findFabric(d.fabricId);
-    return `
-      ${cTop("Fabric Marketplace", "measurements")}
-      <div class="content">
-        ${flowBar("fabric")}
-        <div class="notice">You've already bought ${d.yards} yd of ${escapeHtml(fabric.name)} for this order.</div>
-        <button class="cta" onclick="go('fabricPurchase')">View purchase →</button>
-        <button class="linkish" onclick="changeFabric()">Change fabric (returns ${d.yards} yd to stock)</button>
-      </div>`;
-  }
   marketMode = "flow";
   let selected = findFabric(d.fabricId);
   let gone = "";
@@ -350,7 +326,6 @@ function screenFabric() {
     selected = null;
   }
   const seller = selected ? findSupplier(selected.supplier_id) : null;
-  const enough = selected && d.yards <= selected.yards_available && d.yards >= selected.min_order_yards;
 
   return `
     ${cTop("Fabric Marketplace", "measurements")}
@@ -366,138 +341,67 @@ function screenFabric() {
             <div><div class="name">${escapeHtml(selected.name)}</div>
               <div class="meta">${escapeHtml(seller ? seller.name : "")} · ${money(selected.price_per_yard)} / yd · ${selected.yards_available} yd left</div></div>
           </div>
-          <div class="qty">
-            <span>Yards</span>
-            <span class="stepper">
-              <button type="button" onclick="changeYards(-0.5)" aria-label="Less">−</button>
-              <b>${d.yards}</b>
-              <button type="button" onclick="changeYards(0.5)" aria-label="More">+</button>
-            </span>
-            <b>${money(fabricCostFor(d.yards, selected.price_per_yard))}</b>
-          </div>
-          ${enough ? "" : `<div class="meta low">Only ${selected.yards_available} yd in stock.</div>`}
-          <button class="cta" onclick="buyFabric()" ${enough ? "" : "disabled"}>Buy Fabric →</button>
+          <div class="meta">Your tailor works out how many yards you need with you. Nothing is bought yet.</div>
+          <button class="cta" onclick="go('send')">Continue with this fabric →</button>
         </div>` : `<div class="pick-bar"><button class="cta" disabled>Tap a fabric to choose it</button></div>`}
     </div>`;
 }
 
-function changeYards(delta) {
+// ---- Send to tailor (end of step 4) ----
+
+function screenSend() {
   const d = draft();
   const fabric = findFabric(d.fabricId);
-  const yards = Math.min(Math.max(d.yards + delta, fabric.min_order_yards), Math.max(fabric.yards_available, fabric.min_order_yards));
-  d.yards = Math.round(yards * 100) / 100;
-  saveData();
-  renderAll();
-}
-
-function changeFabric() {
-  returnDraftFabric();
-  saveData();
-  renderAll();
-}
-
-// Step 5: buying the fabric takes it out of stock straight away
-function buyFabric() {
-  const d = draft();
-  const fabric = findFabric(d.fabricId);
-  if (!fabric || !isBuyable(fabric) || d.yards > fabric.yards_available || d.yards < fabric.min_order_yards) {
-    toast("That fabric isn't available in that amount any more.");
-    renderAll();
-    return;
+  if (!fabric || !isBuyable(fabric)) {
+    d.fabricId = null;
+    return screenFabric();
   }
-  // Live mode: the database takes the fabric out of stock when the deposit is paid
-  if (!Cloud.live) fabric.yards_available = Math.round((fabric.yards_available - d.yards) * 10) / 10;
-  d.purchased = true;
-  d.quoteReady = false;
-  saveData();
-  go("fabricPurchase");
+  const seller = findSupplier(fabric.supplier_id);
+  const profile = findProfile(d.profileId);
+  const photos = hasInspiration(d.inspiration) ? d.inspiration.photos.length : 0;
+  const tailoring = findOutfit(d.outfit).tailoring;
+  const embroidery = embroideryPrice(d.embroidery);
+  return `
+    ${cTop("Send to Tailor", "fabric")}
+    <div class="content">
+      ${flowBar("send")}
+      <div class="order-head">
+        <div class="thumb">${conceptSVG(d, d.variation)}</div>
+        <div>
+          <div class="name">${escapeHtml(d.outfit)} by ${escapeHtml(SHOP_NAME)}</div>
+          <div class="meta">${escapeHtml(colourName(d.colour))} · ${escapeHtml(d.embroidery)} embroidery · ${escapeHtml(d.sleeve)} sleeve · ${escapeHtml(d.neck)} neck</div>
+        </div>
+      </div>
+      <div class="mrow"><span>Style photos</span><span>${photos ? `${photos} attached` : "None"}</span></div>
+      <div class="mrow"><span>Measurements</span><span>${profile ? `Saved (${escapeHtml(profile.label)})` : "Saved"}</span></div>
+      <div class="pick-head">
+        <img src="${fabricCoverUrl(fabric)}" alt="">
+        <div><div class="name">${escapeHtml(fabric.name)}</div>
+          <div class="meta">${money(fabric.price_per_yard)} / yd · ${escapeHtml(seller ? seller.name : "")}</div></div>
+        <button class="linkish" onclick="go('fabric')">Change</button>
+      </div>
+      <div class="send-next">
+        <b>What happens next</b>
+        <ol>
+          <li>${escapeHtml(SHOP_NAME)} looks at your design, photos and measurements.</li>
+          <li>You chat here in the app to agree how many yards of fabric you need.</li>
+          <li>They send your quote: fabric (yards × ${money(fabric.price_per_yard)}) + tailoring ${money(tailoring)} + embroidery ${money(embroidery)} + delivery ${money(DELIVERY_FEE)}.</li>
+          <li>Accept it and pay a ${Math.round(DEPOSIT_RATE * 100)}% deposit. The fabric is only bought then.</li>
+        </ol>
+      </div>
+      <label class="field"><span>Anything to tell the tailor? <small>(optional)</small></span>
+        <textarea id="tailor-note" rows="3" maxlength="${CHAT_TEXT_MAX}" placeholder="e.g. It's for a wedding on 12 June. I'm 6ft 2 and like a loose fit."
+          oninput="draft().tailorNote=this.value;saveData()">${escapeHtml(d.tailorNote || "")}</textarea></label>
+      <button id="send-request" class="cta" onclick="sendToTailor()">Send to Tailor</button>
+      <div class="meta centre">Nothing to pay now.</div>
+    </div>`;
 }
 
-// ---- Screen 7: Fabric purchase confirmation (step 5) ----
-
-function screenFabricPurchase() {
+let sendingRequest = false;
+function sendToTailor() {
+  if (sendingRequest) return;
   const d = draft();
   const fabric = findFabric(d.fabricId);
-  const supplier = findSupplier(fabric.supplier_id);
-  return `
-    ${cTop("Fabric Purchased", "fabric")}
-    <div class="content">
-      ${flowBar("fabricPurchase")}
-      <div class="stat centre">
-        <div class="l">✓ Purchase confirmed</div>
-        <div class="n">${escapeHtml(fabric.name)}</div>
-        <div class="l">from ${escapeHtml(supplier.name)}, ${escapeHtml(supplier.location)}</div>
-      </div>
-      <div class="qline"><span>${d.yards} yards × ${money(fabric.price_per_yard)}</span><span>${money(fabricCostFor(d.yards, fabric.price_per_yard))}</span></div>
-      <div class="mrow"><span>Supplier delivery</span><span>${escapeHtml(supplier.delivery_estimate)} to ${escapeHtml(SHOP_NAME)}</span></div>
-      <div class="meta">${Cloud.live ? `${fabric.yards_available} yd in stock. Your ${d.yards} yd is taken out of stock when you pay your deposit.` : `Remaining stock: ${fabric.yards_available} yd`}</div>
-      <button class="cta" onclick="continueToQuote()">Continue to Quotation →</button>
-    </div>`;
-}
-
-// Step 6: the quotation is generated instantly
-function continueToQuote() {
-  draft().quoteReady = true;
-  saveData();
-  go("quote");
-}
-
-function draftQuote() {
-  const d = draft();
-  return computeQuote(d.outfit, d.embroidery, findFabric(d.fabricId), d.yards);
-}
-
-// ---- Screen 8: Quotation (step 6) ----
-
-function screenQuote() {
-  const quote = draftQuote();
-  const deposit = depositFor(quote.total);
-  return `
-    ${cTop("Quotation", "fabricPurchase")}
-    <div class="content">
-      ${flowBar("quote")}
-      ${quote.lines.map(l => `<div class="qline"><span>${escapeHtml(l.label)}</span><span>${money(l.amount)}</span></div>`).join("")}
-      <div class="qtotal"><span>Total</span><span>${money(quote.total)}</span></div>
-      <div class="meta">Deposit today ${money(deposit)} · balance ${money(quote.total - deposit)} after quality control.</div>
-      <button class="cta" onclick="go('payment')">Proceed to Payment →</button>
-    </div>`;
-}
-
-// ---- Screen 9: Payment (step 7) ----
-
-function screenPayment() {
-  const d = draft();
-  const quote = draftQuote();
-  const deposit = depositFor(quote.total);
-  return `
-    ${cTop("Payment", "quote")}
-    <div class="content">
-      ${flowBar("payment")}
-      <div class="qline"><span>Order Total</span><span>${money(quote.total)}</span></div>
-      <div class="qline"><span>Deposit Required (${Math.round(DEPOSIT_RATE * 100)}%)</span><span>${money(deposit)}</span></div>
-      <div class="qline"><span>Balance (after quality control)</span><span>${money(quote.total - deposit)}</span></div>
-      <div class="selopt"><span class="fl">Method</span>
-        <span class="optbtns">${["Card", "Apple Pay", "Bank transfer"].map(m =>
-          `<button class="optbtn ${d.payMethod === m ? "sel" : ""}" onclick="setPayMethod('${m}')">${m}</button>`).join("")}</span>
-      </div>
-      <div class="meta">Demo checkout — no real money is taken. Your deposit shows as <b>awaiting confirmation</b> until ${escapeHtml(SHOP_NAME)} confirms it. Stripe connects here in the full version.</div>
-      <button id="pay-deposit" class="cta" onclick="payDeposit()">Pay ${money(deposit)} Deposit</button>
-    </div>`;
-}
-
-function setPayMethod(method) {
-  draft().payMethod = method;
-  saveData();
-  renderAll();
-}
-
-// Step 7 → 8: the deposit creates the order and a tailor is assigned.
-// The deposit waits for Nebeda Threads to confirm it before production starts.
-let placingOrder = false;
-function payDeposit() {
-  if (placingOrder) return;
-  const d = draft();
-  const quote = draftQuote();
   // The order belongs to whoever the measurements were saved for
   const owner = db.customers.find(c => c.measurement_profiles.some(p => p.id === d.profileId));
   if (!owner) {
@@ -506,32 +410,170 @@ function payDeposit() {
     go("measurements");
     return;
   }
-  placingOrder = true;
-  const button = document.getElementById("pay-deposit");
-  if (button) { button.disabled = true; button.textContent = "Placing your order…"; }
-  const placed = createPaidOrder({
+  if (!fabric || !isBuyable(fabric)) {
+    toast("That fabric has just sold out. Please choose another.");
+    d.fabricId = null;
+    go("fabric");
+    return;
+  }
+  const note = document.getElementById("tailor-note");
+  if (note) d.tailorNote = note.value;
+  sendingRequest = true;
+  const button = document.getElementById("send-request");
+  if (button) { button.disabled = true; button.textContent = "Sending…"; }
+  const sent = requestQuote({
     customerId: owner.id,
     outfit: d.outfit, colour: d.colour, embroidery: d.embroidery, sleeve: d.sleeve, neck: d.neck,
-    variation: d.variation, profileId: d.profileId,
-    fabric: findFabric(d.fabricId), yards: d.yards, quote,
-    deposit: depositFor(quote.total), method: d.payMethod,
+    variation: d.variation, profileId: d.profileId, fabric,
     inspiration: hasInspiration(d.inspiration)
       ? { photos: d.inspiration.photos.slice(), link: cleanStyleLink(d.inspiration.link) || "", note: d.inspiration.note || "" }
       : null,
-    confirmed: false
+    note: (d.tailorNote || "").trim()
   });
-  Promise.resolve(placed)
+  Promise.resolve(sent)
     .then(order => {
+      db.session.customerId = owner.id;
       db.draft = null;
       saveData();
-      flashMessage = `Thank you! Order ${order.id} is with ${SHOP_NAME}. Your deposit is awaiting confirmation — we'll start as soon as it's confirmed.`;
+      flashMessage = `Sent! ${SHOP_NAME} will chat with you here to agree the yards, then send your quote.`;
       go("tracking/" + order.id);
     })
     .catch(error => {
-      toast(error.message || "Couldn't place the order. Please try again.");
+      toast(error.message || "Couldn't send your order. Please try again.");
       renderAll();
     })
-    .finally(() => { placingOrder = false; });
+    .finally(() => { sendingRequest = false; });
+}
+
+// ---- Screen 8: the tailor's quote (steps 5 and 6) ----
+
+function quoteLinesHtml(order) {
+  const deposit = order.deposit_amount;
+  return `${order.line_items.map(l => `<div class="qline"><span>${escapeHtml(l.label)}</span><span>${money(l.amount)}</span></div>`).join("")}
+    <div class="qtotal"><span>Total</span><span>${money(order.quote_total)}</span></div>
+    <div class="meta">Deposit ${money(deposit)} (${Math.round(DEPOSIT_RATE * 100)}%) · balance ${money(order.quote_total - deposit)} after quality control.</div>`;
+}
+
+function chatButton(order, primary) {
+  const unread = unreadCount(order.id, "customer");
+  return `<button class="${primary ? "cta" : "btn-outline"} chat-open" onclick="go('chat/${order.id}')">💬 Chat with ${escapeHtml(SHOP_NAME)}${unread ? ` <span class="chat-badge">${unread} new</span>` : ""}</button>`;
+}
+
+// What the customer can do now on an order that's still a request or a quote
+function quoteBlock(order) {
+  const status = quoteStatus(order);
+  if (status === "requested") {
+    return `<div class="quote-card waiting">
+      <b>${escapeHtml(QUOTE_STATUS_LABELS.requested)}</b>
+      ${order.fabric_problem ? `<div class="notice warn">${escapeHtml(order.fabric_problem)}. ${escapeHtml(SHOP_NAME)} will suggest another fabric in the chat.</div>` : ""}
+      <div class="meta">${escapeHtml(SHOP_NAME)} will chat with you to agree how many yards of fabric you need, then send your quote here. Nothing is bought or charged until you accept it.</div>
+      ${chatButton(order, true)}
+    </div>`;
+  }
+  if (status === "quoted") {
+    return `<div class="quote-card">
+      <b>Your quote from ${escapeHtml(SHOP_NAME)}</b>
+      ${quoteLinesHtml(order)}
+      <button id="accept-quote" class="cta" onclick="acceptQuoteFromApp('${order.id}')">Accept quote</button>
+      <button class="btn-outline" onclick="go('chat/${order.id}')">Ask a question</button>
+      <div class="meta">When you accept, the fabric is bought for your outfit and you pay the ${Math.round(DEPOSIT_RATE * 100)}% deposit.</div>
+    </div>`;
+  }
+  return "";
+}
+
+let acceptingQuote = false;
+function acceptQuoteFromApp(orderId) {
+  const order = findOrder(orderId);
+  if (!order || acceptingQuote) return;
+  if (!confirm(`Accept the quote of ${money(order.quote_total)}? The fabric is bought for your outfit and you'll pay a deposit of ${money(order.deposit_amount)}.`)) return;
+  acceptingQuote = true;
+  const button = document.getElementById("accept-quote");
+  if (button) { button.disabled = true; button.textContent = "Accepting…"; }
+  let result;
+  try {
+    result = acceptQuote(order);
+  } catch (error) {
+    result = Promise.reject(error);
+  }
+  Promise.resolve(result)
+    .then(outcome => {
+      if (!Cloud.live) saveData();
+      if (outcome && outcome.ok) {
+        flashMessage = "Quote accepted — your fabric is bought. Now pay your deposit and we'll start making your outfit.";
+        go("pay/" + orderId);
+      } else {
+        flashMessage = (outcome && outcome.message) || "That quote can't be accepted any more.";
+        renderAll();
+      }
+    })
+    .catch(error => {
+      toast(error.message || "Couldn't accept the quote. Please try again.");
+      renderAll();
+    })
+    .finally(() => { acceptingQuote = false; });
+}
+
+// ---- Screen 9: Payment (step 7) ----
+
+function screenPay(orderId) {
+  const order = findOrder(orderId);
+  if (!order) return screenNotFound();
+  if (!isPlaced(order) || depositStarted(order)) return screenTracking(orderId);
+  const deposit = order.deposit_amount;
+  return `
+    ${cTop("Pay Deposit", "tracking/" + order.id)}
+    <div class="content">
+      ${flash()}
+      <div class="qline"><span>Order Total</span><span>${money(order.quote_total)}</span></div>
+      <div class="qline"><span>Deposit Required (${Math.round(DEPOSIT_RATE * 100)}%)</span><span>${money(deposit)}</span></div>
+      <div class="qline"><span>Balance (after quality control)</span><span>${money(order.quote_total - deposit)}</span></div>
+      <div class="selopt"><span class="fl">Method</span>
+        <span class="optbtns">${["Card", "Apple Pay", "Bank transfer"].map(m =>
+          `<button class="optbtn ${depositMethod === m ? "sel" : ""}" onclick="depositMethod='${m}';renderAll()">${m}</button>`).join("")}</span>
+      </div>
+      <div class="meta">Demo checkout — no real money is taken. Your deposit shows as <b>awaiting confirmation</b> until ${escapeHtml(SHOP_NAME)} confirms it. Stripe connects here in the full version.</div>
+      <button id="pay-deposit" class="cta" onclick="payDeposit('${order.id}')">Pay ${money(deposit)} Deposit</button>
+    </div>`;
+}
+
+// Step 7: the deposit waits for Nebeda Threads to confirm it before production starts
+function payDeposit(orderId) {
+  const order = findOrder(orderId);
+  if (!order || !isPlaced(order) || depositStarted(order)) return;
+  db.payments.push({
+    id: nextPaymentId(), order_id: order.id, amount: order.deposit_amount, method: depositMethod, kind: "Deposit",
+    date: today(), status: "awaiting_confirmation"
+  });
+  refreshOrderPayments(order);
+  saveData();
+  flashMessage = `Thank you! Your deposit of ${money(order.deposit_amount)} is awaiting confirmation — we'll start as soon as it's confirmed.`;
+  go("tracking/" + order.id);
+}
+
+// ---- Chat with Nebeda Threads (every order) ----
+
+function screenChat(orderId) {
+  const order = findOrder(orderId);
+  if (!order) return screenNotFound();
+  const profile = findProfile(order.measurement_profile_id);
+  const fabric = findFabric(order.fabric_id);
+  const status = quoteStatus(order);
+  return `
+    ${cTop("Chat · " + order.id, "tracking/" + order.id)}
+    <div class="content chat-content" data-chat-scroll="${order.id}" onscroll="chatScrolled(this)">
+      <details class="chat-brief">
+        <summary>Your order: ${escapeHtml(order.outfit_type)}${hasInspiration(order.inspiration) ? " · style photos" : ""} · measurements</summary>
+        ${inspirationBlock(order.id, order.inspiration)}
+        <div class="meta">${escapeHtml(colourName(order.colour))} · ${escapeHtml(order.embroidery)} embroidery · ${escapeHtml(order.sleeve_style)} sleeve · ${escapeHtml(order.neck_style)} neck</div>
+        ${fabric ? `<div class="meta">Fabric: <b>${escapeHtml(fabric.name)}</b> · ${money(fabric.price_per_yard)} / yd${isPlaced(order) || status === "quoted" ? ` · ${order.fabric_yards} yd` : ""}</div>` : ""}
+        ${profile ? `<div class="chat-measure">${MEASUREMENT_FIELDS.filter(f => profile[f.key] != null).map(f => `<span>${f.label} <b>${profile[f.key]}"</b></span>`).join("")}</div>` : ""}
+      </details>
+      ${status === "quoted" ? `<div class="chat-quote-bar"><span>Quote: <b>${money(order.quote_total)}</b> · deposit ${money(order.deposit_amount)}</span>
+        <button class="optbtn sel" onclick="go('tracking/${order.id}')">View &amp; accept</button></div>` : ""}
+      ${chatLogHtml(order, "customer", false)}
+    </div>
+    ${chatComposerHtml(order, "customer")}`;
 }
 
 // ---- My orders ----
@@ -546,7 +588,8 @@ function screenOrders() {
       ${d && d.designDone ? `<button class="selopt" onclick="go('${FLOW.slice().reverse().find(f => !flowRedirect(f.screen)).screen}')">
         <span><b>${escapeHtml(d.outfit)}</b> · not placed yet<br><span class="fl">Continue where you left off</span></span><span>›</span></button>` : ""}
       ${orders.map(o => `<button class="selopt" onclick="go('tracking/${o.id}')">
-        <span><b>${escapeHtml(o.outfit_type)}</b> · ${o.id}<br><span class="fl">${escapeHtml(currentStepLabel(o) === "Complete" ? "Complete" : "Now: " + currentStepLabel(o))}</span></span><span>›</span></button>`).join("")}
+        <span><b>${escapeHtml(o.outfit_type)}</b> · ${o.id}<br><span class="fl">${escapeHtml(currentStepLabel(o) === "Complete" ? "Complete" : "Now: " + currentStepLabel(o))}</span></span>
+        <span>${unreadBadge(unreadCount(o.id, "customer"))} ›</span></button>`).join("")}
       ${!orders.length && !(d && d.designDone) ? `<div class="empty">${customer ? "No orders yet." : "Your orders appear here once you place one."}</div>
         <button class="cta" onclick="go('outfit')">Start an Order</button>` : ""}
     </div>
@@ -562,7 +605,8 @@ function lifecycleList(order) {
     const state = i < done ? "done" : i === done ? "now" : "";
     let extra = "";
     if (i === done && staff) extra = ` <span class="fl">· ${escapeHtml(staff.name)}</span>`;
-    if (i === done && depositAwaiting(order)) extra = ` <span class="fl awaiting">· awaiting confirmation by ${escapeHtml(SHOP_NAME)}</span>`;
+    if (i === done && isPlaced(order) && depositAwaiting(order)) extra = ` <span class="fl awaiting">· ${depositStarted(order) ? `awaiting confirmation by ${escapeHtml(SHOP_NAME)}` : "waiting for your deposit"}</span>`;
+    if (i === done && !isPlaced(order)) extra = ` <span class="fl awaiting">· ${escapeHtml(currentStepLabel(order).toLowerCase())}</span>`;
     if (i === done && label === "Delivery" && findDelivery(order.id)) extra = ` <span class="fl">· ${escapeHtml(findDelivery(order.id).status)}</span>`;
     return `<li><span class="tdot ${state}"></span><span class="${state}-t">${i + 1}. ${label}</span>${extra}</li>`;
   }).join("")}</ul>`;
@@ -576,8 +620,13 @@ function screenTracking(orderId) {
   const due = Math.round((balance - awaiting) * 100) / 100;
   const delivery = findDelivery(order.id);
   const qcPassed = stageIndex(order) >= STAGES.findIndex(s => s.key === "quality_control") && !depositAwaiting(order);
+  const placed = isPlaced(order);
   let action = "";
-  if (order.stage === "delivered" && !order.review_rating) {
+  if (!placed) {
+    action = quoteBlock(order);
+  } else if (!depositStarted(order)) {
+    action = `<button class="cta" onclick="go('pay/${order.id}')">Pay ${money(order.deposit_amount)} Deposit →</button>`;
+  } else if (order.stage === "delivered" && !order.review_rating) {
     action = `<button class="cta" onclick="go('review/${order.id}')">Leave a Review →</button>`;
   } else if (due > 0 && qcPassed) {
     action = `
@@ -593,18 +642,22 @@ function screenTracking(orderId) {
         <div class="thumb">${conceptSVG({ outfit: order.outfit_type, colour: order.colour, embroidery: order.embroidery, sleeve: order.sleeve_style, neck: order.neck_style }, order.concept_variation)}</div>
         <div>
           <div class="name">${escapeHtml(order.outfit_type)} by ${escapeHtml(SHOP_NAME)}</div>
+          ${placed ? `
           <div class="meta">Total ${money(order.quote_total)} · Paid ${money(amountPaid(order.id))}</div>
           ${awaiting > 0 ? `<div class="meta awaiting">${money(awaiting)} awaiting confirmation by ${escapeHtml(SHOP_NAME)}</div>` : ""}
           <div class="meta">${due > 0 ? `Balance ${money(due)}${qcPassed ? " — due now" : " after quality control"}` : balance > 0 ? "Nothing more to pay right now" : "Paid in full"}</div>
-          <div class="meta">Due ${formatDate(order.due_date)}</div>
+          <div class="meta">Due ${formatDate(order.due_date)}</div>` : `
+          <div class="meta">Sent to the tailor ${formatDate(order.created_at)}</div>
+          <div class="meta">Now: ${escapeHtml(currentStepLabel(order))}</div>`}
         </div>
       </div>
       ${action}
+      ${placed || quoteStatus(order) === "quoted" ? chatButton(order, false) : ""}
       ${inspirationBlock(order.id, order.inspiration)}
       ${lifecycleList(order)}
       ${order.review_rating ? `<div class="meta">Your review: ${"★".repeat(order.review_rating)} ${escapeHtml(order.review_text)}</div>` : ""}
       <div class="optbtns">
-        <button class="optbtn" onclick="go('invoice/${order.id}')">Invoice</button>
+        ${placed ? `<button class="optbtn" onclick="go('invoice/${order.id}')">Invoice</button>` : ""}
         ${delivery ? `<button class="optbtn" onclick="go('delivery/${order.id}')">Track delivery</button>` : ""}
       </div>
       <div class="meta">${escapeHtml(SHOP_NAME)} updates each stage as your outfit is made.</div>
@@ -716,6 +769,7 @@ function invoiceBody(order) {
 function screenInvoice(orderId) {
   const order = findOrder(orderId);
   if (!order) return screenNotFound();
+  if (!isPlaced(order)) return screenTracking(orderId);
   return `
     ${cTop("Invoice #" + order.id, "tracking/" + orderId)}
     <div class="content">
@@ -897,9 +951,9 @@ const CUSTOMER_SCREENS = {
   fabric: screenFabric,
   market: screenMarket,
   fabricView: screenFabricView,
-  fabricPurchase: screenFabricPurchase,
-  quote: screenQuote,
-  payment: screenPayment,
+  send: screenSend,
+  pay: screenPay,
+  chat: screenChat,
   orders: screenOrders,
   tracking: screenTracking,
   delivery: screenDelivery,
@@ -922,4 +976,6 @@ function renderCustomer(screen, id) {
   const el = document.getElementById("customer-app");
   el.innerHTML = draw(id);
   el.classList.toggle("is-hero", screen === "home");
+  el.classList.toggle("is-chat", screen === "chat");
+  afterChatRender();
 }

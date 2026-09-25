@@ -4,7 +4,7 @@
 // ============================================================
 
 function renderDeliveries() {
-  const ready = db.orders.filter(o => o.stage === "balance_paid" && !findDelivery(o.id));
+  const ready = placedOrders().filter(o => o.stage === "balance_paid" && !findDelivery(o.id));
   const readyRows = ready.map(o => `<tr>
     <td><a href="#/biz/orders/${o.id}">${o.id}</a></td>
     <td>${escapeHtml(customerName(o.customer_id))}</td>

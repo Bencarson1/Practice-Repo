@@ -10,15 +10,17 @@ function renderOrdersTab(orderId) {
   if (orderId) return renderOrderDetail(orderId);
 
   const filters = ["All", "In progress", "Late", "Delivered"];
-  const shown = db.orders.slice().reverse().filter(o =>
+  const waiting = quoteRequests();
+  const shown = placedOrders().slice().reverse().filter(o =>
     orderFilter === "All" || (orderFilter === "In progress" && isOpen(o)) ||
     (orderFilter === "Late" && isLate(o)) || (orderFilter === "Delivered" && !isOpen(o)));
 
   const rows = shown.map(o => {
     const fabric = findFabric(o.fabric_id);
     const balance = balanceOwed(o);
+    const unread = unreadCount(o.id, "team");
     return `<tr>
-      <td><a href="#/biz/orders/${o.id}">${o.id}</a></td>
+      <td><a href="#/biz/orders/${o.id}">${o.id}</a>${unread ? ` <span title="New messages from the customer">💬${unreadBadge(unread)}</span>` : ""}</td>
       <td>${escapeHtml(customerName(o.customer_id))}</td>
       <td>${escapeHtml(o.outfit_type)}${hasInspiration(o.inspiration) ? ` <span title="Customer uploaded style photos" aria-label="has style photos">📷</span>` : ""}</td>
       <td>${escapeHtml(fabric ? fabric.name : "—")} (${o.fabric_yards} yd)</td>
@@ -37,10 +39,11 @@ function renderOrdersTab(orderId) {
 
   return `
     ${bizHeader("All Orders — Live", "Every order across every customer, with the step it's on now.")}
+    ${waiting.length ? `<a class="alert quote-alert" href="#/biz/quotes">📝 ${waiting.length} quote request${waiting.length === 1 ? "" : "s"} — customers waiting for you or deciding on a quote →</a>` : ""}
 
     <div class="card">
       <h2>New walk-in order</h2>
-      <p class="hint">For orders taken in the shop or by phone. Online customers order through the customer app. The price is quoted the same way (fabric + tailoring + embroidery + delivery) and the order starts once a deposit is paid. Leave the tailoring, embroidery and delivery prices blank to use the <a href="#/biz/prices">price list</a>, or type your own price for this order.</p>
+      <p class="hint">For orders taken in the shop or by phone: you enter the yards directly. (Online customers send their order to you as a <a href="#/biz/quotes">quote request</a> instead, and you agree the yards with them in the chat.) The price is worked out the same way (fabric + tailoring + embroidery + delivery) and the order starts once a deposit is paid. Leave the tailoring, embroidery and delivery prices blank to use the <a href="#/biz/prices">price list</a>, or type your own price for this order.</p>
       <form id="order-form" class="form-grid" onsubmit="return createWalkInOrder(event)">
         <label>Customer name
           <input name="customer" list="customer-list" required placeholder="Type a name">
@@ -136,14 +139,18 @@ function showListPrices(form) {
 function deleteOrder(orderId) {
   if (!confirm(`Delete order ${orderId} and its payments? Its fabric goes back into stock.`)) return;
   const order = findOrder(orderId);
+  if (!isPlaced(order) && !confirm(`${orderId} is still a quote request, so no fabric was bought. Delete it and its chat?`)) return;
   if (Cloud.live) {
     // The database puts the fabric back and tidies up the order's records
     Cloud.deleteOrder(order).then(() => { toast(`Order ${orderId} deleted.`); go("biz/orders"); }, error => alert(error.message));
     return;
   }
   const fabric = findFabric(order.fabric_id);
-  if (fabric) fabric.yards_available = Math.round((fabric.yards_available + order.fabric_yards) * 10) / 10;
+  // Only an accepted order took fabric out of stock
+  if (fabric && isPlaced(order)) fabric.yards_available = Math.round((fabric.yards_available + order.fabric_yards) * 100) / 100;
   if (order.inspiration) order.inspiration.photos.forEach(ref => PhotoStore.remove(ref));
+  db.messages = (db.messages || []).filter(m => m.order_id !== orderId);
+  db.chat_reads = (db.chat_reads || []).filter(r => r.order_id !== orderId);
   db.orders = db.orders.filter(o => o.id !== orderId);
   db.payments = db.payments.filter(p => p.order_id !== orderId);
   db.invoices = db.invoices.filter(i => i.order_id !== orderId);
@@ -151,7 +158,7 @@ function deleteOrder(orderId) {
   db.wedding_orders.forEach(w => w.members.forEach(m => { if (m.order_id === orderId) m.order_id = ""; }));
   cancelFabricOrder(orderId); // the fabric seller sees it as cancelled
   saveData();
-  go("biz/orders");
+  go(isPlaced(order) ? "biz/orders" : "biz/quotes");
 }
 
 // ---- One order, in full ----
@@ -159,12 +166,12 @@ function deleteOrder(orderId) {
 function renderOrderDetail(orderId) {
   const order = findOrder(orderId);
   if (!order) return `${bizHeader("Order not found")}<p><a href="#/biz/orders">← All orders</a></p>`;
+  if (!isPlaced(order)) return renderQuoteDetail(orderId); // still a quote request
 
   const customer = findCustomer(order.customer_id);
   const fabric = findFabric(order.fabric_id);
   const supplier = findSupplier(order.fabric_supplier_id);
   const fabricOrderRow = db.fabric_orders.find(o => o.order_id === order.id);
-  const profile = findProfile(order.measurement_profile_id);
   const delivery = findDelivery(order.id);
   const balance = balanceOwed(order);
   const index = stageIndex(order);
@@ -172,7 +179,9 @@ function renderOrderDetail(orderId) {
 
   // What the "next" button does depends on the step
   let nextAction = "";
-  if (depositAwaiting(order)) {
+  if (depositAwaiting(order) && !depositStarted(order)) {
+    nextAction = `<span class="owed">Waiting for the customer to pay the deposit of ${money(order.deposit_amount)}.</span> You can record it below if they paid in the shop.`;
+  } else if (depositAwaiting(order)) {
     nextAction = `<span class="owed">Deposit awaiting confirmation.</span> Confirm it under Payments below to start production.`;
   } else if (!next) {
     nextAction = `<span class="paid">✓ Delivered${order.review_rating ? " and reviewed" : " — waiting for the customer's review"}</span>`;
@@ -206,6 +215,21 @@ function renderOrderDetail(orderId) {
     ${styleBriefCard(order)}
 
     <div class="two-col">
+      <div class="card chat-card">
+        <h2>Chat with ${escapeHtml(customer ? customer.name.split(" ")[0] : "the customer")} <small class="muted">questions, fittings, updates</small></h2>
+        ${chatPanel(order, "team")}
+      </div>
+      <div class="stack">
+        ${designCard(order, `
+          <div class="kv"><span>Fabric</span><b>${escapeHtml(fabric ? fabric.name : "—")}, ${order.fabric_yards} yd</b></div>
+          <div class="kv"><span>Supplier</span><b>${escapeHtml(supplier ? supplier.name : "—")}</b></div>
+          ${fabricOrderRow ? `<div class="kv"><span>Fabric from seller</span><b>${fabricOrderRow.status === "sent" ? "Sent " + formatDate(fabricOrderRow.sent_at) : fabricOrderRow.status === "new" ? "Not sent yet" : "Cancelled"}</b></div>` : ""}
+          ${order.quoted_at ? `<div class="kv"><span>Quote</span><b>Accepted ${formatDate(order.accepted_at)}</b></div>` : ""}`)}
+        ${measurementsCard(order)}
+      </div>
+    </div>
+
+    <div class="two-col">
       <div class="card">
         <h2>Progress — step ${Math.min(stepsDone(order) + 1, LIFECYCLE.length)} of ${LIFECYCLE.length}</h2>
         ${lifecycleList(order)}
@@ -214,51 +238,25 @@ function renderOrderDetail(orderId) {
           ${nextAction}
         </div>
       </div>
-
       <div class="stack">
         <div class="card">
-          <h2>Design</h2>
-          <div class="design-row">
-            <div class="thumb big">${conceptSVG({ outfit: order.outfit_type, colour: order.colour, embroidery: order.embroidery, sleeve: order.sleeve_style, neck: order.neck_style }, order.concept_variation)}</div>
-            <div>
-              <div class="kv"><span>Outfit</span><b>${escapeHtml(order.outfit_type)}</b></div>
-              ${hasInspiration(order.inspiration) ? `<div class="kv"><span>Style</span><b>Copy the customer's photos ↑</b></div>` : ""}
-              <div class="kv"><span>Colour</span><b>${escapeHtml(colourName(order.colour))}</b></div>
-              <div class="kv"><span>Embroidery</span><b>${escapeHtml(order.embroidery)}</b></div>
-              <div class="kv"><span>Sleeve</span><b>${escapeHtml(order.sleeve_style)}</b></div>
-              <div class="kv"><span>Neck</span><b>${escapeHtml(order.neck_style)}</b></div>
-              <div class="kv"><span>Fabric</span><b>${escapeHtml(fabric ? fabric.name : "—")}, ${order.fabric_yards} yd</b></div>
-              <div class="kv"><span>Supplier</span><b>${escapeHtml(supplier ? supplier.name : "—")}</b></div>
-              ${fabricOrderRow ? `<div class="kv"><span>Fabric from seller</span><b>${fabricOrderRow.status === "sent" ? "Sent " + formatDate(fabricOrderRow.sent_at) : fabricOrderRow.status === "new" ? "Not sent yet" : "Cancelled"}</b></div>` : ""}
-            </div>
-          </div>
+          <h2>Payments <span class="total">${balance > 0 ? `Balance ${money(balance)}` : "Paid in full"}</span></h2>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Date</th><th>Type</th><th>Method</th><th>Amount</th><th>Status</th></tr></thead>
+            <tbody>${payments || "<tr><td colspan='5' class='empty'>No payments yet — the customer pays the deposit in the app.</td></tr>"}</tbody>
+          </table></div>
+          ${balance > 0 ? `<form class="inline-form" onsubmit="return payFromDetail(event, '${order.id}')">
+            <input name="amount" type="number" min="0.01" max="${balance}" step="0.01" value="${balance}" aria-label="Amount">
+            <select name="method">${PAYMENT_METHODS.map(m => `<option>${m}</option>`).join("")}</select>
+            <button type="submit">Record payment</button>
+          </form>` : ""}
+          <p><a href="#/biz/invoices/${order.id}">View invoice →</a>${delivery ? ` · Tracking ${escapeHtml(delivery.courier)} ${escapeHtml(delivery.tracking_number)}` : ""}</p>
+          ${order.review_rating ? `<p class="review"><span class="gold">${"★".repeat(order.review_rating)}</span> ${escapeHtml(order.review_text)}</p>` : ""}
         </div>
         <div class="card">
-          <h2>Measurements ${profile ? `<small class="muted">${escapeHtml(profile.label)} profile</small>` : ""}</h2>
-          ${profile ? `<div class="measure-list">${MEASUREMENT_FIELDS.map(f => `<div><span>${f.label}</span><strong>${profile[f.key] != null ? profile[f.key] + '"' : "—"}</strong></div>`).join("")}</div>`
-            : `<p class="empty">No measurements yet. <a href="#/biz/measurements">Add them</a>.</p>`}
+          <h2>Production team</h2>
+          <div class="form-grid">${staffSelects}</div>
         </div>
-      </div>
-    </div>
-
-    <div class="two-col">
-      <div class="card">
-        <h2>Production team</h2>
-        <div class="form-grid">${staffSelects}</div>
-      </div>
-      <div class="card">
-        <h2>Payments <span class="total">${balance > 0 ? `Balance ${money(balance)}` : "Paid in full"}</span></h2>
-        <div class="table-wrap"><table>
-          <thead><tr><th>Date</th><th>Type</th><th>Method</th><th>Amount</th><th>Status</th></tr></thead>
-          <tbody>${payments}</tbody>
-        </table></div>
-        ${balance > 0 ? `<form class="inline-form" onsubmit="return payFromDetail(event, '${order.id}')">
-          <input name="amount" type="number" min="0.01" max="${balance}" step="0.01" value="${balance}" aria-label="Amount">
-          <select name="method">${PAYMENT_METHODS.map(m => `<option>${m}</option>`).join("")}</select>
-          <button type="submit">Record payment</button>
-        </form>` : ""}
-        <p><a href="#/biz/invoices/${order.id}">View invoice →</a>${delivery ? ` · Tracking ${escapeHtml(delivery.courier)} ${escapeHtml(delivery.tracking_number)}` : ""}</p>
-        ${order.review_rating ? `<p class="review"><span class="gold">${"★".repeat(order.review_rating)}</span> ${escapeHtml(order.review_text)}</p>` : ""}
       </div>
     </div>
   `;

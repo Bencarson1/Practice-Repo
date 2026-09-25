@@ -27,7 +27,7 @@ function renderPrices() {
       <div class="two-col">
         <div class="card">
           <h2>Outfits</h2>
-          <p class="hint">Tailoring is your making price. Typical yards is the fabric the customer app suggests for one adult.</p>
+          <p class="hint">Tailoring is your making price. Typical yards is only a starting point for walk-in orders — customers never see it: you agree the yards with each customer in their order's chat.</p>
           <div class="table-wrap"><table class="price-table">
             <thead><tr><th>Outfit</th><th>Tailoring (${CURRENCY})</th><th>Typical yards</th></tr></thead>
             <tbody>${outfits.map(p => `<tr>

@@ -186,7 +186,8 @@ const Cloud = (() => {
   const day = value => value ? String(value).slice(0, 10) : null;
   const num = value => value == null || value === "" ? null : Number(value);
 
-  const STYLE = "style-photos", FABRIC_PHOTOS = "fabric-photos", LOGOS = "seller-logos";
+  const STYLE = "style-photos", FABRIC_PHOTOS = "fabric-photos", LOGOS = "seller-logos", CHAT = "chat-photos";
+  const PRIVATE_BUCKETS = [STYLE, CHAT];
 
   async function fetchAll(table, order) {
     let query = state.client.from(table).select("*");
@@ -204,9 +205,10 @@ const Cloud = (() => {
   async function load() {
     const tables = ["designers", "suppliers", "fabrics", "customers", "measurement_profiles", "orders", "payments",
       "invoices", "deliveries", "fabric_order_lines", "tailors", "wedding_orders", "wedding_order_members",
-      "ready_to_wear_items", "ready_to_wear_sales", "reviews", "price_list"];
+      "ready_to_wear_items", "ready_to_wear_sales", "reviews", "price_list", "order_messages", "order_chat_reads"];
+    const sortBy = { price_list: "sort_order", order_chat_reads: "last_read_at" };
     const rows = {};
-    const results = await Promise.all(tables.map(t => fetchAll(t, t === "price_list" ? "sort_order" : "created_at")));
+    const results = await Promise.all(tables.map(t => fetchAll(t, sortBy[t] || "created_at")));
     tables.forEach((t, i) => { rows[t] = results[i]; });
     const previous = db;
     state.loadedAt = Date.now();
@@ -278,6 +280,9 @@ const Cloud = (() => {
             finishing: o.assigned_finishing || "", quality_control: o.assigned_quality_control || ""
           },
           review_rating: o.review_rating || null, review_text: o.review_text || "",
+          // Before tailor-quote.sql has run there's no quote_status: every order is an accepted one
+          quote_status: o.quote_status || "accepted", quoted_at: day(o.quoted_at), accepted_at: day(o.accepted_at),
+          fabric_problem: o.fabric_problem || null,
           due_date: day(o.due_date) || addDays(14, day(o.created_at) || today()),
           created_at: day(o.created_at) || today(), updated_at: day(o.updated_at) || today()
         };
@@ -323,6 +328,9 @@ const Cloud = (() => {
       // Empty until supabase/prices.sql has been run; the starting prices are used until then
       prices: r.price_list.map(p => ({ id: p.id, kind: p.kind, name: p.name, price: num(p.price), yards: num(p.yards) })),
 
+      messages: messagesFrom(r.order_messages, numberOf),
+      chat_reads: keepLocalReads(readsFrom(r.order_chat_reads, numberOf), previous && previous.chat_reads),
+
       reviews: r.reviews.map(v => ({
         id: v.id, order_id: numberOf.get(v.order_id) || null, designer_id: v.designer_id, customer_id: v.customer_id,
         rating: v.rating, review_text: v.review_text || "", created_at: day(v.created_at)
@@ -346,12 +354,127 @@ const Cloud = (() => {
     return data;
   }
 
-  // ---- The draft order (kept on this device until it's paid for) ----
+  // ---- Order chats ----
+
+  function messagesFrom(rows, numberOf) {
+    return rows.filter(m => numberOf.has(m.order_id)).map(m => ({
+      id: m.id, order_id: numberOf.get(m.order_id), sender_kind: m.sender_kind, sender_name: m.sender_name || "",
+      body: m.body || "", photos: (m.photos || []).map(p => `sb:${CHAT}/${p}`), created_at: new Date(m.created_at).toISOString()
+    }));
+  }
+
+  function readsFrom(rows, numberOf) {
+    return rows.filter(x => numberOf.has(x.order_id)).map(x => ({
+      order_id: numberOf.get(x.order_id), side: x.side, last_read_at: new Date(x.last_read_at).toISOString()
+    }));
+  }
+
+  // A chat marked read on this device a moment ago stays read while the database catches up
+  function keepLocalReads(rows, local) {
+    (local || []).forEach(mine => {
+      const row = rows.find(r => r.order_id === mine.order_id && r.side === mine.side);
+      if (!row) rows.push(mine);
+      else if (mine.last_read_at > row.last_read_at) row.last_read_at = mine.last_read_at;
+    });
+    return rows;
+  }
+
+  // Just the chats — checked every few seconds while a chat is open. Returns true if anything changed.
+  async function refreshChat() {
+    if (!state.live || !state.me || !db) return false;
+    const [messages, reads] = await Promise.all([
+      state.client.from("order_messages").select("*").order("created_at", { ascending: true }),
+      state.client.from("order_chat_reads").select("*")
+    ]);
+    if (messages.error || reads.error || !db) return false;
+    const numberOf = new Map(db.orders.map(o => [o._uuid, o.id]));
+    const before = JSON.stringify([db.messages, db.chat_reads]);
+    db.messages = messagesFrom(messages.data || [], numberOf);
+    db.chat_reads = keepLocalReads(readsFrom(reads.data || [], numberOf), db.chat_reads);
+    return JSON.stringify([db.messages, db.chat_reads]) !== before;
+  }
+
+  function sendMessage(order, body, photoRefs) {
+    return run(async () => {
+      const { error } = await state.client.from("order_messages").insert({
+        order_id: order._uuid, body, photos: photoRefs.map(ref => photoPath(ref, CHAT)).filter(Boolean)
+      });
+      if (error) throw new Error(friendly(error));
+      photoRefs.forEach(ref => state.localPhotos.delete(ref));
+      await refreshChat();
+      const side = isTeam() ? "team" : "customer";
+      if (!db.chat_reads.some(r => r.order_id === order.id && r.side === side)) db.chat_reads.push({ order_id: order.id, side, last_read_at: "" });
+      db.chat_reads.find(r => r.order_id === order.id && r.side === side).last_read_at = new Date().toISOString();
+    });
+  }
+
+  function markChatRead(order) {
+    if (!order || !order._uuid) return;
+    state.client.rpc("wearvia_mark_chat_read", { p_order_id: order._uuid }).then(({ error }) => {
+      if (error) console.warn("Couldn't mark the chat as read:", error.message);
+    });
+  }
+
+  // ---- Quotes: the customer sends their order, the team quotes, the customer accepts ----
+
+  function requestQuote(details) {
+    return run(async () => {
+      await push();                     // their measurements must be saved first
+      const id = newId();
+      const insp = details.inspiration;
+      // No yards and no prices: the database ignores them from a customer anyway
+      const row = {
+        id, customer_id: details.customerId, designer_id: designer().id,
+        outfit_type: details.outfit, colour: details.colour, embroidery: details.embroidery,
+        sleeve_style: details.sleeve, neck_style: details.neck, concept_variation: details.variation || 1,
+        measurement_profile_id: details.profileId || null, fabric_id: details.fabric.id,
+        inspiration_photos: insp ? insp.photos.map(ref => photoPath(ref, STYLE)).filter(Boolean) : [],
+        inspiration_link: insp ? insp.link || null : null, inspiration_note: insp ? insp.note || null : null
+      };
+      const created = await state.client.from("orders").insert(row).select("id, order_number").single();
+      if (created.error) {
+        await load().catch(() => {});
+        throw new Error(friendly(created.error));
+      }
+      if (details.note) {
+        const note = await state.client.from("order_messages").insert({ order_id: id, body: details.note });
+        if (note.error) console.warn("The note to the tailor couldn't be sent:", note.error.message);
+      }
+      await load();
+      return db.orders.find(o => o._uuid === id);
+    });
+  }
+
+  function sendQuote(order, fabricId, yards, note) {
+    return run(async () => {
+      await push();
+      const { error } = await state.client.rpc("wearvia_send_quote", {
+        p_order_id: order._uuid, p_yards: yards, p_fabric_id: fabricId || null, p_note: note || null
+      });
+      if (error) {
+        await load().catch(() => {});
+        throw new Error(friendly(error));
+      }
+      await load();
+      return db.orders.find(o => o._uuid === order._uuid);
+    });
+  }
+
+  function acceptQuote(order) {
+    return run(async () => {
+      const { data, error } = await state.client.rpc("wearvia_accept_quote", { p_order_id: order._uuid, p_total: order.quote_total });
+      await load().catch(() => {});
+      if (error) throw new Error(friendly(error));
+      return data || { ok: false };
+    });
+  }
+
+  // ---- The draft order (kept on this device until it's sent to the tailor) ----
 
   function draftKey() { return "wearvia-draft-" + (state.me ? state.me.user_id : "anon"); }
 
   function loadDraft() {
-    try { return upgradeDraftToYards(JSON.parse(localStorage.getItem(draftKey()) || "null")); } catch (e) { return null; }
+    try { return upgradeDraftToQuotes(upgradeDraftToYards(JSON.parse(localStorage.getItem(draftKey()) || "null")), null); } catch (e) { return null; }
   }
 
   function saveDraft() {
@@ -630,7 +753,7 @@ const Cloud = (() => {
   }
 
   async function uploadPhoto(dataUrl, folder) {
-    const bucket = folder === "style" ? STYLE : folder === "logo" ? LOGOS : FABRIC_PHOTOS;
+    const bucket = folder === "style" ? STYLE : folder === "chat" ? CHAT : folder === "logo" ? LOGOS : FABRIC_PHOTOS;
     const path = `${state.me.user_id}/${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}.jpg`;
     const { error } = await state.client.storage.from(bucket).upload(path, dataUrlToBlob(dataUrl), { contentType: "image/jpeg", upsert: false });
     if (error) throw new Error(friendly(error));
@@ -666,25 +789,33 @@ const Cloud = (() => {
   function photoUrl(ref) {
     const where = splitRef(ref);
     if (!where) return "";
-    if (where.bucket !== STYLE) return publicUrl(where.bucket, where.path);
+    if (!PRIVATE_BUCKETS.includes(where.bucket)) return publicUrl(where.bucket, where.path);
     if (state.signedUrls.has(ref)) return state.signedUrls.get(ref);
     signSoon(ref);
     return state.localPhotos.get(ref) || "";
   }
 
-  // Private style photos need a short-lived link; ask for them in one batch
+  // Private photos (style photos, chat photos) need a short-lived link; ask for them in one batch per bucket
   let signTimer = null;
   function signSoon(ref) {
     if (state.signing.has(ref)) return;
     state.signing.add(ref);
     clearTimeout(signTimer);
     signTimer = setTimeout(async () => {
-      const refs = Array.from(state.signing).filter(r => !state.signedUrls.has(r));
-      if (!refs.length) return;
-      const { data, error } = await state.client.storage.from(STYLE).createSignedUrls(refs.map(r => splitRef(r).path), 60 * 60);
-      if (error) { console.warn(error); refs.forEach(r => state.signing.delete(r)); return; }
-      data.forEach((item, i) => { if (item.signedUrl) state.signedUrls.set(refs[i], item.signedUrl); });
-      if (refs.some(r => !state.localPhotos.has(r))) requestRender();
+      const waiting = Array.from(state.signing).filter(r => !state.signedUrls.has(r));
+      let drawn = false;
+      for (const bucket of PRIVATE_BUCKETS) {
+        const refs = waiting.filter(r => splitRef(r).bucket === bucket);
+        if (!refs.length) continue;
+        const { data, error } = await state.client.storage.from(bucket).createSignedUrls(refs.map(r => splitRef(r).path), 60 * 60);
+        if (error) { console.warn(error); refs.forEach(r => state.signing.delete(r)); continue; }
+        data.forEach((item, i) => { if (item.signedUrl) state.signedUrls.set(refs[i], item.signedUrl); });
+        if (refs.some(r => !state.localPhotos.has(r))) drawn = true;
+      }
+      if (drawn) {
+        if (isTyping() && typeof updateChatLogs === "function") updateChatLogs();
+        requestRender();
+      }
     }, 30);
   }
 
@@ -719,6 +850,7 @@ const Cloud = (() => {
     start, afterSignIn, signIn, signUp, signOut, sendPasswordReset, setNewPassword,
     enterDemo, leaveDemo, newId, isTeam, isOwner, canOpen, homeRoute,
     save, flush, refresh, refreshIfStale, placeOrder, deleteOrder,
+    requestQuote, sendQuote, acceptQuote, sendMessage, markChatRead, refreshChat,
     uploadPhoto, removePhoto, photoUrl,
     loadTeamLogins, addTeamLogin, removeTeamLogin
   };

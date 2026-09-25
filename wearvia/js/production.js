@@ -6,7 +6,7 @@
 
 function renderProduction() {
   const columns = STAGES.map((stage, index) => {
-    const orders = db.orders.filter(o => o.stage === stage.key);
+    const orders = placedOrders().filter(o => o.stage === stage.key);
     const next = STAGES[index + 1];
 
     const cards = orders.map(order => {

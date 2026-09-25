@@ -429,6 +429,24 @@ function upgradeData(data) {
     });
     db = previous;
   }
-  data.version = 4;
+  // Order chats (chat.js). Orders from before quotes existed are accepted orders.
+  if (!data.messages) data.messages = [];
+  if (!data.chat_reads) data.chat_reads = [];
+  data.draft = upgradeDraftToQuotes(data.draft, data);
+  data.version = 5;
   return data;
+}
+
+// Drafts from before "Send to tailor" could have fabric already bought (demo
+// mode took it out of stock) and a number of yards. The tailor decides the
+// yards now, so the fabric goes back into stock and only the choice is kept.
+function upgradeDraftToQuotes(d, data) {
+  if (!d) return d;
+  if (d.purchased && data) {
+    const fabric = data.fabrics.find(f => f.id === d.fabricId);
+    if (fabric && d.yards > 0) fabric.yards_available = Math.round((fabric.yards_available + d.yards) * 100) / 100;
+  }
+  ["purchased", "quoteReady", "yards", "payMethod"].forEach(key => { delete d[key]; });
+  if (d.tailorNote === undefined) d.tailorNote = "";
+  return d;
 }

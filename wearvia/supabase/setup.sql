@@ -27,6 +27,9 @@
 --   7. Storage buckets for photos, with their security rules
 --   8. Functions the app calls (sign-up setup, adding staff)
 --   9. The owner set-up function — see the instructions at the very end
+--
+-- After this file, run tailor-quote.sql as well (again if it has run before):
+-- it replaces the "new order" rules so customers' orders become quote requests.
 -- =====================================================================
 
 
