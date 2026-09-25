@@ -10,11 +10,15 @@
 -- columns (price_per_metre, metres_available …) needs yards.sql as well:
 -- run this file first, then yards.sql.
 --
+-- Prices (tailoring, embroidery, delivery) are kept in the price_list
+-- table and new orders are priced by the database. On a database set up
+-- before the price list existed, run prices.sql after this file too.
+--
 -- What it does:
 --   1. Adds the enum values the app uses
 --   2. Adds the missing columns (fabric photos, supplier phone/logo, style photos …)
 --   3. Adds the missing tables (payments, tailors, wedding members,
---      ready-to-wear, fabric seller order lines, team invites)
+--      ready-to-wear, fabric seller order lines, team invites, price list)
 --   4. Helper functions used by the security rules
 --   5. Triggers that keep the data honest (a customer's browser can never
 --      mark an order paid or move a production stage)
@@ -222,6 +226,41 @@ create table if not exists public.designer_staff_invites (
 );
 create unique index if not exists staff_invites_email_key on public.designer_staff_invites (designer_id, lower(email));
 
+-- The price list: tailoring price and typical yards for each outfit, embroidery
+-- and delivery. New orders are priced from it (Business → Prices changes it).
+create table if not exists public.price_list (
+  id         uuid primary key default gen_random_uuid(),
+  kind       text not null check (kind in ('outfit', 'embroidery', 'delivery')),
+  name       text not null,                        -- "Agbada", "Gold", "Delivery"
+  price      numeric(10, 2) not null check (price >= 0),
+  yards      numeric(6, 2),                        -- outfits only: typical fabric for one adult
+  sort_order integer not null default 0,
+  updated_at timestamptz not null default now(),
+  updated_by uuid,
+  constraint price_list_kind_name_key unique (kind, name),
+  constraint price_list_outfit_yards_check check (kind <> 'outfit' or yards > 0)
+);
+
+-- The prices the app used until now. Only added if missing, so running this
+-- file again never undoes a price you've changed.
+insert into public.price_list (kind, name, price, yards, sort_order) values
+  ('outfit', 'Agbada',    280, 10,  1),
+  ('outfit', 'Kaftan',    150, 4.5, 2),
+  ('outfit', 'Senator',   170, 4,   3),
+  ('outfit', 'Bubu',      140, 5,   4),
+  ('outfit', 'Two Piece', 180, 4,   5),
+  ('outfit', 'Dress',     160, 3,   6),
+  ('outfit', 'Wedding',   450, 10,  7),
+  ('outfit', 'Suit',      350, 3.5, 8),
+  ('outfit', 'Aso Ebi',   160, 5,   9),
+  ('outfit', 'Custom',    200, 5,   10),
+  ('embroidery', 'Gold',   60, null, 1),
+  ('embroidery', 'Silver', 50, null, 2),
+  ('embroidery', 'None',    0, null, 3),
+  ('delivery', 'Delivery', 15, null, 1)
+on conflict (kind, name) do nothing;
+
+
 -- Indexes the security rules lean on
 create index if not exists customers_auth_user_idx   on public.customers (auth_user_id);
 create index if not exists orders_customer_idx       on public.orders (customer_id);
@@ -340,18 +379,49 @@ begin
   return new;
 end $$;
 
+-- £1,234 or £1,234.50 — the same way the app writes money
+create or replace function public.wv_money_text(p_amount numeric) returns text
+language sql immutable set search_path = public as $$
+  select '£' || case when p_amount = trunc(p_amount) then to_char(p_amount, 'FM999,999,990')
+                     else to_char(p_amount, 'FM999,999,990.00') end
+$$;
+
+-- The itemised quote, worded the same way as the app's quote screen
+create or replace function public.wv_quote_lines(
+  p_fabric_name text, p_yards numeric, p_price_per_yard numeric, p_fabric_cost numeric,
+  p_outfit text, p_tailoring numeric, p_embroidery text, p_embroidery_cost numeric, p_delivery numeric)
+returns jsonb
+language sql immutable set search_path = public as $$
+  select case when p_fabric_name is null then '[]'::jsonb
+              else jsonb_build_array(jsonb_build_object(
+                'label', 'Fabric — ' || p_fabric_name || ' (' || trim_scale(p_yards) || ' yd × '
+                         || public.wv_money_text(p_price_per_yard) || ')',
+                'amount', p_fabric_cost)) end
+      || jsonb_build_array(
+           jsonb_build_object('label', 'Tailoring (' || p_outfit || ')', 'amount', p_tailoring),
+           jsonb_build_object('label', 'Embroidery (' || p_embroidery || ')', 'amount', p_embroidery_cost),
+           jsonb_build_object('label', 'Delivery', 'amount', p_delivery))
+$$;
+
 -- ---- New orders ----
 -- Gives the order its number, checks the fabric and the price, and — when a
--- customer places it — makes sure it starts unpaid at "tailor assigned".
--- Tailors are assigned automatically: the least busy person in each role.
+-- customer places it — works out every price from the database (fabric from
+-- the fabric, the rest from the price list) and makes sure it starts unpaid
+-- at "tailor assigned". Tailors are assigned automatically: the least busy
+-- person in each role.
 create or replace function public.wv_orders_before_insert() returns trigger
 language plpgsql security definer set search_path = public as $$
 declare
-  v_team   boolean := public.wv_is_team();
-  v_fabric public.fabrics%rowtype;
-  v_cost   numeric;
-  v_role   text;
-  v_pick   text;
+  v_team       boolean := public.wv_is_team();
+  v_fabric     public.fabrics%rowtype;
+  v_cost       numeric;
+  v_embroidery text := coalesce(nullif(trim(new.embroidery), ''), 'None');
+  v_tailoring  numeric;
+  v_emb_cost   numeric;
+  v_delivery   numeric;
+  v_total      numeric;
+  v_role       text;
+  v_pick       text;
 begin
   if new.designer_id is null then
     new.designer_id := public.wv_main_designer_id();
@@ -379,6 +449,42 @@ begin
       raise exception 'The price of % has changed. Please check your quote and try again.', v_fabric.name;
     end if;
     new.fabric_cost := v_cost;
+  elsif not v_team then
+    raise exception 'Please choose a fabric for your order.';
+  end if;
+
+  -- Tailoring, embroidery and delivery from the price list
+  select p.price into v_tailoring from public.price_list p where p.kind = 'outfit' and p.name = new.outfit_type;
+  select p.price into v_emb_cost from public.price_list p where p.kind = 'embroidery' and p.name = v_embroidery;
+  select p.price into v_delivery from public.price_list p where p.kind = 'delivery' order by p.sort_order, p.name limit 1;
+
+  if v_team then
+    -- The team can set their own prices on walk-in orders; anything left out comes from the price list
+    new.tailoring_cost := coalesce(new.tailoring_cost, v_tailoring, 0);
+    new.embroidery_cost := coalesce(new.embroidery_cost, v_emb_cost, 0);
+    new.delivery_cost := coalesce(new.delivery_cost, v_delivery, 0);
+  else
+    -- A customer's browser can't choose the price: what it sent is ignored
+    if v_tailoring is null then
+      raise exception 'Sorry, we can''t take orders for "%" at the moment. Please choose another outfit.', coalesce(new.outfit_type, '');
+    end if;
+    if v_emb_cost is null then
+      raise exception 'Sorry, "%" embroidery isn''t available. Please choose another.', v_embroidery;
+    end if;
+    if v_delivery is null then
+      raise exception 'Sorry, we can''t take orders right now (no delivery price is set). Please contact Nebeda Threads.';
+    end if;
+    new.embroidery := v_embroidery;
+    new.tailoring_cost := v_tailoring;
+    new.embroidery_cost := v_emb_cost;
+    new.delivery_cost := v_delivery;
+    v_total := new.fabric_cost + v_tailoring + v_emb_cost + v_delivery;
+    -- The customer must have been shown this total; if a price changed since, they see the new quote first
+    if new.quote_total is null or abs(new.quote_total - v_total) > 0.01 then
+      raise exception 'Our prices have changed since your quote. Please check the new total and try again.';
+    end if;
+    new.line_items := public.wv_quote_lines(v_fabric.name, new.fabric_yards, v_fabric.price_per_yard, new.fabric_cost,
+                                            new.outfit_type, v_tailoring, v_embroidery, v_emb_cost, v_delivery);
   end if;
 
   new.quote_total := coalesce(new.fabric_cost, 0) + coalesce(new.tailoring_cost, 0)
@@ -716,6 +822,18 @@ begin
   return new;
 end $$;
 
+-- Records who changed a price and when; only outfits have yards
+create or replace function public.wv_price_list_before_update() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  new.kind := old.kind;
+  new.name := old.name;
+  if new.kind <> 'outfit' then new.yards := null; end if;
+  new.updated_at := now();
+  new.updated_by := auth.uid();
+  return new;
+end $$;
+
 -- Attach the triggers (dropped first so this file can run again)
 drop trigger if exists wv_orders_before_insert on public.orders;
 create trigger wv_orders_before_insert before insert on public.orders
@@ -763,6 +881,10 @@ create trigger wv_fabric_lines_before_update before update on public.fabric_orde
 drop trigger if exists wv_rtw_sales_before_insert on public.ready_to_wear_sales;
 create trigger wv_rtw_sales_before_insert before insert on public.ready_to_wear_sales
   for each row execute function public.wv_rtw_sales_before_insert();
+
+drop trigger if exists wv_price_list_before_update on public.price_list;
+create trigger wv_price_list_before_update before update on public.price_list
+  for each row execute function public.wv_price_list_before_update();
 
 drop trigger if exists wv_touch_deliveries on public.deliveries;
 create trigger wv_touch_deliveries before update on public.deliveries
@@ -1035,6 +1157,22 @@ create policy "designer_staff_invites: owner manages" on public.designer_staff_i
     exists (select 1 from public.designers d where d.id = designer_staff_invites.designer_id and d.owner_user_id = (select auth.uid()))
     or (select public.is_admin()));
 
+-- Price list: anyone can read the prices; only the team can change them.
+-- The team can change a price and the yards, nothing else, and nobody can
+-- add or delete rows from the app (an outfit missing from the list can't be ordered).
+alter table public.price_list enable row level security;
+
+drop policy if exists "price_list: everyone reads" on public.price_list;
+create policy "price_list: everyone reads" on public.price_list
+  for select using (true);
+drop policy if exists "price_list: team changes prices" on public.price_list;
+create policy "price_list: team changes prices" on public.price_list
+  for update to authenticated using ((select public.wv_is_team())) with check ((select public.wv_is_team()));
+
+revoke all on public.price_list from public, anon, authenticated;
+grant select on public.price_list to anon, authenticated;
+grant update (price, yards) on public.price_list to authenticated;
+
 -- Table access for the API roles (Row Level Security still decides which rows)
 grant select on public.ready_to_wear_items to anon, authenticated;
 grant select, insert, update, delete on
@@ -1044,6 +1182,9 @@ grant select, insert, update, delete on
 
 -- Internal helpers are not for calling from the app
 revoke execute on function public.wv_refresh_order_payments(uuid) from public, anon, authenticated;
+revoke execute on function public.wv_price_list_before_update() from public, anon, authenticated;
+revoke execute on function public.wv_quote_lines(text, numeric, numeric, numeric, text, numeric, text, numeric, numeric)
+  from public, anon, authenticated;
 
 
 -- ---------------------------------------------------------------------

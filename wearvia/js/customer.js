@@ -146,7 +146,7 @@ function screenHome() {
   return `
     <div class="hero">
       <div class="brand">WEARVIA</div>
-      <div class="tag">Bespoke · Ready to Wear · African Luxury</div>
+      <div class="tagline">Bespoke · Ready to Wear · African Luxury</div>
       <div class="featured">Now on Wearvia: <b>${escapeHtml(SHOP_NAME)}</b> · ${escapeHtml(designer().location)}</div>
       <h2>Your Style.<br>Our Craft.<br>Timeless You.</h2>
       ${resume ? `<button class="btn" onclick="go('${resume.screen}')">Continue your ${escapeHtml(d.outfit)} order</button>` : ""}

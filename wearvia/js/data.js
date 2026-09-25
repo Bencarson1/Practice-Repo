@@ -9,7 +9,7 @@ const SHOP_NAME = "Nebeda Threads";  // the first shop (designer) using Wearvia
 const CURRENCY = "£";
 const STORAGE_KEY = "wearvia-app-v2";
 const DEPOSIT_RATE = 0.6;            // 60% deposit, balance after quality control
-const DELIVERY_FEE = 15;
+let DELIVERY_FEE = 15;               // starting price; the real one is in the price list (below)
 const LOW_STOCK_YARDS = 10;          // "low stock" warning below this many yards
 const YARDS_PER_METRE = 1.0936;      // only used to convert data saved before Wearvia switched to yards
 const METRES_PER_YARD = 0.9144;
@@ -85,6 +85,35 @@ const EMBROIDERY = [
   { name: "Silver", price: 50 },
   { name: "None", price: 0 }
 ];
+
+// ---- The price list ----
+// The prices above are only the starting prices. The real ones are kept in
+// db.prices and changed in Business → Prices. In live mode that's the
+// database's price_list table — the database charges those prices itself,
+// so the quote a customer sees must come from there too.
+const DEFAULT_PRICES = OUTFITS.map((o, i) => ({ id: "PL" + (i + 1), kind: "outfit", name: o.name, price: o.tailoring, yards: o.yards }))
+  .concat(EMBROIDERY.map((e, i) => ({ id: "PL" + (OUTFITS.length + i + 1), kind: "embroidery", name: e.name, price: e.price, yards: null })))
+  .concat([{ id: "PL" + (OUTFITS.length + EMBROIDERY.length + 1), kind: "delivery", name: "Delivery", price: DELIVERY_FEE, yards: null }]);
+
+function defaultPriceList() {
+  return DEFAULT_PRICES.map(p => Object.assign({}, p));
+}
+
+// Copies the price list into OUTFITS, EMBROIDERY and DELIVERY_FEE, which every screen reads
+function applyPriceList(rows) {
+  (rows || []).forEach(row => {
+    if (row.kind === "outfit") {
+      const outfit = OUTFITS.find(o => o.name === row.name);
+      if (outfit) { outfit.tailoring = row.price; if (row.yards > 0) outfit.yards = row.yards; }
+    } else if (row.kind === "embroidery") {
+      const embroidery = EMBROIDERY.find(e => e.name === row.name);
+      if (embroidery) embroidery.price = row.price;
+    } else if (row.kind === "delivery") {
+      DELIVERY_FEE = row.price;
+    }
+  });
+}
+
 const SLEEVES = ["Wide", "Fitted"];
 const NECKS = ["Round", "V-neck"];
 const PAYMENT_METHODS = ["Card", "Apple Pay", "Bank transfer", "Cash"];
@@ -166,17 +195,27 @@ function fabricCostFor(yards, pricePerYard) {
   return Math.round(Math.round(yards * 100) * Math.round(pricePerYard * 100) / 100) / 100;
 }
 
-// Itemised quotation: fabric, tailoring, embroidery, delivery → total (screen 8)
-function computeQuote(outfit, embroidery, fabric, yards) {
+// Itemised quotation: fabric, tailoring, embroidery, delivery → total (screen 8).
+// ownPrices lets the team charge their own price on a walk-in order,
+// e.g. { tailoring: 250 }; anything left out comes from the price list.
+function computeQuote(outfit, embroidery, fabric, yards, ownPrices) {
+  const own = ownPrices || {};
+  const pick = (value, fallback) => value == null || value === "" || !(Number(value) >= 0) ? fallback : Number(value);
   const fabricCost = fabricCostFor(yards, fabric.price_per_yard);
   const lines = [
     { label: `Fabric — ${fabric.name} (${yards} yd × ${money(fabric.price_per_yard)})`, amount: fabricCost },
-    { label: `Tailoring (${outfit})`, amount: findOutfit(outfit).tailoring },
-    { label: `Embroidery (${embroidery})`, amount: embroideryPrice(embroidery) },
-    { label: "Delivery", amount: DELIVERY_FEE }
+    { label: `Tailoring (${outfit})`, amount: pick(own.tailoring, findOutfit(outfit).tailoring) },
+    { label: `Embroidery (${embroidery})`, amount: pick(own.embroidery, embroideryPrice(embroidery)) },
+    { label: "Delivery", amount: pick(own.delivery, DELIVERY_FEE) }
   ];
   const total = lines.reduce((sum, line) => sum + line.amount, 0);
   return { lines, total, fabricCost };
+}
+
+// What delivery cost on an order (its quote line; older orders use today's price)
+function deliveryCostOf(order) {
+  const line = (order.line_items || []).find(l => l.label === "Delivery");
+  return line ? Number(line.amount) || 0 : DELIVERY_FEE;
 }
 
 function depositFor(total) {
@@ -304,6 +343,8 @@ function buildSampleData() {
       { id: "RS2", item_id: "R3", customer_id: "C1", price: 40, cost: 18, date: addDays(-5), status: "confirmed" }
     ],
 
+    prices: defaultPriceList(),
+
     // What the customer app is doing right now
     session: { customerId: null },
     draft: null,
@@ -315,6 +356,7 @@ function buildSampleData() {
   data.sample_sellers_added = true;
 
   // Build sample orders through the same quote maths as the real flow
+  applyPriceList(data.prices);
   const samples = [
     { id: "NT-1001", customer: "C1", outfit: "Dress",     colour: "#c9a24a", embroidery: "None",   sleeve: "Fitted", neck: "V-neck", fabric: "F11",  yards: 3, stage: "sewing",          created: -14, due: 7,   method: "Card" },
     { id: "NT-1002", customer: "C2", outfit: "Suit",      colour: "#1e2a44", embroidery: "None",   sleeve: "Fitted", neck: "V-neck", fabric: "F7",  yards: 3.5, stage: "cutting",         created: -16, due: -2,  method: "Bank transfer" },

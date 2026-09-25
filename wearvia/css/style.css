@@ -161,7 +161,7 @@ main { flex: 1; width: 100%; }
   overflow-y: auto;
 }
 .hero .brand { font-family: var(--serif); font-size: 30px; font-weight: 700; letter-spacing: .12em; color: var(--gold); }
-.hero .tag { font-size: 11.5px; opacity: .6; }
+.hero .tagline { font-size: 13px; font-weight: 500; letter-spacing: .04em; color: var(--on-navy); }
 .hero .featured { font-size: 12.5px; margin: 6px 0 14px; padding: 8px 10px; border: 1px solid rgba(201,162,74,.4); border-radius: 9px; }
 .hero .featured b { color: var(--gold); }
 .hero h2 { font-family: var(--serif); font-size: 34px; line-height: 1.08; margin: 0 0 8px; }
@@ -391,6 +391,7 @@ td:first-child { white-space: nowrap; }
 tr.clickable { cursor: pointer; }
 tr.clickable:hover td { background: var(--soft); }
 td select { width: auto !important; }
+.price-table input { width: 110px; }
 .dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; vertical-align: -1px; margin-right: 4px; }
 
 /* Badges for steps */
