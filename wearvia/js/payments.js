@@ -15,6 +15,7 @@ function paymentStatusCell(p) {
 }
 
 function confirmPaymentFromList(paymentId, accept) {
+  if (Cloud.live && !businessPaymentsOpen()) { alert("Protected payments are not open yet."); return; }
   const p = db.payments.find(x => x.id === paymentId);
   if (!p) return;
   if (!accept && !confirm(`Reject this ${money(p.amount, paymentCurrency(p))} payment for ${p.order_id}? Only do this if the money never arrived.`)) return;
@@ -25,6 +26,21 @@ function confirmPaymentFromList(paymentId, accept) {
 }
 
 function renderPayments() {
+  // Real payments are intentionally closed until NebedaHub finishes its payment-provider setup.
+  // Do not let a live tailor manually confirm or record off-platform customer payments.
+  if (Cloud.live && typeof ONLINE_PAYMENTS_ENABLED !== "undefined" && !ONLINE_PAYMENTS_ENABLED) {
+    return `
+      ${bizHeader("Payments", "Protected in-app payments are being prepared.")}
+      <div class="card attention">
+        <h2>Payments are not open yet</h2>
+        <p class="hint">Do not ask customers to pay you by bank transfer, cash, WhatsApp, payment link or any other method outside NebedaHub.</p>
+        <p class="hint">When protected payments are enabled, customer payments and seller payouts will be recorded by NebedaHub automatically.</p>
+      </div>
+      <div class="card">
+        <h2>What you can do now</h2>
+        <p class="hint">You can receive quote requests, agree fabric and measurements, chat with customers and prepare orders. Production that requires payment should wait until protected in-app payments are enabled.</p>
+      </div>`;
+  }
   // Only orders that still have money owed can take a payment
   const orderOptions = placedOrders().filter(o => balanceOwed(o) > 0).map(o =>
     `<option value="${o.id}">${o.id} — ${escapeHtml(customerName(o.customer_id))} (owes ${money(balanceOwed(o), orderCurrency(o))})</option>`).join("");
@@ -115,6 +131,7 @@ function renderPayments() {
 
 function recordPayment(event) {
   event.preventDefault();
+  if (Cloud.live && !businessPaymentsOpen()) { alert("Protected payments are not open yet."); return false; }
   const form = event.target;
   const order = findOrder(form.order.value);
   const amount = Number(form.amount.value);
