@@ -29,8 +29,8 @@ function renderQuotes(orderId) {
   const rows = requests.map(o => {
     const fabric = findFabric(o.fabric_id);
     const unread = unreadCount(o.id, "team");
-    return `<tr class="clickable" onclick="go('biz/quotes/${o.id}')">
-      <td><a href="#/biz/quotes/${o.id}">${o.id}</a></td>
+    return `<tr class="clickable" onclick="go('quotes/${o.id}')">
+      <td><a href="#/quotes/${o.id}">${o.id}</a></td>
       <td>${escapeHtml(customerName(o.customer_id))}</td>
       <td>${escapeHtml(o.outfit_type)}${hasInspiration(o.inspiration) ? ` <span title="Customer uploaded style photos" aria-label="has style photos">📷</span>` : ""}</td>
       <td>${escapeHtml(fabric ? fabric.name : "—")}${fabric ? ` <span class="muted">${escapeHtml(fabricPriceText(fabric, designerFabricUnit(bizDesigner())))}</span>` : ""}
@@ -38,7 +38,7 @@ function renderQuotes(orderId) {
       <td>${formatDate(o.created_at)}</td>
       <td>${quoteStatusBadge(o)}${quoteStatus(o) === "quoted" ? `<div class="small-text">${money(o.quote_total, orderCurrency(o))} · ${lengthText(o.fabric_yards, orderFabricUnit(o))}</div>` : ""}</td>
       <td>${unread ? unreadBadge(unread) + " new" : `<span class="muted">${orderMessages(o.id).length} msg</span>`}</td>
-      <td><a class="button small" href="#/biz/quotes/${o.id}">Open</a></td>
+      <td><a class="button small" href="#/quotes/${o.id}">Open</a></td>
     </tr>`;
   }).join("");
   const accepted = placedOrders().filter(o => o.accepted_at && o.quoted_at && o.accepted_at >= addDays(-14))
@@ -56,7 +56,7 @@ function renderQuotes(orderId) {
     ${accepted.length ? `<div class="card">
       <h2>Recently accepted</h2>
       <p class="hint">These are now orders: confirm the deposit under Payments, then make them.</p>
-      <ul class="plain-list">${accepted.map(o => `<li><a href="#/biz/orders/${o.id}">${o.id}</a> · ${escapeHtml(customerName(o.customer_id))} · ${escapeHtml(o.outfit_type)} · ${money(o.quote_total, orderCurrency(o))} · accepted ${formatDate(o.accepted_at)}</li>`).join("")}</ul>
+      <ul class="plain-list">${accepted.map(o => `<li><a href="#/orders/${o.id}">${o.id}</a> · ${escapeHtml(customerName(o.customer_id))} · ${escapeHtml(o.outfit_type)} · ${money(o.quote_total, orderCurrency(o))} · accepted ${formatDate(o.accepted_at)}</li>`).join("")}</ul>
     </div>` : ""}`;
 }
 
@@ -73,7 +73,7 @@ function measurementsCard(order) {
   return `<div class="card">
     <h2>Measurements ${profile ? `<small class="muted">${escapeHtml(profile.label)} profile · the customer measures in ${unit === "cm" ? "centimetres" : "inches"}</small>` : ""}</h2>
     ${profile ? `<div class="measure-list">${MEASUREMENT_FIELDS.map(f => `<div><span>${f.label}</span><strong>${bodyBoth(profile[f.key], unit)}</strong></div>`).join("")}</div>`
-      : `<p class="empty">No measurements yet. <a href="#/biz/measurements">Add them</a>.</p>`}
+      : `<p class="empty">No measurements yet. <a href="#/measurements">Add them</a>.</p>`}
   </div>`;
 }
 
@@ -97,12 +97,12 @@ function designCard(order, extraRows) {
 
 function renderQuoteDetail(orderId) {
   const order = findOrder(orderId);
-  if (!order) return `${bizHeader("Quote request not found")}<p><a href="#/biz/quotes">← Quote requests</a></p>`;
+  if (!order) return `${bizHeader("Quote request not found")}<p><a href="#/quotes">← Quote requests</a></p>`;
   if (isPlaced(order)) {
-    return `<p><a href="#/biz/quotes">← Quote requests</a></p>
+    return `<p><a href="#/quotes">← Quote requests</a></p>
       ${bizHeader(`Order ${order.id} ${stageBadge(order)}`)}
       <div class="card"><p>The customer accepted this quote${order.accepted_at ? " on " + formatDate(order.accepted_at) : ""}. It's an order now.</p>
-      <a class="button" href="#/biz/orders/${order.id}">Open order ${order.id} →</a></div>`;
+      <a class="button" href="#/orders/${order.id}">Open order ${order.id} →</a></div>`;
   }
   const customer = findCustomer(order.customer_id);
   const fabric = findFabric(order.fabric_id);
@@ -121,8 +121,8 @@ function renderQuoteDetail(orderId) {
   }).join("");
 
   return `
-    <p><a href="#/biz/quotes">← Quote requests</a></p>
-    ${bizHeader(`Quote request ${order.id} ${quoteStatusBadge(order)}`, `${escapeHtml(order.outfit_type)} for <a href="#/biz/customers/${order.customer_id}">${escapeHtml(customer ? customer.name : "Unknown")}</a> · sent ${formatDate(order.created_at)} · chat below — contact details stay on ${APP_NAME}`)}
+    <p><a href="#/quotes">← Quote requests</a></p>
+    ${bizHeader(`Quote request ${order.id} ${quoteStatusBadge(order)}`, `${escapeHtml(order.outfit_type)} for <a href="#/customers/${order.customer_id}">${escapeHtml(customer ? customer.name : "Unknown")}</a> · sent ${formatDate(order.created_at)} · chat below — contact details stay on ${APP_NAME}`)}
     ${order.fabric_problem ? `<div class="card attention"><b>⚠ ${escapeHtml(order.fabric_problem)}.</b> The customer has been told in the chat. Suggest another fabric, then choose it below and send a new quote.</div>` : ""}
 
     <div class="quote-layout">

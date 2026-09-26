@@ -15,7 +15,11 @@
 // person is allowed to change — the browser is never trusted with that.
 // ============================================================
 
-const MODE_KEY = "wearvia-mode";
+// Each app keeps its own demo switch and its own sign-in, so the same email
+// can be signed in to NebedaHub and NebedaHub Business separately. The
+// customer app keeps Supabase's usual key, so customers stay signed in.
+const MODE_KEY = APP_KIND === "customer" ? "wearvia-mode" : `wearvia-mode-${APP_KIND}`;
+const AUTH_STORAGE_KEY = APP_KIND === "customer" ? undefined : `nebedahub-${APP_KIND}-auth`;
 const REFRESH_EVERY_MS = 45000;
 
 const Cloud = (() => {
@@ -42,13 +46,13 @@ const Cloud = (() => {
 
   function enterDemo() {
     try { localStorage.setItem(MODE_KEY, "demo"); } catch (e) { /* private browsing */ }
-    location.hash = "#/home";
+    location.hash = "#/" + APP.home;
     location.reload();
   }
 
   function leaveDemo() {
     try { localStorage.removeItem(MODE_KEY); } catch (e) { /* private browsing */ }
-    const url = location.pathname + "#/home";
+    const url = location.pathname + "#/" + APP.home;
     history.replaceState(null, "", url);
     location.reload();
   }
@@ -66,18 +70,16 @@ const Cloud = (() => {
   function isTeam() { return !state.live || !!(state.me && state.me.is_team); }
   function isOwner() { return !state.live || !!(state.me && state.me.is_owner); }
 
-  function canOpen(area) {
-    if (!state.live) return true;
-    if (area === "business") return isTeam();
-    return true;
-  }
-
+  // Where this person starts in this app
   function homeRoute() {
-    if (!state.live || !state.me) return "home";
-    if (state.me.is_team) return state.me.designer_id && state.me.designers && state.me.designers.length
-      && state.me.designers[0].admin_status !== "approved" ? "biz/profile" : "biz/dashboard";
-    if (state.me.account_type === "seller") return state.me.supplier_id ? "seller/fabrics" : "seller/profile";
-    return "home";
+    if (!state.live || !state.me) return APP.home;
+    const me = state.me;
+    if (APP_KIND === "business") {
+      if (!me.is_team) return "welcome";
+      return me.designer_id && me.designers && me.designers.length && me.designers[0].admin_status !== "approved" ? "profile" : "dashboard";
+    }
+    if (APP_KIND === "seller") return me.supplier_id ? "fabrics" : "welcome";
+    return APP.home;
   }
 
   // ---- Start-up ----
@@ -93,7 +95,7 @@ const Cloud = (() => {
     // A link from a sign-up or password email arrives as #access_token=… — that's for Supabase, not a page address
     const authHash = /access_token=|error_description=|type=recovery/.test(location.hash) ? location.hash : "";
     state.client = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+      auth: Object.assign({ persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }, AUTH_STORAGE_KEY ? { storageKey: AUTH_STORAGE_KEY } : {})
     });
     state.client.auth.onAuthStateChange((event) => {
       if (event === "PASSWORD_RECOVERY") setTimeout(() => Auth.show("newPassword"), 0);
@@ -108,7 +110,7 @@ const Cloud = (() => {
     }
     if (authHash) {
       const params = new URLSearchParams(authHash.replace(/^#\/?/, ""));
-      history.replaceState(null, "", location.pathname + location.search + "#/home");
+      history.replaceState(null, "", location.pathname + location.search + "#/" + APP.home);
       if (params.get("error_description")) Auth.flash(params.get("error_description").replace(/\+/g, " ") + ". Please sign in or ask for a new link.");
       if (params.get("type") === "recovery" && session) return { signedIn: false, recovery: true };
     }
@@ -149,7 +151,7 @@ const Cloud = (() => {
     if (!data.session) {
       // Supabase hides whether the email was already used; an empty identities list means it was
       if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
-        throw new Error("There's already an account with that email. Sign in instead, or reset your password.");
+        throw new Error(`There's already a ${APP_NAME} account with that email (perhaps from another ${APP_NAME} app). Sign in with it here instead, or reset your password.`);
       }
       return { needsConfirmation: true };
     }
@@ -186,7 +188,7 @@ const Cloud = (() => {
   // ---- Browsing tailors without an account ----
   // Anyone can find tailors and open their pages. Everything else needs signing in.
 
-  const GUEST_SCREENS = ["tailors", "tailor", "joinTailor"];
+  const GUEST_SCREENS = ["tailors", "tailor"];
 
   function isGuest() { return state.live && !state.me; }
 
@@ -1001,6 +1003,15 @@ const Cloud = (() => {
     return data;
   }
 
+  // A tailor (or their staff) who wants to order outfits too: their own customer record
+  async function becomeCustomer() {
+    const me = state.me || {};
+    const { error } = await state.client.from("customers")
+      .insert({ id: newId(), auth_user_id: me.user_id, name: me.name || String(me.email || "").split("@")[0], created_at: new Date().toISOString() });
+    if (error) throw new Error(friendly(error));
+    await afterSignIn();
+  }
+
   // The tailor agrees not to take NebedaHub customers off the platform
   async function acceptTailorTerms(designerId, quiet) {
     const { error } = await state.client.rpc("wearvia_accept_tailor_terms", { p_designer_id: designerId, p_version: TAILOR_TERMS_VERSION });
@@ -1133,7 +1144,7 @@ const Cloud = (() => {
     GUEST_SCREENS, isGuest, startGuest,
     get teamLogins() { return state.teamLogins; },
     start, afterSignIn, signIn, signUp, signOut, sendPasswordReset, setNewPassword,
-    enterDemo, leaveDemo, newId, isTeam, isOwner, canOpen, homeRoute,
+    enterDemo, leaveDemo, newId, isTeam, isOwner, homeRoute, becomeCustomer,
     save, flush, refresh, refreshIfStale, placeOrder, deleteOrder,
     requestQuote, sendQuote, acceptQuote, sendMessage, markChatRead, refreshChat,
     uploadPhoto, removePhoto, photoUrl,

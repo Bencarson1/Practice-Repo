@@ -1,6 +1,6 @@
 // ============================================================
 // tailor-admin.js — Business → My profile (each tailor edits their own
-// public profile) and Business → Tailors (the admin approves or hides
+// public profile) and NebedaHub Admin → Tailors (the admin approves or hides
 // tailors and looks after the list of specialities)
 //
 // Saving a postcode or address looks up its map position automatically
@@ -48,7 +48,7 @@ function renderMyProfile() {
     ${tailorTermsCard(d, canEdit)}
     <div class="card">
       <p class="share-row">Your public page: <a href="${escapeHtml(link)}" target="_blank" rel="noopener">${escapeHtml(link.replace(/^https?:\/\//, ""))}</a>
-        ${d.admin_status === "approved" ? `· <a href="#/tailor/${escapeHtml(d.slug)}">see it in the app</a>` : "(live once you're approved)"}</p>
+        ${d.admin_status === "approved" ? `· <a href="${escapeHtml(appUrl("customer", "tailor/" + d.slug))}" target="_blank" rel="noopener">see it in ${APP_NAME}</a>` : "(live once you're approved)"}</p>
     </div>
     <form id="profile-form" class="card profile-form" onsubmit="return saveMyProfile(event)" novalidate>
       <fieldset ${dis}>
@@ -322,12 +322,11 @@ function acceptTermsFromProfile(event, designerId) {
   return false;
 }
 
-// ---- Tailors (admin) ----
+// ---- Tailors (NebedaHub Admin) ----
 
 let tailorAdminFilter = "pending";
 
 function renderTailorAdmin() {
-  if (!isAdminUser()) return `${bizHeader("Tailors")}<p class="empty">Only the ${APP_NAME} admin can approve tailors.</p>`;
   const groups = { pending: "Waiting", approved: "Approved", hidden: "Hidden" };
   const all = db.designers.filter(d => !d.from_search || d.is_mine);
   const shown = all.filter(d => d.admin_status === tailorAdminFilter)
@@ -346,7 +345,7 @@ function renderTailorAdmin() {
           : d.is_mine === false ? "" : `<div class="small-text owed">Hasn't accepted the tailor terms yet</div>`}
       </div>
       <div class="nowrap job-buttons">
-        <a class="button small ghost" href="#/tailor/${escapeHtml(d.slug)}">View page</a>
+        <a class="button small ghost" href="${escapeHtml(appUrl("customer", "tailor/" + d.slug))}" target="_blank" rel="noopener">View page</a>
         ${d.admin_status !== "approved" ? `<button class="small gold" onclick="setTailorStatus('${d.id}', 'approved')">✓ Approve</button>` : ""}
         ${d.admin_status !== "hidden" && d.id !== (mainDesigner() || {}).id ? `<button class="small danger" onclick="setTailorStatus('${d.id}', 'hidden')">Hide</button>` : ""}
       </div>
@@ -357,10 +356,15 @@ function renderTailorAdmin() {
     <div class="card">
       <div class="chips">${Object.keys(groups).map(k => `<button class="chip ${k === tailorAdminFilter ? "active" : ""}" onclick="tailorAdminFilter='${k}';renderAll()">${groups[k]} (${all.filter(d => d.admin_status === k).length})</button>`).join("")}</div>
       ${rows || `<p class="empty">No ${groups[tailorAdminFilter].toLowerCase()} tailors.</p>`}
-    </div>
+    </div>`;
+}
+
+// ---- Specialities (admin): the list tailors choose from and customers filter by ----
+
+function renderSpecialities() {
+  return `
+    ${bizHeader("Specialities", "Tailors choose their specialities from this list in My profile, and customers filter by it in Find tailors near me.")}
     <div class="card">
-      <h2>Specialities</h2>
-      <p class="hint">Tailors choose from this list, and customers filter by it.</p>
       <div class="spec-tags">${specialityList().map(sp => `<span class="pill">${escapeHtml(sp.name)}</span>`).join("")}</div>
       <form class="inline-form" onsubmit="return addSpecialityFromForm(event)">
         <input name="name" required minlength="2" maxlength="40" placeholder="e.g. Kids' outfits" aria-label="New speciality">

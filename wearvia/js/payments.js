@@ -38,7 +38,7 @@ function renderPayments() {
     if (balance > 0) addMoney(totalOwed, cur, balance);
     const due = stageIndex(order) >= STAGES.findIndex(s => s.key === "quality_control");
     return `<tr>
-      <td><a href="#/biz/orders/${order.id}">${order.id}</a></td>
+      <td><a href="#/orders/${order.id}">${order.id}</a></td>
       <td>${escapeHtml(customerName(order.customer_id))}</td>
       <td>${money(order.quote_total, cur)}</td>
       <td>${money(order.deposit_amount, cur)}</td>
@@ -52,7 +52,7 @@ function renderPayments() {
     const order = findOrder(p.order_id);
     return `<tr>
       <td>${formatDate(p.date)}</td>
-      <td><a href="#/biz/orders/${p.order_id}">${escapeHtml(p.order_id)}</a></td>
+      <td><a href="#/orders/${p.order_id}">${escapeHtml(p.order_id)}</a></td>
       <td>${escapeHtml(order ? customerName(order.customer_id) : "Unknown")}</td>
       <td>${escapeHtml(p.kind)}</td><td>${escapeHtml(p.method)}</td><td>${money(p.amount, paymentCurrency(p))}</td>
       <td>${paymentStatusCell(p)}</td>
@@ -63,7 +63,7 @@ function renderPayments() {
     const order = findOrder(p.order_id);
     return `<tr>
       <td>${formatDate(p.date)}</td>
-      <td><a href="#/biz/orders/${p.order_id}">${escapeHtml(p.order_id)}</a></td>
+      <td><a href="#/orders/${p.order_id}">${escapeHtml(p.order_id)}</a></td>
       <td>${escapeHtml(order ? customerName(order.customer_id) : "Unknown")}</td>
       <td>${escapeHtml(p.kind)}</td>
       <td>${escapeHtml(p.method)}</td>

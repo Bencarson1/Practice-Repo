@@ -3,7 +3,7 @@
 // and the full detail page for one order
 // ============================================================
 
-let pendingFabricId = null; // set when "Use in an order" is clicked in Fabric Inventory
+let pendingFabricId = null; // a fabric to pre-select in the walk-in order form
 let orderFilter = "All";
 
 function renderOrdersTab(orderId) {
@@ -20,7 +20,7 @@ function renderOrdersTab(orderId) {
     const balance = balanceOwed(o);
     const unread = unreadCount(o.id, "team");
     return `<tr>
-      <td><a href="#/biz/orders/${o.id}">${o.id}</a>${unread ? ` <span title="New messages from the customer">💬${unreadBadge(unread)}</span>` : ""}</td>
+      <td><a href="#/orders/${o.id}">${o.id}</a>${unread ? ` <span title="New messages from the customer">💬${unreadBadge(unread)}</span>` : ""}</td>
       <td>${escapeHtml(customerName(o.customer_id))}</td>
       <td>${escapeHtml(o.outfit_type)}${hasInspiration(o.inspiration) ? ` <span title="Customer uploaded style photos" aria-label="has style photos">📷</span>` : ""}</td>
       <td>${escapeHtml(fabric ? fabric.name : "—")} (${lengthText(o.fabric_yards, orderFabricUnit(o))})</td>
@@ -28,7 +28,7 @@ function renderOrdersTab(orderId) {
       <td>${stageBadge(o)}</td>
       <td>${money(o.quote_total, orderCurrency(o))}</td>
       <td class="${balance > 0 ? "owed" : "paid"}">${balance > 0 ? money(balance, orderCurrency(o)) : "Paid"}</td>
-      <td class="nowrap"><a class="button small" href="#/biz/orders/${o.id}">Open</a>
+      <td class="nowrap"><a class="button small" href="#/orders/${o.id}">Open</a>
         <button class="small danger" onclick="deleteOrder('${o.id}')">Delete</button></td>
     </tr>`;
   }).join("");
@@ -42,11 +42,11 @@ function renderOrdersTab(orderId) {
 
   return `
     ${bizHeader("All Orders — Live", "Every order across every customer, with the step it's on now.")}
-    ${waiting.length ? `<a class="alert quote-alert" href="#/biz/quotes">📝 ${waiting.length} quote request${waiting.length === 1 ? "" : "s"} — customers waiting for you or deciding on a quote →</a>` : ""}
+    ${waiting.length ? `<a class="alert quote-alert" href="#/quotes">📝 ${waiting.length} quote request${waiting.length === 1 ? "" : "s"} — customers waiting for you or deciding on a quote →</a>` : ""}
 
     <div class="card">
       <h2>New walk-in order</h2>
-      <p class="hint">For orders taken in the shop or by phone: you enter the ${unitWord(unit, true)} directly. Prices are in ${escapeHtml(currencyInfo(currency).name)}; fabric from a seller in another currency is converted at today's rate, which is saved on the order. (Online customers send their order to you as a <a href="#/biz/quotes">quote request</a> instead, and you agree the yards with them in the chat.) The price is worked out the same way (fabric + tailoring + embroidery + delivery) and the order starts once a deposit is paid. Leave the tailoring, embroidery and delivery prices blank to use the <a href="#/biz/prices">price list</a>, or type your own price for this order.</p>
+      <p class="hint">For orders taken in the shop or by phone: you enter the ${unitWord(unit, true)} directly. Prices are in ${escapeHtml(currencyInfo(currency).name)}; fabric from a seller in another currency is converted at today's rate, which is saved on the order. (Online customers send their order to you as a <a href="#/quotes">quote request</a> instead, and you agree the length with them in the chat.) The price is worked out the same way (fabric + tailoring + embroidery + delivery) and the order starts once a deposit is paid. Leave the tailoring, embroidery and delivery prices blank to use the <a href="#/prices">price list</a>, or type your own price for this order.</p>
       <form id="order-form" class="form-grid" onsubmit="return createWalkInOrder(event)">
         <label>Customer name
           <input name="customer" list="customer-list" required placeholder="Type a name">
@@ -130,7 +130,7 @@ function createWalkInOrder(event) {
       pendingFabricId = null;
       saveData();
       toast(`Order ${order.id} created — quote ${money(order.quote_total, orderCurrency(order))}, deposit ${money(order.deposit_amount, orderCurrency(order))}.${profile ? "" : " Add measurements for this customer."}`);
-      go("biz/orders/" + order.id);
+      go("orders/" + order.id);
     })
     .catch(error => {
       alert(error.message || "Couldn't create the order.");
@@ -151,7 +151,7 @@ function deleteOrder(orderId) {
   if (!isPlaced(order) && !confirm(`${orderId} is still a quote request, so no fabric was bought. Delete it and its chat?`)) return;
   if (Cloud.live) {
     // The database puts the fabric back and tidies up the order's records
-    Cloud.deleteOrder(order).then(() => { toast(`Order ${orderId} deleted.`); go("biz/orders"); }, error => alert(error.message));
+    Cloud.deleteOrder(order).then(() => { toast(`Order ${orderId} deleted.`); go("orders"); }, error => alert(error.message));
     return;
   }
   const fabric = findFabric(order.fabric_id);
@@ -167,14 +167,14 @@ function deleteOrder(orderId) {
   db.wedding_orders.forEach(w => w.members.forEach(m => { if (m.order_id === orderId) m.order_id = ""; }));
   cancelFabricOrder(orderId); // the fabric seller sees it as cancelled
   saveData();
-  go(isPlaced(order) ? "biz/orders" : "biz/quotes");
+  go(isPlaced(order) ? "orders" : "quotes");
 }
 
 // ---- One order, in full ----
 
 function renderOrderDetail(orderId) {
   const order = findOrder(orderId);
-  if (!order) return `${bizHeader("Order not found")}<p><a href="#/biz/orders">← All orders</a></p>`;
+  if (!order) return `${bizHeader("Order not found")}<p><a href="#/orders">← All orders</a></p>`;
   if (!isPlaced(order)) return renderQuoteDetail(orderId); // still a quote request
 
   const customer = findCustomer(order.customer_id);
@@ -220,8 +220,8 @@ function renderOrderDetail(orderId) {
       <td>${paymentStatusCell(p)}</td></tr>`).join("");
 
   return `
-    <p><a href="#/biz/orders">← All orders</a></p>
-    ${bizHeader(`Order ${order.id} ${stageBadge(order)}`, `${escapeHtml(order.outfit_type)} for <a href="#/biz/customers/${order.customer_id}">${escapeHtml(customer ? customer.name : "Unknown")}</a> · placed ${formatDate(order.created_at)} · due ${formatDate(order.due_date)}`)}
+    <p><a href="#/orders">← All orders</a></p>
+    ${bizHeader(`Order ${order.id} ${stageBadge(order)}`, `${escapeHtml(order.outfit_type)} for <a href="#/customers/${order.customer_id}">${escapeHtml(customer ? customer.name : "Unknown")}</a> · placed ${formatDate(order.created_at)} · due ${formatDate(order.due_date)}`)}
     ${styleBriefCard(order)}
 
     <div class="two-col">
@@ -264,7 +264,7 @@ function renderOrderDetail(orderId) {
             <select name="method">${PAYMENT_METHODS.map(m => `<option>${m}</option>`).join("")}</select>
             <button type="submit">Record payment</button>
           </form>` : ""}
-          <p><a href="#/biz/invoices/${order.id}">View invoice →</a>${delivery ? ` · Tracking ${escapeHtml(delivery.courier)} ${escapeHtml(delivery.tracking_number)}` : ""}</p>
+          <p><a href="#/invoices/${order.id}">View invoice →</a>${delivery ? ` · Tracking ${escapeHtml(delivery.courier)} ${escapeHtml(delivery.tracking_number)}` : ""}</p>
           ${order.review_rating ? `<p class="review"><span class="gold">${"★".repeat(order.review_rating)}</span> ${escapeHtml(order.review_text)}</p>` : ""}
         </div>
         <div class="card">

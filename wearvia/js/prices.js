@@ -8,7 +8,7 @@
 
 function renderPrices() {
   const currency = bizCurrency();
-  const head = bizHeader(`Prices · ${escapeHtml(bizDesigner().business_name)}`, `Your own price list, in ${escapeHtml(currencyInfo(currency).name)} (${escapeHtml(currency)}): what your customers pay for tailoring, embroidery and delivery. Fabric is priced by each fabric seller in their own currency, and converted into yours when you send a quote. You can change your currency in <a href="#/biz/profile">My profile</a>.`);
+  const head = bizHeader(`Prices · ${escapeHtml(bizDesigner().business_name)}`, `Your own price list, in ${escapeHtml(currencyInfo(currency).name)} (${escapeHtml(currency)}): what your customers pay for tailoring, embroidery and delivery. Fabric is priced by each fabric seller in their own currency, and converted into yours when you send a quote. You can change your currency in <a href="#/profile">My profile</a>.`);
   const list = bizPrices();
   // Prices still in another currency (a tailor who joined before exchange rates arrived)
   const foreign = list.filter(p => p.currency_code && p.currency_code !== currency);

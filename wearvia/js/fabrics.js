@@ -1,6 +1,6 @@
 // ============================================================
-// fabrics.js — screen 15: fabric inventory and the supplier marketplace
-// Live stock per fabric, low-stock warnings, restocking
+// fabrics.js — NebedaHub Admin → Fabric inventory: every fabric in the
+// marketplace, live stock, low-stock warnings, restocking, suppliers
 // ============================================================
 
 // Which fabric category is currently selected in the filter ("All" shows everything)
@@ -26,7 +26,6 @@ function renderFabrics() {
           <p class="${isLow ? "owed" : ""}"><b>${lengthText(fabric.yards_available, unit)}</b> in stock${isLow ? " — low stock!" : ""}</p>
           <div class="job-buttons">
             <button class="small" onclick="restockFabric('${fabric.id}', ${unit === "m" ? yardsFrom(10, "m") : 10})">Restock +10 ${unit}</button>
-            <button class="small" onclick="chooseFabric('${fabric.id}')" ${isSoldOut(fabric) ? "disabled" : ""}>Use in an order</button>
           </div>
         </div>
       </div>`;
@@ -37,7 +36,7 @@ function renderFabrics() {
     <td>${sellerFabrics(s.id).map(f => escapeHtml(f.name)).join(", ") || "—"}</td></tr>`).join("");
 
   return `
-    ${bizHeader("Fabric Inventory — Live", "Stock goes down automatically when a customer buys fabric for an order. Fabrics from independent sellers are checked in the Fabric Sellers tab.")}
+    ${bizHeader("Fabric Inventory — Live", "Stock goes down automatically when a customer buys fabric for an order. Fabrics from independent sellers are checked in the Fabric sellers tab.")}
     ${low.length ? `<div class="alerts"><span class="alert">⚠ Low stock (under ${lengthText(LOW_STOCK_YARDS, unit)}): ${low.map(f => `${escapeHtml(f.name)} (${lengthText(f.yards_available, unit)})`).join(", ")}</span></div>` : ""}
     <div class="chips">${categories.map(c => `<button class="chip ${c === fabricFilter ? "active" : ""}" onclick="setFabricFilter('${escapeHtml(c)}')">${escapeHtml(c)}</button>`).join("")}</div>
     <div class="fabric-grid">${cards}</div>
@@ -58,7 +57,7 @@ function renderFabrics() {
         </form>
       </div>
       <div class="card">
-        <h2>Suppliers <a class="total" href="#/biz/sellers">Seller approvals →</a></h2>
+        <h2>Suppliers <a class="total" href="#/sellers">Seller approvals →</a></h2>
         <div class="table-wrap"><table>
           <thead><tr><th>Supplier</th><th>Location</th><th>Currency</th><th>Delivery</th><th>Rating</th><th>Fabrics</th></tr></thead>
           <tbody>${supplierRows}</tbody>
@@ -98,14 +97,4 @@ function addFabric(event) {
   saveData();
   renderAll();
   return false;
-}
-
-// Jump to the Orders tab with this fabric already picked
-function chooseFabric(fabricId) {
-  pendingFabricId = fabricId;
-  go("biz/orders");
-  setTimeout(() => {
-    const input = document.querySelector("#order-form [name=customer]");
-    if (input) input.focus();
-  }, 0);
 }

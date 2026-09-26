@@ -545,7 +545,7 @@ function resetSampleData() {
     db = upgradeData(buildSampleData());
     PhotoStore.clear();
     saveData();
-    go("home");
+    go(APP.home);
     renderAll();
   }
 }

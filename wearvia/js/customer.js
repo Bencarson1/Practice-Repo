@@ -75,7 +75,7 @@ function cNav(active) {
   return `<nav class="bottomnav" aria-label="Customer menu">
     ${item("home", "🏠", "Home")}
     ${item("orders", "📦", "Orders", unreadBadge(unread, "in your orders"))}
-    <button class="plus" onclick="go('outfit')" aria-label="Start an order">+</button>
+    <button class="plus" onclick="startOrder()" aria-label="Start an order">+</button>
     ${item("market", "🧶", "Fabrics")}
     ${item("tailors", "📍", "Tailors")}
     ${item("profile", "👤", "Profile")}
@@ -134,14 +134,28 @@ function screenHome() {
       <div class="tagline">${APP_TAGLINE}</div>
       <h2>Your Style.<br>Our Craft.<br>Timeless You.</h2>
       <button class="btn near-btn" onclick="go('tailors')"><span aria-hidden="true">📍</span> Find tailors near me</button>
-      ${resume ? `<button class="btn2" onclick="go('${resume.screen}')">Continue your ${escapeHtml(d.outfit)} order with ${escapeHtml(draftDesigner().business_name)}</button>` : ""}
-      <button class="btn2" onclick="go('outfit')">Start an Order${d && d.designerId ? "" : ` with ${escapeHtml(draftDesigner().business_name)}`}</button>
+      ${resume ? `<button class="btn2" onclick="go('${resume.screen}')">Continue your ${escapeHtml(d.outfit)} order${draftHasTailor() ? ` with ${escapeHtml(draftDesigner().business_name)}` : ""}</button>` : ""}
+      <button class="btn2" onclick="startOrder()">Start an Order</button>
       <button class="btn2" onclick="go('market')">Fabric Marketplace</button>
-      ${Cloud.isTeam() ? `<button class="btn2" onclick="go('biz/dashboard')">Business Dashboard</button>` : ""}
-      <button class="linkish on-navy" onclick="go('seller')">Sell your fabric on ${APP_NAME} →</button>
-      <button class="linkish on-navy" onclick="go('for-tailors')">Are you a tailor or designer? Join ${APP_NAME} →</button>
+      <a class="linkish on-navy" href="${escapeHtml(appUrl("seller", "welcome"))}">Sell your fabric on ${APP_NAME} →</a>
+      <a class="linkish on-navy" href="${escapeHtml(appUrl("business", "welcome"))}">Are you a tailor or designer? Join ${APP_NAME} →</a>
     </div>
     ${cNav("home")}`;
+}
+
+// "Start an Order": the customer picks their tailor first (Find tailors near
+// me → a tailor → Request a quote), then designs the outfit for them
+let pickingTailor = false;
+
+function draftHasTailor() {
+  const d = db.draft;
+  return !!(d && d.designerId && designerById(d.designerId));
+}
+
+function startOrder() {
+  if (draftHasTailor()) { go("outfit"); return; }
+  pickingTailor = true;
+  go("tailors");
 }
 
 // ---- Screen 2: Outfit picker (step 1) ----
@@ -410,7 +424,7 @@ function screenSend() {
       <div class="order-head">
         <div class="thumb">${conceptSVG(d, d.variation)}</div>
         <div>
-          <div class="name">${escapeHtml(d.outfit)} by ${escapeHtml(draftDesigner().business_name)}</div>
+          <div class="name">${escapeHtml(d.outfit)}${draftHasTailor() ? ` by ${escapeHtml(draftDesigner().business_name)}` : ""}</div>
           <div class="meta">${escapeHtml(colourName(d.colour))} · ${escapeHtml(d.embroidery)} embroidery · ${escapeHtml(d.sleeve)} sleeve · ${escapeHtml(d.neck)} neck</div>
         </div>
       </div>
@@ -425,10 +439,10 @@ function screenSend() {
       <div class="send-next">
         <b>What happens next</b>
         <ol>
-          <li>${escapeHtml(draftDesigner().business_name)} looks at your design, photos and measurements.</li>
+          <li>${draftHasTailor() ? escapeHtml(draftDesigner().business_name) : "Your tailor"} looks at your design, photos and measurements.</li>
           <li>You chat here in the app to agree how many ${unitWord(unit, true)} of fabric you need.</li>
           <li>They send your quote in ${escapeHtml(currencyInfo(currency).name)}: fabric (${unitWord(unit, true)} × ${money(perUnit, fc)}) + tailoring ${money(tailoring, currency)}${approxMoney(tailoring, currency)} + embroidery ${money(embroidery, currency)} + delivery ${money(DELIVERY_FEE, currency)}.</li>
-          ${fc !== currency ? `<li>The seller prices this fabric in ${escapeHtml(currencyInfo(fc).name)}. ${escapeHtml(tailor.business_name)}'s quote converts it into ${escapeHtml(currencyInfo(currency).name)} at the day's exchange rate${fxRate(fc, currency) ? ` (today ${escapeHtml(rateText(fxRate(fc, currency), fc, currency))})` : ""}, and shows the rate used.</li>` : ""}
+          ${fc !== currency ? `<li>The seller prices this fabric in ${escapeHtml(currencyInfo(fc).name)}. ${draftHasTailor() ? escapeHtml(tailor.business_name) + "'s" : "Your tailor's"} quote converts it into ${escapeHtml(currencyInfo(currency).name)} at the day's exchange rate${fxRate(fc, currency) ? ` (today ${escapeHtml(rateText(fxRate(fc, currency), fc, currency))})` : ""}, and shows the rate used.</li>` : ""}
           <li>Accept it and pay a ${Math.round(DEPOSIT_RATE * 100)}% deposit. The fabric is only bought then.</li>
         </ol>
       </div>
@@ -436,14 +450,16 @@ function screenSend() {
       <label class="field"><span>Anything to tell the tailor? <small>(optional)</small></span>
         <textarea id="tailor-note" rows="3" maxlength="${CHAT_TEXT_MAX}" placeholder="e.g. It's for a wedding on 12 June. I'm 6ft 2 and like a loose fit."
           oninput="draft().tailorNote=this.value;saveData()">${escapeHtml(d.tailorNote || "")}</textarea></label>
-      <button id="send-request" class="cta" onclick="sendToTailor()">Send to Tailor</button>
-      <div class="meta centre">Nothing to pay now.</div>
+      ${draftHasTailor() ? `<button id="send-request" class="cta" onclick="sendToTailor()">Send to Tailor</button>
+      <div class="meta centre">Nothing to pay now.</div>` : `<div class="notice">Choose the tailor who'll make it. Your design, photos, measurements and fabric are kept.</div>
+      <button id="send-request" class="cta" onclick="startOrder()">Choose your tailor</button>`}
     </div>`;
 }
 
 let sendingRequest = false;
 function sendToTailor() {
   if (sendingRequest) return;
+  if (!draftHasTailor()) { startOrder(); return; }
   const d = draft();
   const fabric = findFabric(d.fabricId);
   // The order belongs to whoever the measurements were saved for
@@ -526,7 +542,7 @@ function deliveryBoxHtml(order, side) {
       <button type="submit" class="optbtn sel">${x.delivery_address ? "Update" : "Save"}</button></form>` : "";
   return `<div class="handover">
     <b>📦 Delivery and fitting details</b>
-    <div class="mrow"><span>${side === "customer" ? tailor : "Your business address"}</span><span>${x.tailor_address ? escapeHtml(x.tailor_address) : side === "customer" ? "Not added yet — ask in the chat" : `Not added yet — add it in <a href="#/biz/profile">My profile</a>`}</span></div>
+    <div class="mrow"><span>${side === "customer" ? tailor : "Your business address"}</span><span>${x.tailor_address ? escapeHtml(x.tailor_address) : side === "customer" ? "Not added yet — ask in the chat" : `Not added yet — add it in <a href="#/profile">My profile</a>`}</span></div>
     <div class="mrow"><span>${side === "customer" ? "Your delivery address" : "Customer's delivery address"}</span><span>${x.delivery_address ? escapeHtml(x.delivery_address) : side === "customer" ? "Add it below" : "The customer hasn't added it yet"}</span></div>
     ${form}
     <p class="meta">Shared because the deposit is confirmed — for delivery and fittings only. Keep payments and changes on ${APP_NAME} so you're protected.</p>
@@ -722,7 +738,7 @@ function screenOrders() {
         <span><b>${escapeHtml(o.outfit_type)}</b> · ${o.id}<br><span class="fl">${escapeHtml(currentStepLabel(o) === "Complete" ? "Complete" : "Now: " + currentStepLabel(o))}</span></span>
         <span>${unreadBadge(unreadCount(o.id, "customer"))} ›</span></button>`).join("")}
       ${!orders.length && !(d && d.designDone) ? `<div class="empty">${customer ? "No orders yet." : "Your orders appear here once you place one."}</div>
-        <button class="cta" onclick="go('outfit')">Start an Order</button>` : ""}
+        <button class="cta" onclick="startOrder()">Start an Order</button>` : ""}
     </div>
     ${cNav("orders")}`;
 }
@@ -997,7 +1013,7 @@ function screenProfile() {
       ${cTop("Profile")}
       <div class="content">
         <div class="empty">New here? Your profile is created when you save your measurements during your first order.</div>
-        <button class="cta" onclick="go('outfit')">Start an Order</button>
+        <button class="cta" onclick="startOrder()">Start an Order</button>
         ${signIn}
       </div>
       ${cNav("profile")}`;
@@ -1120,7 +1136,6 @@ const CUSTOMER_SCREENS = {
   designer: screenDesigner,
   tailors: screenTailors,
   tailor: screenTailorPage,
-  joinTailor: screenJoinTailor,
   rtw: screenRtw,
   profile: screenProfile,
   myMeasurements: screenMyMeasurements

@@ -1,6 +1,7 @@
 // ============================================================
-// pwa.js — makes NebedaHub installable ("Add to Home Screen" on iPhone,
-// "Install app" on Android and laptops). See sw.js for what is stored:
+// pwa.js — makes each NebedaHub app installable on its own ("Add to Home Screen" on iPhone,
+// "Install app" on Android and laptops). Each app registers the sw.js in its own
+// folder (sw-core.js does the work). What is stored:
 // only the app's own files, never anything from Supabase.
 // ============================================================
 

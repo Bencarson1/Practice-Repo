@@ -40,7 +40,7 @@ function renderMeasurements() {
       <div class="measure-card">
         <div class="measure-head">
           <div>
-            <h3><a href="#/biz/customers/${customer.id}">${escapeHtml(customer.name)}</a></h3>
+            <h3><a href="#/customers/${customer.id}">${escapeHtml(customer.name)}</a></h3>
             <small>${escapeHtml(customer.phone)} · ${escapeHtml(m.label)} profile · updated ${formatDate(m.updated)} · measures in ${customerBodyUnit(customer) === "cm" ? "cm" : "inches"}</small>
           </div>
           <button class="small" onclick="editMeasurements('${customer.id}')">Edit</button>

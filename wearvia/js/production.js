@@ -15,16 +15,16 @@ function renderProduction() {
       if (!next) {
         nextButton = `<span class="muted small-text">${order.review_rating ? "★".repeat(order.review_rating) : "Awaiting review"}</span>`;
       } else if (next.key === "delivered") {
-        nextButton = `<a class="button small" href="#/biz/orders/${order.id}">${findDelivery(order.id) ? "Delivery ▶" : "Dispatch ▶"}</a>`;
+        nextButton = `<a class="button small" href="#/orders/${order.id}">${findDelivery(order.id) ? "Delivery ▶" : "Dispatch ▶"}</a>`;
       } else if (depositAwaiting(order)) {
-        nextButton = `<a class="button small" href="#/biz/payments" title="Confirm the deposit to start production">Awaiting deposit</a>`;
+        nextButton = `<a class="button small" href="#/payments" title="Confirm the deposit to start production">Awaiting deposit</a>`;
       } else {
         const blocked = next.key === "balance_paid" && balanceOwed(order) > 0;
         nextButton = `<button class="small" onclick="moveStage('${order.id}', 1)" ${blocked ? `disabled title="Balance of ${money(balanceOwed(order), orderCurrency(order))} owed"` : ""}>${blocked ? "Awaiting balance" : "Next ▶"}</button>`;
       }
       return `
         <div class="job-card ${isLate(order) ? "late" : ""}">
-          <a href="#/biz/orders/${order.id}"><strong>${order.id}</strong></a>
+          <a href="#/orders/${order.id}"><strong>${order.id}</strong></a>
           <div>${escapeHtml(order.outfit_type)} · ${escapeHtml(colourName(order.colour))}</div>
           <small>${escapeHtml(customerName(order.customer_id))} · due ${formatDate(order.due_date)}${isLate(order) ? " · late" : ""}</small>
           ${styleJobStrip(order)}

@@ -1,5 +1,5 @@
 // ============================================================
-// seller-fabrics.js — business tab: Nebeda Threads checks the
+// seller-fabrics.js — NebedaHub Admin → Fabric sellers: the admin checks the
 // fabrics sellers upload. Approve puts a fabric live in the
 // marketplace; Hide takes it down (the seller sees the reason).
 // ============================================================

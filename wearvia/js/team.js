@@ -18,8 +18,8 @@ function renderTeam() {
             <button class="small danger" onclick="removeStaff('${person.id}')" ${assigned.length ? `disabled title="Reassign their ${assigned.length} order(s) first"` : ""}>Remove</button>
           </div>
           ${jobs.length ? `<ul class="jobs">${jobs.map(o => `<li>
-            <a href="#/biz/orders/${o.id}">${o.id}</a> ${escapeHtml(o.outfit_type)} — ${escapeHtml(currentStepLabel(o).toLowerCase())} now
-            ${hasInspiration(o.inspiration) ? `<a href="#/biz/orders/${o.id}" title="The customer uploaded photos of the style to copy">📷 style photos</a>` : ""}
+            <a href="#/orders/${o.id}">${o.id}</a> ${escapeHtml(o.outfit_type)} — ${escapeHtml(currentStepLabel(o).toLowerCase())} now
+            ${hasInspiration(o.inspiration) ? `<a href="#/orders/${o.id}" title="The customer uploaded photos of the style to copy">📷 style photos</a>` : ""}
             ${others.length ? `<select class="small" onchange="reassign('${o.id}', '${role.key}', this.value)" aria-label="Reassign ${o.id}">
               <option value="">Reassign…</option>${others.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join("")}</select>` : ""}
           </li>`).join("")}</ul>` : `<p class="muted small-text">No jobs waiting right now · ${assigned.length} order(s) assigned for later</p>`}
@@ -76,7 +76,7 @@ function teamLoginsCard() {
           <select name="role" aria-label="Job">${["staff", "manager"].concat(STAFF_ROLES.map(r => r.key)).map(r => `<option value="${r}">${escapeHtml(r.replace("_", " "))}</option>`).join("")}</select>
           <button type="submit">Add login</button>
         </form>
-        <p class="hint">They then create an account in the app with that email (and confirm it). They'll see the Business dashboard when they sign in.</p>`
+        <p class="hint">They then create an account in ${APP.name} (<b>nebedahub.com/business/</b>) with that email and confirm it. They'll see the Business dashboard when they sign in there.</p>`
         : `<p class="hint">Only the owner can add or remove logins.</p>`}
     </div>`;
 }

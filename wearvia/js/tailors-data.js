@@ -66,7 +66,7 @@ function bizDesigner() {
 function switchBizDesigner(id) {
   db.session.designerId = id;
   if (!Cloud.live) saveData();
-  go("biz/dashboard");
+  go("dashboard");
 }
 
 function inBusiness() {
@@ -354,7 +354,7 @@ const DEMO_TAILORS = [
   { id: "D9", business_name: "Camden Bespoke (demo, waiting for approval)", country_code: "GB", city: "London", postcode: "NW1 8AH", address_line: "Camden Lock",
     latitude: 51.5410, longitude: -0.1460, show_exact_address: false, speciality_tags: ["Custom design", "Women's dresses"], admin_status: "pending",
     delivery_available: true, custom_orders: true, rating: null, review_count: 0, pattern: ["adire", ["#1e3a5f", "#efe6d2", "#1b1b1b"]],
-    description: "A new tailor waiting for the admin to approve them — try approving it in Business → Tailors." },
+    description: "A new tailor waiting for the admin to approve them — try approving it in NebedaHub Admin → Tailors." },
   { id: "D10", business_name: "Westlands Tailors Nairobi (demo)", country_code: "KE", city: "Nairobi", postcode: "00800", address_line: "Woodvale Grove",
     latitude: -1.2635, longitude: 36.8030, show_exact_address: false, speciality_tags: ["Suits", "Kaftan", "Custom design"],
     delivery_available: true, custom_orders: true, rating: 4.6, review_count: 14, pattern: ["kente", ["#1d7a5a", "#c9a227", "#1b1b1b"]],

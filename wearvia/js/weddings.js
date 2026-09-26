@@ -19,7 +19,7 @@ function renderWeddings() {
       return `<tr>
         <td><b>${escapeHtml(m.role)}</b>${m.name ? `<div class="muted small-text">${escapeHtml(m.name)}</div>` : ""}</td>
         <td>${m.outfits} outfit${m.outfits == 1 ? "" : "s"}</td>
-        <td>${order ? `<a href="#/biz/orders/${order.id}">${escapeHtml(memberStatus(m))}</a>` : `
+        <td>${order ? `<a href="#/orders/${order.id}">${escapeHtml(memberStatus(m))}</a>` : `
           <select onchange="setMemberStatus('${w.id}', '${m.id}', this.value)" aria-label="Status">
             ${MEMBER_STATUSES.map(s => `<option ${s === m.status ? "selected" : ""}>${s}</option>`).join("")}
           </select>`}</td>
