@@ -45,6 +45,7 @@ function renderMyProfile() {
     ${bizHeader("My profile", `What customers see when they find ${escapeHtml(d.business_name)} on ${APP_NAME}.`)}
     ${tailorStatusBanner(d)}
     ${canEdit ? "" : `<div class="card"><p class="hint">Only the owner can change the profile. Ask them to update it.</p></div>`}
+    ${canEdit ? designerPaymentsCard() : ""}
     ${tailorTermsCard(d, canEdit)}
     <div class="card">
       <p class="share-row">Your public page: <a href="${escapeHtml(link)}" target="_blank" rel="noopener">${escapeHtml(link.replace(/^https?:\/\//, ""))}</a>
@@ -105,6 +106,12 @@ function renderMyProfile() {
         <input id="portfolio-title" maxlength="60" placeholder="Caption (optional), e.g. Wedding agbada" aria-label="Caption">
         <label class="button file-button">Add photos<input type="file" accept="image/*" multiple onchange="addPortfolioPhotos(this)"></label></div>` : ""}
     </div>`;
+}
+
+function designerPaymentsCard() {
+  return `<div class="card"><h2>Payments & payouts</h2>
+    <p><b>Not open yet.</b> NebedaHub is completing its protected payment and payout setup before sellers can receive customer money.</p>
+    <p class="hint">Do not ask customers to pay you directly. Payment setup will be enabled here when it is ready.</p></div>`;
 }
 
 function profileLogoRow(d) {
