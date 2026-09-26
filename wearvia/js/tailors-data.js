@@ -87,6 +87,15 @@ function ownsBizDesigner() {
   return !!(row && row.is_owner);
 }
 
+// Owner or manager actions: deleting orders, changing prices and maintaining
+// the production roster are business-management actions, not ordinary staff work.
+function canManageBusinessSettings() {
+  if (!Cloud.live) return true;
+  const me = Cloud.me || {};
+  if (me.is_admin || ownsBizDesigner()) return true;
+  return me.designer_id === bizDesignerId() && me.job_role === "manager";
+}
+
 // The tailor a customer is ordering from right now (the draft), or Nebeda Threads
 function draftDesignerId() {
   const d = db && db.draft && db.draft.designerId && designerById(db.draft.designerId);

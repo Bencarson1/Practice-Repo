@@ -665,15 +665,15 @@ function screenPay(orderId) {
       <div class="qline"><span>Balance (after quality control)</span><span>${money(order.quote_total - deposit, cur)}</span></div>
       <div class="meta">You pay in ${escapeHtml(currencyInfo(cur).name)} (${escapeHtml(cur)}), ${escapeHtml(designerName(order.designer_id))}'s currency.</div>
       ${approxNote(cur)}
-      <div class="selopt"><span class="fl">Method</span>
+      ${Cloud.live && ONLINE_PAYMENTS_ENABLED ? `<div class="meta"><b>Payment methods:</b> Secure payment methods will be shown at checkout.</div>` : !Cloud.live ? `<div class="selopt"><span class="fl">Method</span>
         <span class="optbtns">${["Card", "Apple Pay", "Bank transfer"].map(m =>
           `<button class="optbtn ${depositMethod === m ? "sel" : ""}" onclick="depositMethod='${m}';renderAll()">${m}</button>`).join("")}</span>
-      </div>
+      </div>` : `<div class="card attention"><b>Online payments are not open yet.</b><p class="hint">You can prepare and accept your quote, but do not send money directly to a tailor or fabric seller. NebedaHub will enable protected in-app payments before public transactions open.</p></div>`}
       <label class="field">Delivery address <small>(optional — shared with ${escapeHtml(designerName(order.designer_id))} once your deposit is confirmed)</small>
         <input id="pay-address" maxlength="300" value="${escapeHtml(deliveryDetails(order).delivery_address)}" placeholder="House number, street, town, postcode" autocomplete="street-address"></label>
       ${payProtectionLine()}
-      <div class="meta">Demo checkout — no real money is taken. Your deposit shows as <b>awaiting confirmation</b> until ${escapeHtml(designerName(order.designer_id))} confirms it. Stripe connects here in the full version.</div>
-      <button id="pay-deposit" class="cta" onclick="payDeposit('${order.id}')">Pay ${money(deposit, cur)} Deposit</button>
+      <div class="meta">${Cloud.live ? (ONLINE_PAYMENTS_ENABLED ? `Secure checkout is handled by the approved payment provider. ${APP_NAME} records payment from a verified server notification, not from your browser.` : `Payments are currently disabled while NebedaHub completes payment setup.`) : `Demo mode — no real money is taken.`}</div>
+      ${Cloud.live && !ONLINE_PAYMENTS_ENABLED ? "" : `<button id="pay-deposit" class="cta" onclick="payDeposit('${order.id}')">${Cloud.live ? "Continue to secure payment" : `Pay ${money(deposit, cur)} Deposit`}</button>`}
     </div>`;
 }
 
@@ -683,16 +683,22 @@ function payDeposit(orderId) {
   if (!order || !isPlaced(order) || depositStarted(order)) return;
   const addressBox = document.getElementById("pay-address");
   const address = addressBox ? addressBox.value.trim() : "";
-  if (address && Cloud.live) Cloud.setDeliveryAddress(order, address).catch(error => toast(error.message));
-  else if (address) order.delivery_address = hideContactDetails(address).text;
-  db.payments.push({
-    id: nextPaymentId(), order_id: order.id, amount: order.deposit_amount, method: depositMethod, kind: "Deposit",
-    date: today(), status: "awaiting_confirmation", currency_code: orderCurrency(order)
-  });
-  refreshOrderPayments(order);
-  saveData();
-  flashMessage = `Thank you! Your deposit of ${money(order.deposit_amount, orderCurrency(order))} is awaiting confirmation — we'll start as soon as it's confirmed.`;
-  go("tracking/" + order.id);
+  if (!Cloud.live) {
+    if (address) order.delivery_address = hideContactDetails(address).text;
+    db.payments.push({
+      id: nextPaymentId(), order_id: order.id, amount: order.deposit_amount, method: depositMethod, kind: "Deposit",
+      date: today(), status: "awaiting_confirmation", currency_code: orderCurrency(order)
+    });
+    refreshOrderPayments(order);
+    saveData();
+    flashMessage = `Demo payment recorded for ${money(order.deposit_amount, orderCurrency(order))}.`;
+    go("tracking/" + order.id);
+    return;
+  }
+
+  if (!ONLINE_PAYMENTS_ENABLED) { toast("Online payments are not open yet. Please do not pay a seller outside NebedaHub."); return; }
+
+  toast("Protected checkout will be enabled after the payment provider is connected.");
 }
 
 // ---- Chat with Nebeda Threads (every order) ----
@@ -773,14 +779,16 @@ function screenTracking(orderId) {
   if (!placed) {
     action = quoteBlock(order);
   } else if (!depositStarted(order)) {
-    action = `<button class="cta" onclick="go('pay/${order.id}')">Pay ${money(order.deposit_amount, cur)} Deposit →</button>`;
+    action = Cloud.live && !ONLINE_PAYMENTS_ENABLED
+      ? `<div class="card attention"><b>Payment not open yet</b><p class="hint">Your quote is accepted. NebedaHub will notify you when protected in-app payment is enabled. Do not pay the seller outside NebedaHub.</p></div>`
+      : `<button class="cta" onclick="go('pay/${order.id}')">Pay ${money(order.deposit_amount, cur)} Deposit →</button>`;
   } else if (order.stage === "delivered" && !order.review_rating) {
     action = `<button class="cta" onclick="go('review/${order.id}')">Leave a Review →</button>`;
   } else if (due > 0 && qcPassed) {
     action = `
-      <div class="selopt"><span class="fl">Pay by</span><span class="optbtns">${["Card", "Apple Pay", "Bank transfer"].map(m =>
-        `<button class="optbtn ${balanceMethod === m ? "sel" : ""}" onclick="balanceMethod='${m}';renderAll()">${m}</button>`).join("")}</span></div>
-      <button class="cta" onclick="payBalance('${order.id}')">Pay ${money(due, cur)} Balance</button>
+      ${Cloud.live && ONLINE_PAYMENTS_ENABLED ? `<div class="meta"><b>Secure payment:</b> Continue through NebedaHub's protected checkout.</div>` : !Cloud.live ? `<div class="selopt"><span class="fl">Pay by</span><span class="optbtns">${["Card", "Apple Pay", "Bank transfer"].map(m =>
+        `<button class="optbtn ${balanceMethod === m ? "sel" : ""}" onclick="balanceMethod='${m}';renderAll()">${m}</button>`).join("")}</span></div>` : `<div class="card attention"><b>Balance payment is not open yet.</b><p class="hint">Do not pay outside NebedaHub. Protected in-app payment will be enabled before live transactions open.</p></div>`}
+      ${Cloud.live && !ONLINE_PAYMENTS_ENABLED ? "" : `<button id="pay-balance" class="cta" onclick="payBalance('${order.id}')">Pay ${money(due, cur)} Balance</button>`}
       ${payProtectionLine()}`;
   }
   return `
@@ -821,10 +829,15 @@ function payBalance(orderId) {
   const order = findOrder(orderId);
   const due = Math.round((balanceOwed(order) - amountAwaiting(order.id)) * 100) / 100;
   if (due <= 0) return;
-  recordOrderPayment(order, due, balanceMethod, today(), false);
-  saveData();
-  flashMessage = `Thank you! Your balance of ${money(due, orderCurrency(order))} is awaiting confirmation. Your outfit goes out for delivery once it's confirmed.`;
-  renderAll();
+  if (!Cloud.live) {
+    recordOrderPayment(order, due, balanceMethod, today(), false);
+    saveData();
+    flashMessage = `Demo balance payment of ${money(due, orderCurrency(order))} recorded.`;
+    renderAll();
+    return;
+  }
+  if (!ONLINE_PAYMENTS_ENABLED) { toast("Online payments are not open yet. Please do not pay outside NebedaHub."); return; }
+  toast("Protected checkout will be enabled after the payment provider is connected.");
 }
 
 // ---- Screen 20: Delivery tracking (step 15) ----

@@ -9,3 +9,6 @@
 
 const SUPABASE_URL = "https://ylngxdwywqteanpelsqb.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_79DT7izyjA7R_VsIPlfkTQ_z14fm6Kr";
+
+// Payments are intentionally disabled until NebedaHub finishes its payment-provider setup.
+const ONLINE_PAYMENTS_ENABLED = false;

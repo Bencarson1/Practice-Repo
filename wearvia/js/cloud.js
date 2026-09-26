@@ -188,7 +188,7 @@ const Cloud = (() => {
   // ---- Browsing tailors without an account ----
   // Anyone can find tailors and open their pages. Everything else needs signing in.
 
-  const GUEST_SCREENS = ["tailors", "tailor"];
+  const GUEST_SCREENS = ["home", "tailors", "tailor"];
 
   function isGuest() { return state.live && !state.me; }
 
@@ -898,7 +898,8 @@ const Cloud = (() => {
         throw new Error(friendly(created.error));
       }
       const deposit = num(created.data.deposit_amount);
-      if (deposit > 0) {
+      const paymentsOpen = typeof ONLINE_PAYMENTS_ENABLED === "undefined" || ONLINE_PAYMENTS_ENABLED;
+      if (deposit > 0 && paymentsOpen) {
         const paid = await state.client.from("payments").insert({
           id: newId(), order_id: id, amount: deposit, method: details.method, kind: "Deposit",
           status: details.confirmed ? "confirmed" : "awaiting_confirmation", paid_on: today()

@@ -7,6 +7,7 @@
 // ============================================================
 
 function renderPrices() {
+  if (!canManageBusinessSettings()) return bizHeader("Prices", "Only the business owner or a manager can change prices.");
   const currency = bizCurrency();
   const head = bizHeader(`Prices · ${escapeHtml(bizDesigner().business_name)}`, `Your own price list, in ${escapeHtml(currencyInfo(currency).name)} (${escapeHtml(currency)}): what your customers pay for tailoring, embroidery and delivery. Fabric is priced by each fabric seller in their own currency, and converted into yours when you send a quote. You can change your currency in <a href="#/profile">My profile</a>.`);
   const list = bizPrices();
@@ -70,6 +71,7 @@ function renderPrices() {
 
 function savePrices(event) {
   event.preventDefault();
+  if (!canManageBusinessSettings()) { alert("Only the business owner or a manager can change prices."); return false; }
   const form = event.target;
   const field = name => form.elements.namedItem(name);
   const updates = [];
@@ -105,6 +107,7 @@ function savePrices(event) {
 
 // Puts any prices still in another currency into the tailor's own, at today's rate
 function convertMyPrices() {
+  if (!canManageBusinessSettings()) { alert("Only the business owner or a manager can change prices."); return; }
   const d = bizDesigner();
   const currency = designerCurrency(d);
   if (Cloud.live) {

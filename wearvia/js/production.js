@@ -17,7 +17,9 @@ function renderProduction() {
       } else if (next.key === "delivered") {
         nextButton = `<a class="button small" href="#/orders/${order.id}">${findDelivery(order.id) ? "Delivery ▶" : "Dispatch ▶"}</a>`;
       } else if (depositAwaiting(order)) {
-        nextButton = `<a class="button small" href="#/payments" title="Confirm the deposit to start production">Awaiting deposit</a>`;
+        nextButton = businessPaymentsOpen()
+          ? `<a class="button small" href="#/payments" title="Confirm the deposit to start production">Awaiting deposit</a>`
+          : `<button class="small" disabled title="Protected payments are not open yet">Payments not open</button>`;
       } else {
         const blocked = next.key === "balance_paid" && balanceOwed(order) > 0;
         nextButton = `<button class="small" onclick="moveStage('${order.id}', 1)" ${blocked ? `disabled title="Balance of ${money(balanceOwed(order), orderCurrency(order))} owed"` : ""}>${blocked ? "Awaiting balance" : "Next ▶"}</button>`;
@@ -45,7 +47,7 @@ function renderProduction() {
   }).join("");
 
   return `
-    ${bizHeader("Production Tracking", "Each column is the last step an order has completed. Orders can't pass quality control until the balance is paid, and are delivered once the courier confirms.")}
+    ${bizHeader("Production Tracking", businessPaymentsOpen() ? "Each column is the last step an order has completed. Orders can't pass quality control until the balance is paid, and are delivered once the courier confirms." : "Prepare and manage production here. Orders that need customer payment stay blocked until protected in-app payments are enabled.")}
     <div class="board">${columns}</div>
   `;
 }
