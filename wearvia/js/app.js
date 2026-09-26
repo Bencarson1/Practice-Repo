@@ -19,7 +19,7 @@ const BIZ_TABS = [
   { key: "customers", label: "Customers", render: renderCustomers },
   { key: "measurements", label: "Measurements", render: renderMeasurements },
   { key: "payments", label: "Payments", render: renderPayments },
-  { key: "prices", label: "Prices", render: renderPrices },
+  { key: "prices", label: "Prices", render: renderPrices, show: () => canManageBusinessSettings() },
   { key: "weddings", label: "Wedding Orders", render: renderWeddings },
   { key: "shop", label: "Ready to Wear", render: renderShop },
   { key: "deliveries", label: "Deliveries", render: renderDeliveries },
