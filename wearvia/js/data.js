@@ -948,7 +948,9 @@ function advanceOrder(order) {
   const index = stageIndex(order);
   const next = STAGES[index + 1];
   if (!next) return "This order has been delivered.";
-  if (depositAwaiting(order)) return `The deposit for ${order.id} hasn't been confirmed yet. Confirm it under Payments first.`;
+  if (depositAwaiting(order)) return (Cloud.live && typeof ONLINE_PAYMENTS_ENABLED !== "undefined" && !ONLINE_PAYMENTS_ENABLED)
+    ? `Protected payments are not open yet, so ${order.id} cannot enter paid production.`
+    : `The deposit for ${order.id} hasn't been confirmed yet. Confirm it under Payments first.`;
   if (next.key === "balance_paid") {
     if (balanceOwed(order) > 0) return `Waiting for the balance of ${money(balanceOwed(order), orderCurrency(order))} before this can move on.`;
     order.balance_paid_at = order.balance_paid_at || today();
