@@ -4,7 +4,7 @@
 // Each NebedaHub app (see apps.js) has its own addresses:
 //   NebedaHub           /#/home, /#/outfit, /#/tracking/NT-1003
 //   NebedaHub Business  /business/#/dashboard, /business/#/orders/NT-1003
-//   NebedaHub Seller    /sell/#/fabrics, /sell/#/edit/F12
+//   NebedaHub Sellers   /sellers/#/fabrics, /sellers/#/edit/F12
 //   NebedaHub Admin     /admin/#/overview, /admin/#/tailors
 // ============================================================
 
@@ -30,7 +30,8 @@ const BIZ_TABS = [
 const ADMIN_TABS = [
   { key: "overview", label: "Overview", render: renderAdminOverview },
   { key: "tailors", label: "Tailors", render: renderTailorAdmin, badge: () => db.designers.filter(d => d.admin_status === "pending").length },
-  { key: "sellers", label: "Fabric sellers", render: renderSellerFabrics, badge: () => activeFabrics().filter(f => f.status === "pending").length },
+  { key: "applications", label: "Seller applications", render: renderSellerApplications, badge: () => db.suppliers.filter(s => s.admin_status === "pending").length },
+  { key: "sellers", label: "Seller fabrics", render: renderSellerFabrics, badge: () => activeFabrics().filter(f => f.status === "pending").length },
   { key: "fabrics", label: "Fabric inventory", render: renderFabrics },
   { key: "specialities", label: "Specialities", render: renderSpecialities },
   { key: "contacts", label: "Hidden contact details", render: renderHiddenContacts }
@@ -144,7 +145,7 @@ function renderAdminArea(screen, id) {
     tabsEl.innerHTML = "";
     content.innerHTML = noAccessCard("This account isn't a NebedaHub admin",
       `NebedaHub Admin is only for the NebedaHub team. You're signed in as ${escapeHtml((Cloud.me || {}).email || "")}.`,
-      [["customer", "", "Open NebedaHub"], ["business", "", "Open NebedaHub Business"], ["seller", "", "Open NebedaHub Seller"]]);
+      [["customer", "", "Open NebedaHub"], ["business", "", "Open NebedaHub Business"], ["seller", "", "Open NebedaHub Sellers"]]);
     document.title = APP.name;
     return;
   }

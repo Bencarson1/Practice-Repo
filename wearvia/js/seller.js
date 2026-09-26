@@ -1,23 +1,27 @@
 // ============================================================
-// seller.js — the Fabric Seller area
-// Sellers create a shop profile, put fabrics on their "market stall"
-// (up to 5 photos each), edit them, mark them sold out or delete them,
-// and see the orders that used their fabric.
+// seller.js — NebedaHub Sellers (/sellers/), the fabric seller app
+// A fabric seller applies (shop, contact details, what they sell, sample
+// photos), waits while the NebedaHub team reviews the application, and
+// once approved their fabrics go on the marketplace. They add and edit
+// fabrics (up to 5 photos each), mark them in or out of stock, and move
+// each order along: confirm the stock, then dispatch it to the customer's
+// tailor with the courier and tracking number (and a photo if they like).
 //
-// Addresses (NebedaHub Seller, /sell/): #/welcome (sign in or join), #/fabrics, #/new,
-// #/edit/F12, #/orders, #/profile
+// Addresses: #/welcome (how it works, apply or sign in), #/apply, #/fabrics,
+// #/new, #/edit/F12, #/orders, #/profile
 // ============================================================
 
 const SELLER_TABS = [
   { key: "fabrics", label: "My fabrics" },
   { key: "new", label: "Add a fabric" },
-  { key: "orders", label: "Orders" },
-  { key: "profile", label: "Shop profile" }
+  { key: "orders", label: "Orders", badge: seller => sellerOrders(seller.id).filter(o => o.status === "new" || (o.status === "confirmed" && fabricOrderUnlocked(o))).length },
+  { key: "profile", label: "Shop & application" }
 ];
 
 let stallFilter = "All";
 let sellerForm = null;   // photos (or logo) being edited, kept while the form is open
 let sellerSaving = false;
+let dispatchOpen = null; // the order whose "Dispatch" form is open
 
 function renderSellerArea(screen, id) {
   const seller = currentSeller();
@@ -26,22 +30,26 @@ function renderSellerArea(screen, id) {
   let html, title;
 
   if (!seller) {
-    tabs.innerHTML = `<a class="tab ${screen !== "profile" ? "active" : ""}" href="#/welcome">Sell on ${APP_NAME}</a>
-      ${Cloud.isGuest() ? "" : `<a class="tab ${screen === "profile" ? "active" : ""}" href="#/profile">Create your shop</a>`}`;
-    html = screen === "profile" ? sellerProfileScreen(null) : sellerWelcome();
-    title = "Sell fabric";
+    const applying = (screen === "apply" || screen === "profile") && !Cloud.isGuest();
+    tabs.innerHTML = `<a class="tab ${applying ? "" : "active"}" href="#/welcome">Sell on ${APP_NAME}</a>
+      ${Cloud.isGuest() ? "" : `<a class="tab ${applying ? "active" : ""}" href="#/apply">Apply to sell</a>`}`;
+    html = applying ? sellerProfileScreen(null) : sellerWelcome();
+    title = applying ? "Apply to sell" : "Sell fabric";
   } else {
-    const activeTab = screen === "edit" ? "new" : screen;
-    tabs.innerHTML = SELLER_TABS.map(t =>
-      `<a class="tab ${t.key === activeTab ? "active" : ""}" href="#/${t.key}">${t.key === "new" && screen === "edit" ? "Edit fabric" : t.label}</a>`).join("");
+    const activeTab = screen === "edit" ? "new" : screen === "apply" ? "profile" : screen;
+    tabs.innerHTML = SELLER_TABS.map(t => {
+      const badge = t.badge ? t.badge(seller) : 0;
+      return `<a class="tab ${t.key === activeTab ? "active" : ""}" href="#/${t.key}">${t.key === "new" && screen === "edit" ? "Edit fabric" : t.label}${badge ? `<span class="tab-badge" aria-label="${badge} to do">${badge}</span>` : ""}</a>`;
+    }).join("");
     const screens = {
       fabrics: () => sellerStall(seller),
       new: () => sellerFabricForm(seller, null),
       edit: () => sellerFabricForm(seller, id),
       orders: () => sellerOrdersScreen(seller),
-      profile: () => sellerProfileScreen(seller)
+      profile: () => sellerProfileScreen(seller),
+      apply: () => sellerProfileScreen(seller)
     };
-    html = sellerShopStrip(seller) + (screens[screen] || screens.fabrics)();
+    html = sellerShopStrip(seller) + sellerStatusPanel(seller) + (screens[screen] || screens.fabrics)();
     title = seller.name;
   }
   content.innerHTML = html;
@@ -49,37 +57,46 @@ function renderSellerArea(screen, id) {
 }
 
 function sellerStatusBadge(fabric) {
-  if (isSoldOut(fabric) && fabric.status === "approved") return `<span class="badge status-soldout">Sold out</span>`;
+  if (isSoldOut(fabric) && fabric.status === "approved") return `<span class="badge status-soldout">Out of stock</span>`;
   return `<span class="badge status-${fabric.status}">${FABRIC_STATUS_LABELS[fabric.status]}</span>`;
 }
 
-// ---- Not signed in: explain, join or sign in ----
+// ---- Onboarding: how it works, apply or sign in ----
 
 function sellerWelcome() {
-  const shops = db.suppliers.slice().sort((a, b) => a.name.localeCompare(b.name));
+  const shops = db.suppliers.filter(s => !Cloud.live).slice().sort((a, b) => (b.id === "S15") - (a.id === "S15") || a.name.localeCompare(b.name));
   return `
-    ${bizHeader(`Sell your fabric on ${APP_NAME}`, `Put your fabrics in front of customers and tailors on ${APP_NAME}, like a stall at the market.`)}
-    ${Cloud.live && Cloud.me ? `<div class="notice no-shop">This account (${escapeHtml(Cloud.me.email)}) isn't a fabric seller yet. <b>Create your shop</b> below to start selling — or <a href="${escapeHtml(appUrl("customer", ""))}">open the customer app</a>.</div>` : ""}
+    ${bizHeader(`Sell your fabric on ${APP_NAME}`, `Put your fabrics in front of customers and tailors on ${APP_NAME}, like a stall at the market. You're paid in your own currency, and every order goes straight to the customer's tailor.`)}
+    ${Cloud.live && Cloud.me ? `<div class="notice no-shop">This account (${escapeHtml(Cloud.me.email)}) isn't a fabric seller yet. <a href="#/apply"><b>Apply to sell</b></a> — being a tailor and a fabric seller are separate approvals. Or <a href="${escapeHtml(appUrl("customer", ""))}">open the customer app</a>.</div>` : ""}
     <ol class="how-steps">
-      <li><b>Create your shop</b><span>Shop name, where you are, your phone number, delivery time and logo.</span></li>
-      <li><b>Add your fabrics</b><span>Up to 5 photos each, with the type, colour, price per yard and how many yards you have.</span></li>
-      <li><b>Get approved and sell</b><span>The ${APP_NAME} team checks each fabric, then customers can choose it for their outfit. Orders appear in your Orders tab.</span></li>
+      <li><b>Apply</b><span>Your business, contact details, where you are, what you sell and a few sample photos.</span></li>
+      <li><b>${APP_NAME} reviews it</b><span>We check every new seller. You can add your fabrics while you wait — customers can't see them yet.</span></li>
+      <li><b>Approved: start selling</b><span>Your fabrics go on the marketplace. Confirm each order, then send it to the customer's tailor with a tracking number.</span></li>
     </ol>
+    <div class="card">
+      <h2>Why sell on ${APP_NAME}</h2>
+      <ul class="benefit-list">
+        <li>Customers and tailors choosing fabric for their outfits</li>
+        <li>Prices in your own currency, by the yard or the metre</li>
+        <li>Secure payments through ${APP_NAME} — no chasing money</li>
+        <li>Orders go straight to the tailor who's making the outfit</li>
+      </ul>
+    </div>
     <div class="two-col">
       <div class="card">
         <h2>New seller</h2>
-        <p class="hint">It takes about two minutes.</p>
-        ${Cloud.isGuest() ? `<button class="gold" onclick="Auth.startSignUp()">Create your seller account</button>` : `<a class="button" href="#/profile">Create your seller profile</a>`}
+        <p class="hint">The application takes about five minutes.</p>
+        ${Cloud.isGuest() ? `<button class="gold" onclick="Auth.startSignUp()">Create your seller account</button>` : `<a class="button gold" href="#/apply">Start your application</a>`}
       </div>
       <div class="card">
         <h2>Already selling?</h2>
         ${Cloud.isGuest() ? `<p class="hint">Sign in to ${APP.name} to see your fabrics and orders.</p><button class="ghost" onclick="Auth.show('signIn')">Sign in</button>`
-          : Cloud.live ? `<p class="hint">Your shop opens here once you've created it. Signed in with a different email? <button class="linkish strong" onclick="Auth.signOut()">Sign out</button> and sign in with the one your shop uses.</p>` : `
+          : Cloud.live ? `<p class="hint">Your shop opens here once you've applied. Signed in with a different email? <button class="linkish strong" onclick="Auth.signOut()">Sign out</button> and sign in with the one your shop uses.</p>` : `
         <p class="hint">Choose your shop to sign in. (Demo: there are no passwords yet.)</p>
         <div class="shop-list">${shops.map(s => `
           <button class="shop-pick" onclick="sellerSignIn('${s.id}')">
             <img class="logo" src="${sellerLogoUrl(s)}" alt="">
-            <span><b>${escapeHtml(s.name)}</b><small>${escapeHtml(s.location)} · ${sellerFabrics(s.id).length} fabric${sellerFabrics(s.id).length === 1 ? "" : "s"}</small></span>
+            <span><b>${escapeHtml(s.name)}</b><small>${escapeHtml(s.location)} · ${isSellerLive(s) ? `${sellerFabrics(s.id).length} fabric${sellerFabrics(s.id).length === 1 ? "" : "s"}` : escapeHtml(SELLER_STATUS_LABELS[s.admin_status])}</small></span>
           </button>`).join("")}</div>`}
       </div>
     </div>`;
@@ -103,6 +120,43 @@ function sellerShopStrip(seller) {
       </div>
       <button class="small ghost" onclick="sellerSignIn('')">Sign out</button>
     </div>`;
+}
+
+// ---- The application's progress: submitted → review → approved ----
+
+function sellerStatusPanel(seller) {
+  const status = seller.admin_status || "approved";
+  if (status === "approved") return "";
+  const step = (label, state) => `<li class="${state}"><span></span>${label}</li>`;
+  if (status === "declined" || status === "hidden") {
+    return `<div class="card attention seller-status">
+      <h2>${status === "declined" ? "Your application needs a change" : "Your shop is hidden"}</h2>
+      ${seller.admin_note ? `<p>The ${APP_NAME} team says: “${escapeHtml(seller.admin_note)}”</p>` : ""}
+      ${status === "declined"
+        ? `<p class="hint">Update your details in <a href="#/profile">Shop &amp; application</a>, then send it again.</p>
+           <button class="gold" onclick="sellerResubmit()">Send my application again</button>`
+        : `<p class="hint">Customers can't see your fabrics. Update your shop, then contact ${APP_NAME} to be shown again.</p>`}
+    </div>`;
+  }
+  return `<div class="card attention seller-status">
+    <ol class="status-steps" aria-label="Your application">
+      ${step("Application submitted", "done")}${step(`${APP_NAME} review`, "now")}${step("Approved", "")}
+    </ol>
+    <p><b>Thanks for applying!</b> The ${APP_NAME} team is reviewing ${escapeHtml(seller.name)}${seller.submitted_at ? ` (sent ${formatDate(String(seller.submitted_at).slice(0, 10))})` : ""}. You can add your fabrics now — customers will see them once you're approved.</p>
+  </div>`;
+}
+
+function sellerResubmit() {
+  const seller = currentSeller();
+  if (!seller) return;
+  if (Cloud.live) {
+    Cloud.resubmitSeller(seller.id).then(() => { toast("Application sent again. We'll review it soon."); renderAll(); }, error => toast(error.message));
+    return;
+  }
+  resubmitSellerApplication(seller.id);
+  saveData();
+  toast("Application sent again. We'll review it soon.");
+  renderAll();
 }
 
 // ---- My fabrics: the market stall ----
@@ -142,14 +196,14 @@ function sellerStall(seller) {
           <h3>${escapeHtml(f.name)}</h3>
           <p class="muted">${escapeHtml(f.category)} · ${escapeHtml(f.colour_name)}</p>
           <p><strong class="gold">${money(pricePerUnit(f.price_per_yard, unit), fabricCurrency(f))}</strong> per ${unitWord(unit)}</p>
-          <p class="${soldOut ? "owed" : f.yards_available < LOW_STOCK_YARDS ? "owed" : ""}">${lengthText(f.yards_available, unit)} in stock${f.sold_out ? " · marked sold out" : ""}</p>
-          ${f.status === "hidden" ? `<p class="review-note">Hidden by ${escapeHtml(SHOP_NAME)}${f.review_note ? `: “${escapeHtml(f.review_note)}”` : ""}. Edit it and it goes back for checking.</p>` : ""}
-          ${f.status === "pending" ? `<p class="muted small-text">${escapeHtml(SHOP_NAME)} will check it soon.</p>` : ""}
+          <p class="${soldOut ? "owed" : f.yards_available < LOW_STOCK_YARDS ? "owed" : ""}">${lengthText(f.yards_available, unit)} in stock${f.sold_out ? " · marked out of stock" : ""}</p>
+          ${f.status === "hidden" ? `<p class="review-note">Hidden by ${APP_NAME}${f.review_note ? `: “${escapeHtml(f.review_note)}”` : ""}. Edit it and it goes back for checking.</p>` : ""}
+          ${f.status === "pending" ? `<p class="muted small-text">The ${APP_NAME} team will check it soon.</p>` : ""}
           <div class="job-buttons">
             <a class="button small" href="#/edit/${f.id}">Edit</a>
             ${f.sold_out
               ? `<button class="small ghost" onclick="stallBackInStock('${f.id}')">Back in stock</button>`
-              : `<button class="small ghost" onclick="stallSoldOut('${f.id}')">Mark sold out</button>`}
+              : `<button class="small ghost" onclick="stallSoldOut('${f.id}')">Mark out of stock</button>`}
             <button class="small danger" onclick="stallDelete('${f.id}')">Delete</button>
           </div>
         </div>
@@ -158,10 +212,10 @@ function sellerStall(seller) {
 
   return `
     <div class="biz-head row-between wrap">
-      <div><h1>My fabrics</h1><p class="muted">Your market stall. Customers see fabrics once ${escapeHtml(SHOP_NAME)} approves them.</p></div>
+      <div><h1>My fabrics</h1><p class="muted">Your market stall. Customers see a fabric once the ${APP_NAME} team has approved it${isSellerLive(seller) ? "" : " and your shop"}.</p></div>
       <a class="button gold" href="#/new">+ Add a fabric</a>
     </div>
-    ${newOrders ? `<div class="alerts"><a class="alert" href="#/orders">📦 ${newOrders} new order${newOrders > 1 ? "s" : ""} to send</a></div>` : ""}
+    ${newOrders ? `<div class="alerts"><a class="alert" href="#/orders">📦 ${newOrders} new order${newOrders > 1 ? "s" : ""} — confirm the stock</a></div>` : ""}
     <div class="chips">${["All", "Live", "Waiting", "Hidden", "Sold out"].map(k =>
       `<button class="chip ${k === stallFilter ? "active" : ""}" onclick="stallFilter='${k}';renderAll()">${k}${k === "All" ? ` (${fabrics.length})` : ` (${counts[k]})`}</button>`).join("")}</div>
     ${shown.length ? `<div class="stall-grid">${cards}</div>`
@@ -172,7 +226,7 @@ function sellerStall(seller) {
 function stallSoldOut(fabricId) {
   const fabric = setFabricSoldOut(fabricId, true);
   saveData();
-  toast(`${fabric.name} is marked sold out. Customers can't buy it until you put it back in stock.`);
+  toast(`${fabric.name} is marked out of stock. Customers can't buy it until you put it back in stock.`);
   renderAll();
 }
 
@@ -221,8 +275,8 @@ function sellerFabricForm(seller, fabricId) {
   return `
     <div class="biz-head"><h1>${fabric ? "Edit " + escapeHtml(fabric.name) : "Add a fabric"}</h1>
       <p class="muted">${fabric ? `${sellerStatusBadge(fabric)} ` : ""}${fabric && fabric.status === "approved"
-        ? `Price and stock changes go live straight away. New photos, name, type, colour or description go to ${escapeHtml(SHOP_NAME)} for a quick check first.`
-        : `${escapeHtml(SHOP_NAME)} checks every new fabric before customers see it.`}</p></div>
+        ? `Price and stock changes go live straight away. New photos, name, type, colour or description go to the ${APP_NAME} team for a quick check first.`
+        : `The ${APP_NAME} team checks every new fabric before customers see it.`}</p></div>
     <form class="card fabric-form" onsubmit="return saveStallFabric(event, '${fabricId || ""}')" novalidate>
       <fieldset class="photo-field">
         <legend>Photos <small class="muted">(up to ${MAX_PHOTOS_PER_FABRIC} — the first one is the cover)</small></legend>
@@ -342,8 +396,8 @@ function saveStallFabric(event, fabricId) {
       before.filter(ref => !refs.includes(ref)).forEach(ref => PhotoStore.remove(ref));
       saveData();
       sellerForm = null;
-      toast(result.isNew ? `${values.name} sent to ${SHOP_NAME} for approval.`
-        : result.needsReview ? `Saved. ${SHOP_NAME} will check your changes before customers see them.` : `${values.name} saved.`);
+      toast(result.isNew ? `${values.name} sent to the ${APP_NAME} team for approval.`
+        : result.needsReview ? `Saved. The ${APP_NAME} team will check your changes before customers see them.` : `${values.name} saved.`);
       stallFilter = "All";
       go("fabrics");
     })
@@ -356,81 +410,235 @@ function saveStallFabric(event, fabricId) {
   return false;
 }
 
-// ---- Orders for this seller's fabric ----
+// ---- Orders for this seller's fabric: confirm the stock, then dispatch ----
 
 function sellerOrdersScreen(seller) {
   const rows = sellerOrders(seller.id);
   const live = rows.filter(o => o.status !== "cancelled");
-  const toSend = rows.filter(o => o.status === "new");
+  const toConfirm = rows.filter(o => o.status === "new");
+  const toSend = rows.filter(o => (o.status === "new" || o.status === "confirmed") && fabricOrderUnlocked(o));
   // Each currency on its own (a seller who changed currency keeps older sales in the old one)
   const earned = sumByCurrency(live, o => o.total, o => o.currency_code || sellerCurrency(seller));
-  const yards = live.reduce((total, o) => total + o.yards, 0);
   const unit = sellerFabricUnit(seller);
   const cards = rows.map(o => {
     const fabric = findFabric(o.fabric_id);
     const first = o.customer_first_name || customerName(o.customer_id).split(" ")[0];
-    const statusLabel = { new: "To send", sent: `Sent ${formatDate(o.sent_at)}`, cancelled: "Cancelled" }[o.status];
+    const sendTo = fabricOrderSendTo(o);
+    const unlocked = fabricOrderUnlocked(o);
+    const open = o.status !== "sent" && o.status !== "cancelled";
+    const statusText = o.status === "sent" ? `Dispatched ${formatDate(o.sent_at)}` : FABRIC_ORDER_LABELS[o.status];
     return `
       <div class="sorder ${o.status}">
         <img src="${fabric ? fabricCoverUrl(fabric) : ""}" alt="">
         <div class="sorder-main">
-          <div class="row-between"><b>${escapeHtml(o.fabric_name)}</b><span class="badge sstatus-${o.status}">${statusLabel}</span></div>
-          <div class="muted small-text">${escapeHtml(o.ref || o.id)} · ordered ${formatDate(o.created_at)} · for ${escapeHtml(first)}'s outfit</div>
+          <div class="row-between"><b>${escapeHtml(o.fabric_name)}</b><span class="badge sstatus-${o.status}">${escapeHtml(statusText)}</span></div>
+          <div class="muted small-text">${escapeHtml(o.ref || o.id)} · ordered ${formatDate(o.created_at)}${first ? ` · for ${escapeHtml(first)}'s outfit` : ""}</div>
           <div>${lengthText(o.yards, unit)} × ${money(pricePerUnit(o.price_per_yard, unit), o.currency_code || sellerCurrency(seller))} = <b>${money(o.total, o.currency_code || sellerCurrency(seller))}</b></div>
-          <div class="muted small-text">Send to: ${escapeHtml(o.deliver_to)}</div>
-          ${o.status === "new" ? `<div class="job-buttons"><button class="small gold" onclick="sellerMarkSent('${o.id}')">Mark as sent</button></div>` : ""}
+          <div class="small-text"><span class="muted">Send to the tailor:</span> <b>${escapeHtml(sendTo.name || "—")}</b>${sendTo.address ? ` — ${escapeHtml(sendTo.address)}`
+            : open ? ` <span class="muted">(their address appears once the customer's deposit is confirmed)</span>` : ""}</div>
+          ${o.status === "sent" ? `<div class="small-text">🚚 ${escapeHtml(o.courier || "Courier")} · tracking <b>${escapeHtml(o.tracking_number)}</b>${o.dispatch_note ? ` · ${escapeHtml(o.dispatch_note)}` : ""}</div>
+            ${o.dispatch_photo ? `<img class="dispatch-photo" src="${photoUrl(o.dispatch_photo)}" alt="Dispatch photo">` : ""}` : ""}
+          ${open ? `<div class="job-buttons">
+            ${o.status === "new" ? `<button class="small gold" onclick="sellerConfirmStock('${o.id}')">Confirm stock</button>` : ""}
+            ${unlocked ? `<button class="small ${o.status === "confirmed" ? "gold" : "ghost"}" onclick="toggleDispatch('${o.id}')">${dispatchOpen === o.id ? "Close" : "Dispatch…"}</button>`
+              : `<span class="muted small-text">You can dispatch it once the customer's deposit is confirmed.</span>`}
+          </div>` : ""}
+          ${open && unlocked && dispatchOpen === o.id ? dispatchForm(o) : ""}
         </div>
       </div>`;
   }).join("");
   return `
-    <div class="biz-head"><h1>Orders</h1><p class="muted">When a customer pays their deposit, the fabric they chose is ordered from you. Send it to ${escapeHtml(SHOP_NAME)} to be made up.</p></div>
+    <div class="biz-head"><h1>Orders</h1><p class="muted">When a customer accepts their tailor's quote, the fabric they chose is ordered from you. Confirm you have it, then send it to their tailor once the deposit is confirmed.</p></div>
     <div class="statgrid">
-      <div class="stat"><div class="l">To send</div><div class="n">${toSend.length}</div></div>
-      <div class="stat"><div class="l">Orders</div><div class="n">${live.length}</div></div>
-      <div class="stat"><div class="l">${capitalize(unitWord(unit, true))} sold</div><div class="n">${lengthText(yards, unit)}</div></div>
+      <div class="stat"><div class="l">To confirm</div><div class="n">${toConfirm.length}</div></div>
+      <div class="stat"><div class="l">Ready to send</div><div class="n">${toSend.length}</div></div>
+      <div class="stat"><div class="l">Dispatched</div><div class="n">${rows.filter(o => o.status === "sent").length}</div></div>
       <div class="stat"><div class="l">Sales</div><div class="n">${totalsHtml(earned, sellerCurrency(seller))}</div></div>
     </div>
     ${rows.length ? `<div class="sorders">${cards}</div>` : `<div class="card"><p class="empty">No orders yet. They'll appear here when a customer chooses your fabric.</p></div>`}`;
 }
 
-function sellerMarkSent(fabricOrderId) {
-  const row = markFabricOrderSent(fabricOrderId);
-  if (!row) return;
-  saveData();
-  toast(`${row.ref || row.id} marked as sent to ${SHOP_NAME}.`);
+function dispatchForm(o) {
+  if (!sellerForm || sellerForm.key !== "dispatch:" + o.id) sellerForm = { key: "dispatch:" + o.id, photo: null };
+  return `<form class="dispatch-form" onsubmit="return sellerDispatch(event, '${o.id}')" novalidate>
+    <fieldset class="ship-to"><legend>Where is it going?</legend>
+      ${SHIP_TO_OPTIONS.map(x => `<label class="check"><input type="radio" name="ship_to" value="${x.key}" ${x.key === "tailor" ? "checked" : ""} ${x.ready ? "" : "disabled"}>
+        ${escapeHtml(x.label)}${x.ready ? "" : ` <small class="muted">(coming soon)</small>`}</label>`).join("")}
+    </fieldset>
+    <div class="form-grid">
+      <label>Courier<input name="courier" maxlength="80" placeholder="e.g. GIG Logistics, DHL, Royal Mail"></label>
+      <label>Tracking number<input name="tracking" required maxlength="80" placeholder="e.g. GIG-48213377"></label>
+      <label class="wide">Note for the tailor <small>(optional)</small><input name="note" maxlength="300" placeholder="e.g. Two parcels, 3 yd each"></label>
+    </div>
+    <div id="dispatch-photo-row" class="logo-row">${dispatchPhotoRow()}</div>
+    <p id="dispatch-error" class="form-error" role="alert"></p>
+    <button type="submit" class="gold">Mark as dispatched</button>
+  </form>`;
+}
+
+function dispatchPhotoRow() {
+  return `${sellerForm && sellerForm.photo ? `<img class="dispatch-photo" src="${sellerForm.photo.url}" alt="Parcel photo">` : ""}
+    <label class="button small file-button">${sellerForm && sellerForm.photo ? "Change photo" : "Add a photo of the parcel or receipt"}<input type="file" accept="image/*" onchange="setDispatchPhoto(this)"></label>
+    <small class="muted">Optional. Only you, the tailor and ${APP_NAME} can see it.</small>`;
+}
+
+function setDispatchPhoto(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  const form = sellerForm;
+  resizeImage(file, PHOTO_MAX_SIZE, 0.8)
+    .then(url => {
+      if (sellerForm !== form) return;
+      form.photo = { url };
+      const row = document.getElementById("dispatch-photo-row");
+      if (row) row.innerHTML = dispatchPhotoRow();
+    })
+    .catch(error => toast(error.message));
+}
+
+function toggleDispatch(lineId) {
+  dispatchOpen = dispatchOpen === lineId ? null : lineId;
+  sellerForm = null;
   renderAll();
 }
 
-// ---- Shop profile (create or edit) ----
+function sellerConfirmStock(lineId) {
+  const row = confirmFabricOrder(lineId);
+  if (!row) return;
+  saveData();
+  toast(`${row.ref || row.id}: stock confirmed. The tailor can see it's on its way.`);
+  renderAll();
+}
+
+function sellerDispatch(event, lineId) {
+  event.preventDefault();
+  if (sellerSaving) return false;
+  const form = event.target;
+  const details = { courier: form.courier.value.trim(), tracking_number: form.tracking.value.trim(), dispatch_note: form.note.value.trim(),
+                    ship_to: (form.querySelector("[name=ship_to]:checked") || {}).value || "tailor" };
+  if (!details.tracking_number) return formError("dispatch-error", "Add the tracking number so the tailor can follow the parcel.");
+  if (hideContactDetails(details.dispatch_note).hidden) return formError("dispatch-error", "The note can't include a phone number, email, website or social handle.");
+  const photo = sellerForm && sellerForm.photo;
+  sellerSaving = true;
+  const button = form.querySelector("button[type=submit]");
+  if (button) { button.disabled = true; button.textContent = "Saving…"; }
+  Promise.resolve(photo ? PhotoStore.put(photo.url, "seller-file") : null)
+    .then(ref => {
+      details.dispatch_photo = ref;
+      const row = dispatchFabricOrder(lineId, details);
+      if (!row) throw new Error("That order can't be dispatched.");
+      saveData();
+      dispatchOpen = null;
+      sellerForm = null;
+      toast(`${row.ref || row.id} dispatched. The tailor can see the tracking number.`);
+      renderAll();
+    })
+    .catch(error => {
+      formError("dispatch-error", error.message || "Couldn't save. Please try again.");
+      if (button) { button.disabled = false; button.textContent = "Mark as dispatched"; }
+    })
+    .finally(() => { sellerSaving = false; });
+  return false;
+}
+
+// ---- Shop & application (apply, or edit it later) ----
 
 function sellerProfileScreen(seller) {
   const key = "profile:" + (seller ? seller.id : "new");
   if (!sellerForm || sellerForm.key !== key) {
-    sellerForm = { key, logo: seller && seller.logo ? { ref: seller.logo, url: photoUrl(seller.logo) } : null };
+    sellerForm = { key, logo: seller && seller.logo ? { ref: seller.logo, url: photoUrl(seller.logo) } : null,
+      samples: (seller && seller.sample_photos || []).map(ref => ({ ref, url: photoUrl(ref) })) };
   }
-  const v = seller || { name: "", location: "", phone: "", delivery_estimate: "1–3 days", country_code: browserCountry() || "" };
+  const me = Cloud.live && Cloud.me ? Cloud.me : {};
+  const v = seller || { name: "", location: "", city: "", phone: "", delivery_estimate: "1–3 days", country_code: browserCountry() || "",
+    contact_name: me.name || "", email: me.email || "", address_line: "", postcode: "", sells: "" };
   const currency = (seller && seller.currency_code) || countryCurrency(v.country_code) || "GBP";
   const times = DELIVERY_TIMES.includes(v.delivery_estimate) ? DELIVERY_TIMES : DELIVERY_TIMES.concat(v.delivery_estimate);
+  const field = (label, name, value, attrs) => `<label>${label}<input name="${name}" value="${escapeHtml(value || "")}" ${attrs || ""}></label>`;
+  const approved = seller && isSellerLive(seller);
   return `
-    <div class="biz-head"><h1>${seller ? "Shop profile" : "Create your seller profile"}</h1>
-      <p class="muted">Customers see this next to your fabrics.</p></div>
+    <div class="biz-head"><h1>${seller ? "Shop & application" : "Apply to sell on " + APP_NAME}</h1>
+      <p class="muted">${seller ? `Status: <b>${escapeHtml(SELLER_STATUS_LABELS[seller.admin_status || "approved"])}</b>. ` : ""}Customers and tailors only see your shop name, area, logo and fabrics. Your contact details, address and application are private: only you and the ${APP_NAME} team see them.</p></div>
     <form class="card seller-profile" onsubmit="return saveSellerProfileForm(event)" novalidate>
+      <h2>Your business</h2>
       <div id="logo-row" class="logo-row">${logoRow(v.name)}</div>
       <div class="form-grid">
-        <label>Shop name<input name="name" required maxlength="50" value="${escapeHtml(v.name)}" placeholder="e.g. Mama Titi Wax Prints" oninput="refreshLogoInitials(this.value)"></label>
-        <label>Country<select name="country" required onchange="suggestCurrency(this.form, this.value)">${countryOptions(v.country_code || "", "Choose your country")}</select></label>
-        <label>Location<input name="location" required maxlength="60" value="${escapeHtml(v.location)}" placeholder="e.g. Peckham, London"></label>
-        <label>Phone${phoneFieldHtml("phone", v.phone, v.country_code, 'required placeholder="e.g. 7700 900123"')}</label>
-        <label>Your prices are in<select name="currency">${currencyOptions(currency)}</select></label>
-        <p class="hint wide">You sell by the ${unitWord(sellerFabricUnit({ country_code: v.country_code }))} in ${escapeHtml(currencyInfo(currency).name)}. Tailors in other countries see your prices converted at the day's exchange rate; you're always paid in your currency.${seller ? " Changing your currency converts your fabric prices at today's rate." : ""}</p>
-        <label>Delivery time to ${escapeHtml(SHOP_NAME)}<select name="delivery">${times.map(t => `<option ${t === v.delivery_estimate ? "selected" : ""}>${escapeHtml(t)}</option>`).join("")}</select></label>
+        <label>Business name<input name="name" required maxlength="50" value="${escapeHtml(v.name)}" placeholder="e.g. Lagos Wax Prints" oninput="refreshLogoInitials(this.value)"></label>
+        ${field("Contact name", "contact", v.contact_name, 'required maxlength="80" autocomplete="name"')}
+        <label>Phone${phoneFieldHtml("phone", v.phone, v.country_code, 'required placeholder="e.g. 803 555 0199"')}</label>
+        ${field("Email", "email", v.email, 'type="email" required maxlength="120" autocomplete="email"')}
       </div>
+      <h2>Where you are</h2>
+      <div class="form-grid">
+        <label>Country<select name="country" required onchange="suggestCurrency(this.form, this.value)">${countryOptions(v.country_code || "", "Choose your country")}</select></label>
+        ${field("City or town", "city", v.city, 'required maxlength="60" placeholder="e.g. Lagos"')}
+        ${field("Address", "address", v.address_line, 'required maxlength="120" placeholder="Shop or warehouse address" autocomplete="street-address"')}
+        ${field("Postcode <small>(if you have one)</small>", "postcode", v.postcode, 'maxlength="20" autocomplete="postal-code"')}
+        ${field("Area customers see", "location", v.location, 'required maxlength="60" placeholder="e.g. Idumota Market, Lagos"')}
+        <label>Delivery time to a tailor<select name="delivery">${times.map(t => `<option ${t === v.delivery_estimate ? "selected" : ""}>${escapeHtml(t)}</option>`).join("")}</select></label>
+      </div>
+      <h2>What you sell</h2>
+      <div class="form-grid">
+        <label class="wide">Tell us about your fabrics<textarea name="sells" rows="3" maxlength="500" required placeholder="e.g. Dutch wax and Ankara prints, George and lace for aso ebi">${escapeHtml(v.sells || "")}</textarea></label>
+        <label>Your prices are in<select name="currency">${currencyOptions(currency)}</select></label>
+        <p class="hint">You set your prices in this currency, by the yard or the metre as fabric is sold in your country. Tailors in other countries see your prices converted at the day's exchange rate; you're always paid in your currency.${seller ? " Changing your currency converts your fabric prices at today's rate." : ""}</p>
+      </div>
+      <fieldset class="photo-field">
+        <legend>Sample photos <small class="muted">(up to ${MAX_SAMPLE_PHOTOS} — your shop, stall or fabrics. Only the ${APP_NAME} team sees these)</small></legend>
+        <div id="sample-slots" class="photo-slots">${sampleSlots()}</div>
+      </fieldset>
+      ${seller && seller.seller_terms_accepted_at ? `<p class="hint paid">✓ You agreed to the ${APP_NAME} seller terms.</p>` : `
+      <details class="terms-box" open><summary>${APP_NAME} seller terms</summary><ol>${SELLER_TERMS.map(t => `<li>${escapeHtml(t)}</li>`).join("")}</ol></details>
+      <label class="check terms-check"><input type="checkbox" name="acceptTerms" value="yes" required> I agree to the ${APP_NAME} seller terms.</label>`}
       <p id="profile-form-error" class="form-error" role="alert"></p>
       <div class="job-buttons">
-        <button type="submit" class="gold">${seller ? "Save profile" : "Create my shop"}</button>
+        <button type="submit" class="gold">${seller ? "Save" : "Send my application"}</button>
         ${seller ? "" : `<a class="button ghost" href="#/welcome">Cancel</a>`}
       </div>
+      ${approved ? "" : `<p class="hint">${seller ? "Changes are saved to your application." : `The ${APP_NAME} team reviews every new seller, usually within two working days.`}</p>`}
     </form>`;
+}
+
+function sampleSlots() {
+  const photos = sellerForm.samples || [];
+  const tiles = photos.map((p, i) => `
+    <div class="photo-slot">
+      <img src="${p.url}" alt="Sample photo ${i + 1}">
+      <button type="button" class="slot-btn" onclick="removeSamplePhoto(${i})" aria-label="Remove sample photo ${i + 1}">×</button>
+    </div>`).join("");
+  const add = photos.length < MAX_SAMPLE_PHOTOS ? `
+    <label class="photo-slot add">
+      <input type="file" accept="image/*" multiple onchange="addSamplePhotos(this)">
+      <span>＋</span><small>Add photo${photos.length ? "" : "s"}<br>${photos.length}/${MAX_SAMPLE_PHOTOS}</small>
+    </label>` : "";
+  return tiles + add;
+}
+
+function redrawSampleSlots() {
+  const el = document.getElementById("sample-slots");
+  if (el) el.innerHTML = sampleSlots();
+}
+
+function addSamplePhotos(input) {
+  const form = sellerForm;
+  const room = MAX_SAMPLE_PHOTOS - form.samples.length;
+  const files = Array.from(input.files || []);
+  input.value = "";
+  if (files.length > room) toast(`Only ${room} more photo${room === 1 ? "" : "s"} added — up to ${MAX_SAMPLE_PHOTOS}.`);
+  files.slice(0, room).reduce((chain, file) => chain.then(() =>
+    resizeImage(file, PHOTO_MAX_SIZE, 0.8)
+      .then(url => {
+        if (sellerForm !== form || form.samples.length >= MAX_SAMPLE_PHOTOS) return;
+        form.samples.push({ ref: null, url });
+        redrawSampleSlots();
+      })
+      .catch(error => toast(error.message))
+  ), Promise.resolve());
+}
+
+function removeSamplePhoto(index) {
+  sellerForm.samples.splice(index, 1);
+  redrawSampleSlots();
 }
 
 // The logo and its buttons redraw on their own so typed details aren't lost
@@ -479,21 +687,38 @@ function saveSellerProfileForm(event) {
   const seller = currentSeller();
   const values = {
     name: form.name.value.trim(),
-    location: form.location.value.trim(),
+    contact_name: form.contact.value.trim(),
     phone: readPhone(form, "phone"),
-    delivery_estimate: form.delivery.value,
+    email: form.email.value.trim(),
     country_code: form.country.value || null,
-    currency_code: form.currency.value || countryCurrency(form.country.value) || "GBP"
+    city: form.city.value.trim(),
+    address_line: form.address.value.trim(),
+    postcode: form.postcode.value.trim(),
+    location: form.location.value.trim(),
+    delivery_estimate: form.delivery.value,
+    sells: form.sells.value.trim(),
+    currency_code: form.currency.value || countryCurrency(form.country.value) || "GBP",
+    accept_terms: form.acceptTerms ? form.acceptTerms.checked : true
   };
-  if (!values.name) return formError("profile-form-error", "Enter your shop name.");
+  if (!values.name) return formError("profile-form-error", "Enter your business name.");
   if (db.suppliers.some(s => s.name.toLowerCase() === values.name.toLowerCase() && (!seller || s.id !== seller.id))) {
-    return formError("profile-form-error", "Another seller already uses that shop name.");
+    return formError("profile-form-error", "Another seller already uses that name.");
   }
-  if (!values.country_code) return formError("profile-form-error", "Choose your country.");
-  if (!values.location) return formError("profile-form-error", "Enter where your shop is.");
+  if (hideContactDetails([values.name, values.location, values.city].join(" ")).hidden) {
+    return formError("profile-form-error", "Your business name and area can't include a phone number, email, website or social handle.");
+  }
+  if (!values.contact_name) return formError("profile-form-error", "Enter the name of the person we should talk to.");
   if (!/^\+?[0-9 ()-]{7,24}$/.test(values.phone) || !phoneLooksRight(values.phone)) {
-    return formError("profile-form-error", "Enter a phone number NebedaHub can call: choose the country code, then the number, e.g. 7700 900123.");
+    return formError("profile-form-error", "Enter a phone number NebedaHub can call: choose the country code, then the number, e.g. 803 555 0199.");
   }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.email)) return formError("profile-form-error", "Enter your email address.");
+  if (!values.country_code) return formError("profile-form-error", "Choose your country.");
+  if (!values.city) return formError("profile-form-error", "Enter your city or town.");
+  if (!values.address_line) return formError("profile-form-error", "Enter your shop or warehouse address.");
+  if (!values.location) return formError("profile-form-error", "Enter the area customers will see, e.g. the market and city.");
+  if (!values.sells) return formError("profile-form-error", "Tell us what fabrics you sell.");
+  if (!seller && !(sellerForm.samples || []).length) return formError("profile-form-error", "Add at least one sample photo of your fabrics or shop.");
+  if (!values.accept_terms) return formError("profile-form-error", "Please tick the box to agree to the seller terms.");
   if (seller && seller.currency_code && seller.currency_code !== values.currency_code) {
     const rate = fxRate(seller.currency_code, values.currency_code);
     if (rate == null) return formError("profile-form-error", `There's no exchange rate for ${values.currency_code} yet. Try again tomorrow.`);
@@ -501,26 +726,34 @@ function saveSellerProfileForm(event) {
   }
   const oldLogo = seller ? seller.logo : null;
   const logo = sellerForm.logo;
+  const samples = sellerForm.samples || [];
+  const oldSamples = seller ? (seller.sample_photos || []) : [];
   sellerSaving = true;
-  Promise.resolve(logo ? (logo.ref || PhotoStore.put(logo.url, "logo")) : null)
-    .then(ref => {
+  const button = form.querySelector("button[type=submit]");
+  if (button) { button.disabled = true; button.textContent = "Saving…"; }
+  Promise.all([logo ? (logo.ref || PhotoStore.put(logo.url, "logo")) : null]
+      .concat(samples.map(p => p.ref || PhotoStore.put(p.url, "seller-file"))))
+    .then(([ref, ...sampleRefs]) => {
       values.logo = ref;
+      values.sample_photos = sampleRefs;
       const saved = saveSellerProfile(seller ? seller.id : null, values);
       if (oldLogo && oldLogo !== ref) PhotoStore.remove(oldLogo);
+      oldSamples.filter(x => !sampleRefs.includes(x)).forEach(x => PhotoStore.remove(x));
       db.session.sellerId = saved.id;
       saveData();
       sellerForm = null;
       if (seller) {
-        toast("Shop profile saved.");
+        toast("Saved.");
         renderAll();
       } else {
-        toast(`Welcome to ${APP_NAME}, ${saved.name}! Now add your first fabric.`);
-        go("new");
+        toast(`Thanks, ${saved.name}! Your application is with the ${APP_NAME} team. Add your fabrics while you wait.`);
+        go("fabrics");
       }
     })
     .catch(error => {
       console.warn(error);
-      formError("profile-form-error", Cloud.live ? "Couldn't upload the logo: " + (error.message || "please try again.") : "Couldn't save the logo — this browser's storage may be full.");
+      formError("profile-form-error", Cloud.live ? "Couldn't upload the photos: " + (error.message || "please try again.") : "Couldn't save the photos — this browser's storage may be full.");
+      if (button) { button.disabled = false; button.textContent = seller ? "Save" : "Send my application"; }
     })
     .finally(() => { sellerSaving = false; });
   return false;

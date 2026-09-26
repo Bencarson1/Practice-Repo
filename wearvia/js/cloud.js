@@ -78,7 +78,7 @@ const Cloud = (() => {
       if (!me.is_team) return "welcome";
       return me.designer_id && me.designers && me.designers.length && me.designers[0].admin_status !== "approved" ? "profile" : "dashboard";
     }
-    if (APP_KIND === "seller") return me.supplier_id ? "fabrics" : "welcome";
+    if (APP_KIND === "seller") return me.supplier_id ? "fabrics" : me.account_type === "seller" ? "apply" : "welcome";
     return APP.home;
   }
 
@@ -213,7 +213,8 @@ const Cloud = (() => {
   const day = value => !value ? null : /^\d{4}-\d{2}-\d{2}$/.test(String(value)) ? String(value) : localDay(value);
   const num = value => value == null || value === "" ? null : Number(value);
 
-  const STYLE = "style-photos", FABRIC_PHOTOS = "fabric-photos", LOGOS = "seller-logos", CHAT = "chat-photos", DESIGNER_PHOTOS = "designer-photos";
+  const STYLE = "style-photos", FABRIC_PHOTOS = "fabric-photos", LOGOS = "seller-logos", CHAT = "chat-photos", DESIGNER_PHOTOS = "designer-photos",
+        SELLER_FILES = "seller-files";
   // The tailor columns everyone may read. The exact address, postcode and map
   // position are private: owners read their own through wearvia_my_designers().
   // (public_address is always empty now: the address is only shared with a
@@ -224,7 +225,12 @@ const Cloud = (() => {
   // Phone and email aren't readable from the table (supabase/no-leakage.sql):
   // wearvia_customer_contacts() gives your own, and your walk-in customers'
   const CUSTOMER_COLUMNS = "id, auth_user_id, name, created_at, added_by_designer_id, country_code, currency_code, measurement_unit";
-  const PRIVATE_BUCKETS = [STYLE, CHAT];
+  // A fabric shop's public columns. The phone, email, address, contact name,
+  // application and the admin's note are private (supabase/sellers.sql): the
+  // seller and the admin read them with wearvia_my_suppliers().
+  const SUPPLIER_PUBLIC = "id, name, location, city, delivery_estimate, rating, created_at, updated_at, owner_user_id, logo_url, "
+    + "country_code, currency_code, admin_status";
+  const PRIVATE_BUCKETS = [STYLE, CHAT, SELLER_FILES];
 
   async function fetchAll(table, order, columns, filter) {
     let query = state.client.from(table).select(columns || "*");
@@ -240,6 +246,14 @@ const Cloud = (() => {
     return data || [];
   }
 
+  // Before supabase/sellers.sql has run the shop's status column doesn't exist yet: every shop counts as approved
+  async function fetchSuppliers() {
+    const { data, error } = await state.client.from("suppliers").select(SUPPLIER_PUBLIC).order("created_at", { ascending: true });
+    if (!error) return data || [];
+    if (/admin_status|city|does not exist|42703/i.test(error.message || "")) return fetchAll("suppliers", "created_at");
+    throw new Error(friendly(error));
+  }
+
   async function rpcRows(name, args) {
     const { data, error } = await state.client.rpc(name, args || {});
     if (error) {
@@ -251,7 +265,7 @@ const Cloud = (() => {
   }
 
   async function load() {
-    const tables = ["suppliers", "fabrics", "measurement_profiles", "orders", "payments",
+    const tables = ["fabrics", "measurement_profiles", "orders", "payments",
       "invoices", "deliveries", "fabric_order_lines", "tailors", "wedding_orders", "wedding_order_members",
       "ready_to_wear_sales", "order_messages", "order_chat_reads", "countries", "specialities", "designer_customer_notes",
       "currencies", "exchange_rates"];
@@ -263,7 +277,10 @@ const Cloud = (() => {
                state.me && state.me.is_team ? rpcRows("wearvia_my_designers") : Promise.resolve([]),
                rpcRows("wearvia_customer_contacts"),
                rpcRows("wearvia_delivery_details"),
-               state.me && state.me.is_admin ? fetchAll("hidden_contact_details", "created_at", "source, source_id, original", q => q.eq("source", "chat")) : Promise.resolve([])]));
+               state.me && state.me.is_admin ? fetchAll("hidden_contact_details", "created_at", "source, source_id, original", q => q.eq("source", "chat")) : Promise.resolve([]),
+               fetchSuppliers(),
+               state.me ? rpcRows("wearvia_my_suppliers") : Promise.resolve([]),
+               APP_KIND === "seller" && state.me ? rpcRows("wearvia_seller_deliveries") : Promise.resolve([])]));
     tables.forEach((t, i) => { rows[t] = results[i]; });
     rows.customers = results[tables.length];
     rows.my_designers = results[tables.length + 1];
@@ -271,6 +288,11 @@ const Cloud = (() => {
     rows.customers.forEach(c => Object.assign(c, { email: (contacts.get(c.id) || {}).email || null, phone: (contacts.get(c.id) || {}).phone || null }));
     rows.delivery_details = results[tables.length + 3];
     rows.hidden_originals = results[tables.length + 4];
+    // Everyone gets the public shop details; the seller (and the admin) get their own in full
+    const mine = new Map(results[tables.length + 6].map(x => [x.id, x]));
+    rows.suppliers = results[tables.length + 5].map(x => Object.assign({}, x, mine.get(x.id) || {}, { is_mine: mine.has(x.id) }));
+    mine.forEach((x, id) => { if (!rows.suppliers.some(y => y.id === id)) rows.suppliers.push(Object.assign({}, x, { is_mine: true })); });
+    rows.seller_deliveries = results[tables.length + 7];
 
     // Only the tailors this person needs: their own, their orders' tailors,
     // Nebeda Threads, and the one they're ordering from now
@@ -323,6 +345,7 @@ const Cloud = (() => {
 
   function buildDb(r, previous) {
     const numberOf = new Map(r.orders.map(o => [o.id, o.order_number || "NT-" + o.id.slice(0, 6)]));
+    const sendTo = new Map((r.seller_deliveries || []).map(x => [x.line_id, x]));
     const full = new Map(r.my_designers.map(d => [d.id, d]));
     const publicRows = new Map(r.designers.map(d => [d.id, d]));
     r.my_designers.forEach(d => { if (!publicRows.has(d.id)) publicRows.set(d.id, d); });
@@ -339,10 +362,15 @@ const Cloud = (() => {
       customer_notes: r.designer_customer_notes.map(n => ({ designer_id: n.designer_id, customer_id: n.customer_id, notes: n.notes || "" })),
 
       suppliers: r.suppliers.map(s => ({
-        id: s.id, name: s.name || "Seller", location: s.location || "", phone: s.phone || "",
+        id: s.id, name: s.name || "Seller", location: s.location || "", city: s.city || "", phone: s.phone || "",
         delivery_estimate: s.delivery_estimate || "1–3 days", rating: num(s.rating), logo: s.logo_url || null,
         owner_user_id: s.owner_user_id || null, created_at: iso(s.created_at),
-        country_code: s.country_code || null, currency_code: s.currency_code || "GBP"
+        country_code: s.country_code || null, currency_code: s.currency_code || "GBP",
+        // The application (only filled in for the seller themselves and the admin)
+        admin_status: s.admin_status || "approved", admin_note: s.admin_note || "", submitted_at: iso(s.submitted_at),
+        reviewed_at: iso(s.reviewed_at), contact_name: s.contact_name || "", email: s.email || "", address_line: s.address_line || "",
+        postcode: s.postcode || "", sells: s.sells || "", sample_photos: (s.sample_photos || []).map(p => `sb:${SELLER_FILES}/${p}`),
+        seller_terms_accepted_at: iso(s.seller_terms_accepted_at), is_mine: !!s.is_mine
       })),
 
       fabrics: r.fabrics.map(f => ({
@@ -422,7 +450,13 @@ const Cloud = (() => {
         id: l.id, ref: "FO-" + String(l.order_number || "").replace(/^\D+/, ""), order_id: numberOf.get(l.order_id) || l.order_number,
         seller_id: l.supplier_id, fabric_id: l.fabric_id, fabric_name: l.fabric_name, yards: num(l.yards),
         price_per_yard: num(l.price_per_yard), total: num(l.total), customer_first_name: l.customer_first_name || "",
-        deliver_to: l.deliver_to || "", status: l.status, created_at: day(l.created_at), sent_at: day(l.sent_at), currency_code: l.currency_code || "GBP"
+        deliver_to: l.deliver_to || "", status: l.status, created_at: day(l.created_at), sent_at: day(l.sent_at), currency_code: l.currency_code || "GBP",
+        confirmed_at: day(l.confirmed_at), courier: l.courier || "", tracking_number: l.tracking_number || "",
+        dispatch_photo: l.dispatch_photo ? `sb:${SELLER_FILES}/${l.dispatch_photo}` : null, dispatch_note: l.dispatch_note || "",
+        ship_to: l.ship_to || "tailor",
+        // Where to send it: the customer's tailor, whose address comes once the deposit is confirmed
+        unlocked: !!(sendTo.get(l.id) || {}).unlocked, send_to_name: (sendTo.get(l.id) || {}).send_to_name || "",
+        send_to_address: (sendTo.get(l.id) || {}).send_to_address || ""
       })),
 
       wedding_orders: r.wedding_orders.map(w => ({
@@ -635,8 +669,11 @@ const Cloud = (() => {
   // Each table: the rows it should contain, built from `db`. Only columns the app may change are listed.
   const TABLES = [
     { table: "suppliers", rows: d => d.suppliers.map(s => ({
-        id: s.id, name: s.name, location: s.location, phone: s.phone, delivery_estimate: s.delivery_estimate,
-        logo_url: s.logo || null, owner_user_id: s.owner_user_id || null, country_code: s.country_code || null, currency_code: s.currency_code || null })) },
+        id: s.id, name: s.name, location: s.location, city: s.city || "", phone: s.phone, delivery_estimate: s.delivery_estimate,
+        logo_url: s.logo || null, owner_user_id: s.owner_user_id || null, country_code: s.country_code || null, currency_code: s.currency_code || null,
+        contact_name: s.contact_name || "", email: s.email || "", address_line: s.address_line || "", postcode: s.postcode || "",
+        sells: s.sells || "", sample_photos: (s.sample_photos || []).map(ref => photoPath(ref, SELLER_FILES)).filter(Boolean),
+        seller_terms_accepted_at: s.seller_terms_accepted_at || null })) },
     { table: "fabrics", rows: d => d.fabrics.map(f => ({
         id: f.id, supplier_id: f.supplier_id, name: f.name, category: f.category, colour_name: f.colour_name || null,
         colour_hex: f.color || null, price_per_yard: f.price_per_yard, yards_available: f.yards_available,
@@ -667,7 +704,9 @@ const Cloud = (() => {
         id: x.id, order_id: orderUuid(x.order_id), courier: x.courier, tracking_number: x.tracking_number, status: x.status, eta: x.eta })) },
     { table: "reviews", rows: d => (d.reviews || []).map(v => ({
         id: v.id, order_id: orderUuid(v.order_id), designer_id: v.designer_id, customer_id: v.customer_id, rating: v.rating, review_text: v.review_text })) },
-    { table: "fabric_order_lines", rows: d => d.fabric_orders.map(l => ({ id: l.id, status: l.status })) },
+    { table: "fabric_order_lines", rows: d => d.fabric_orders.map(l => ({ id: l.id, status: l.status, courier: l.courier || "",
+        tracking_number: l.tracking_number || "", dispatch_photo: l.dispatch_photo ? photoPath(l.dispatch_photo, SELLER_FILES) : null,
+        dispatch_note: l.dispatch_note || "", ship_to: l.ship_to || "tailor" })) },
     { table: "ready_to_wear_items", rows: d => d.ready_to_wear.map(i => ({
         id: i.id, designer_id: i.designer_id || bizDesignerId(), name: i.name, price: i.price, cost: i.cost, stock: i.stock, colour_hex: i.color })) },
     { table: "price_list", rows: d => (d.prices || []).map(p => ({
@@ -898,7 +937,8 @@ const Cloud = (() => {
   }
 
   async function uploadPhoto(dataUrl, folder) {
-    const bucket = folder === "style" ? STYLE : folder === "chat" ? CHAT : folder === "logo" ? LOGOS : folder === "designer" ? DESIGNER_PHOTOS : FABRIC_PHOTOS;
+    const bucket = folder === "style" ? STYLE : folder === "chat" ? CHAT : folder === "logo" ? LOGOS : folder === "designer" ? DESIGNER_PHOTOS
+      : folder === "seller-file" ? SELLER_FILES : FABRIC_PHOTOS;
     const path = `${state.me.user_id}/${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}.jpg`;
     const { error } = await state.client.storage.from(bucket).upload(path, dataUrlToBlob(dataUrl), { contentType: "image/jpeg", upsert: false });
     if (error) throw new Error(friendly(error));
@@ -1059,6 +1099,21 @@ const Cloud = (() => {
     await load();
   }
 
+  // The admin approves, declines (with a note), hides or reopens a seller's application
+  async function reviewSeller(id, status, note) {
+    const { error } = await state.client.rpc("wearvia_review_seller", { p_supplier_id: id, p_status: status, p_note: note || "" });
+    if (error) throw new Error(friendly(error));
+    await load();
+  }
+
+  // A seller who was asked to change something sends their application again
+  async function resubmitSeller(id) {
+    await flush();
+    const { error } = await state.client.rpc("wearvia_resubmit_seller_application", { p_supplier_id: id });
+    if (error) throw new Error(friendly(error));
+    await load();
+  }
+
   async function addSpeciality(name) {
     const { error } = await state.client.from("specialities").insert({ name, sort_order: 100 });
     if (error) throw new Error(/duplicate|unique/i.test(error.message || "") ? `"${name}" is already on the list.` : friendly(error));
@@ -1149,7 +1204,7 @@ const Cloud = (() => {
     requestQuote, sendQuote, acceptQuote, sendMessage, markChatRead, refreshChat,
     uploadPhoto, removePhoto, photoUrl,
     loadTeamLogins, addTeamLogin, removeTeamLogin,
-    registerDesigner, acceptTailorTerms, setDeliveryAddress, saveDesignerProfile, addPortfolioItem, removePortfolioItem, setDesignerStatus, addSpeciality,
+    registerDesigner, acceptTailorTerms, setDeliveryAddress, saveDesignerProfile, addPortfolioItem, removePortfolioItem, setDesignerStatus, reviewSeller, resubmitSeller, addSpeciality,
     saveCustomerNotes, searchTailors, tailorPage, ensurePrices, loadPublicLists, convertPriceList
   };
 })();

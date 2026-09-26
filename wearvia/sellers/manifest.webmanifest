@@ -1,8 +1,8 @@
 {
-  "name": "NebedaHub Seller",
-  "short_name": "NH Seller",
-  "description": "For fabric sellers: your fabrics, stock and the orders that use them.",
-  "id": "/sell/",
+  "name": "NebedaHub Sellers",
+  "short_name": "NH Sellers",
+  "description": "For fabric sellers: apply to sell on NebedaHub, add your fabrics, and send each order to the customer's tailor.",
+  "id": "/sellers/",
   "start_url": "./index.html#/fabrics",
   "scope": "./",
   "display": "standalone",

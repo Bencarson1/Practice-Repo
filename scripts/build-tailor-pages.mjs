@@ -351,7 +351,7 @@ write("tailors/index.html", page({
 }));
 urls.unshift({ loc: `${APP_URL}/tailors/` });
 // The apps for tailors and fabric sellers (NebedaHub Admin is kept out of search)
-urls.unshift({ loc: `${APP_URL}/sell/` });
+urls.unshift({ loc: `${APP_URL}/sellers/` });
 urls.unshift({ loc: `${APP_URL}/business/` });
 urls.unshift({ loc: `${APP_URL}/` });
 

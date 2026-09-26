@@ -8,10 +8,10 @@
 if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("sw.js").catch(error => console.warn("Offline support isn't available:", error.message));
-    // The app used to be at /wearvia/. Remove that old offline copy so it can
-    // never open the old version instead of this one.
+    // The app used to be at /wearvia/, and the seller app at /sell/. Remove
+    // those old offline copies so they can never open an old version.
     navigator.serviceWorker.getRegistrations()
-      .then(list => list.filter(r => /\/wearvia\/$/.test(new URL(r.scope).pathname) && r.scope !== new URL("./", location.href).href)
+      .then(list => list.filter(r => /\/(wearvia|sell)\/$/.test(new URL(r.scope).pathname) && r.scope !== new URL("./", location.href).href)
         .forEach(r => r.unregister()))
       .catch(() => {});
   });

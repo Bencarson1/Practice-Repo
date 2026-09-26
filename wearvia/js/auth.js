@@ -4,7 +4,7 @@
 //
 // Each NebedaHub app has its own sign-in page and sign-up: customers sign up
 // in NebedaHub, tailors in NebedaHub Business (then wait for approval),
-// fabric sellers in NebedaHub Seller. Admins are made in Supabase, so
+// fabric sellers in NebedaHub Sellers. Admins are made in Supabase, so
 // NebedaHub Admin only signs in. Tailor staff are added by the owner
 // (Business → Tailor Team → Team logins), then create an account with that
 // email. The same email works in every app; each app keeps its own sign-in.
@@ -30,7 +30,7 @@ function brandHtml() {
 // Small links to the other apps, under the sign-in and sign-up forms
 function otherAppsLine() {
   const links = {
-    customer: [["business", "Tailor or designer?", "NebedaHub Business"], ["seller", "Sell fabric?", "NebedaHub Seller"]],
+    customer: [["business", "Tailor or designer?", "NebedaHub Business"], ["seller", "Sell fabric?", "NebedaHub Sellers"]],
     business: [["customer", "Want an outfit made?", "NebedaHub"]],
     seller: [["customer", "Want an outfit made?", "NebedaHub"]],
     admin: []
