@@ -619,11 +619,16 @@ const Cloud = (() => {
   }
 
   // length is in yards, or metres when unit is "m"; the database converts and prices it
-  function sendQuote(order, fabricId, length, note, unit) {
+  function sendQuote(order, fabricId, length, note, unit, pricing) {
     return run(async () => {
       await push();
+      const p = pricing || {};
       const { error } = await state.client.rpc("wearvia_send_quote", {
-        p_order_id: order._uuid, p_yards: length, p_fabric_id: fabricId || null, p_note: note || null, p_unit: unit || "yd"
+        p_order_id: order._uuid, p_yards: length, p_fabric_id: fabricId || null,
+        p_note: note || null, p_unit: unit || "yd",
+        p_tailoring: Number(p.tailoring), p_embroidery: Number(p.embroidery || 0),
+        p_delivery: Number(p.delivery || 0), p_extra_label: p.extraLabel || null,
+        p_extra: Number(p.extra || 0)
       });
       if (error) {
         await load().catch(() => {});

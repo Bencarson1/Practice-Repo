@@ -793,37 +793,50 @@ function requestQuote(details) {
 // into the tailor's currency at today's rate, + tailoring + embroidery +
 // delivery from the price list. The database does this in live mode
 // (wearvia_send_quote) and saves the rate on the order, so this returns a Promise there.
-function sendQuote(order, fabricId, length, note, unit) {
+function sendQuote(order, fabricId, length, note, unit, pricing) {
   unit = unit === "m" ? "m" : "yd";
-  if (Cloud.live) return Cloud.sendQuote(order, fabricId, length, note, unit);
+  if (Cloud.live) return Cloud.sendQuote(order, fabricId, length, note, unit, pricing);
   const fabric = findFabric(fabricId || order.fabric_id);
   length = Math.round(Number(length) * 100) / 100;
   const yards = yardsFrom(length, unit);
   const words = unitWord(unit, true);
-  if (isPlaced(order)) throw new Error(`The customer has already accepted the quote for ${order.id}. It can't be changed now.`);
+  if (isPlaced(order)) throw new Error(`The customer has already accepted the quote for ${order.id}. It cannot be changed now.`);
   if (!fabric) throw new Error("Choose a fabric for the quote.");
   if (!(length > 0) || length > 100 || Math.round(length * 4) !== length * 4) throw new Error(`Enter the ${words} needed, in quarters (for example 4.5 or 5.25).`);
-  if (fabric.deleted_at || fabric.status !== "approved" || fabric.sold_out) throw new Error(`${fabric.name} isn't on sale any more. Choose another fabric.`);
+  if (fabric.deleted_at || fabric.status !== "approved" || fabric.sold_out) throw new Error(`${fabric.name} is not on sale any more. Choose another fabric.`);
   if (yards < (fabric.min_order_yards || 0) - 0.005) throw new Error(`The smallest order for ${fabric.name} is ${lengthText(fabric.min_order_yards, unit)}.`);
   if (yards > fabric.yards_available) throw new Error(`Only ${lengthText(fabric.yards_available, unit)} of ${fabric.name} is left in stock.`);
+
   const tailor = designerById(order.designer_id);
   const currency = designerCurrency(tailor);
-  usePricesOf(order.designer_id);   // the order's own tailor's price list
-  const quote = computeQuote(order.outfit_type, order.embroidery, fabric, length, null, { currency, unit });
-  if (quote.noRate) throw new Error(`There's no exchange rate for ${quote.fabricCurrency} yet, so ${quote.fabricCurrency} can't be converted to ${currency}.`);
-  const deposit = depositFor(quote.total);
+  const own = pricing || {};
+  const tailoring = Number(own.tailoring);
+  const embroidery = Number(own.embroidery || 0);
+  const delivery = Number(own.delivery || 0);
+  const extra = Number(own.extra || 0);
+  const extraLabel = String(own.extraLabel || "Extra charge").trim() || "Extra charge";
+  if (!(tailoring >= 0) || !(embroidery >= 0) || !(delivery >= 0) || !(extra >= 0)) {
+    throw new Error("Enter valid quote charges. Each amount must be 0 or more.");
+  }
+
+  const quote = computeQuote(order.outfit_type, order.embroidery, fabric, length,
+    { tailoring, embroidery, delivery }, { currency, unit });
+  if (quote.noRate) throw new Error(`There is no exchange rate for ${quote.fabricCurrency} yet, so ${quote.fabricCurrency} cannot be converted to ${currency}.`);
+  const lines = quote.lines.slice();
+  if (extra > 0) lines.push({ label: extraLabel, amount: roundMoney(extra, currency), kind: "extra" });
+  const total = roundMoney(quote.total + extra, currency);
+  const deposit = depositFor(total);
+
   Object.assign(order, {
     fabric_id: fabric.id, fabric_supplier_id: fabric.supplier_id, fabric_yards: yards, fabric_cost: quote.fabricCost,
-    line_items: quote.lines, quote_total: quote.total, deposit_amount: deposit,
+    tailoring_cost: tailoring, embroidery_cost: embroidery, delivery_cost: delivery,
+    line_items: lines, quote_total: total, deposit_amount: deposit,
     currency_code: currency, fabric_currency_code: quote.fabricCurrency, fabric_price_per_yard: fabric.price_per_yard,
     fabric_cost_in_fabric_currency: quote.fabricAmount, exchange_rate: quote.rate, exchange_rate_date: quote.rateDate, fabric_unit: unit,
     quote_status: "quoted", quoted_at: today(), fabric_problem: null, updated_at: today()
   });
   if (note && note.trim()) addChatMessage(order, "team", note.trim(), []);
-  const fc = quote.fabricCurrency;
-  addSystemMessage(order, `Your quote is ready: ${fabric.name}, ${length} ${unit} × ${money(pricePerUnit(fabric.price_per_yard, unit), fc)} = ${money(quote.fabricAmount, fc)}`
-    + (quote.rate ? ` (${money(quote.fabricCost, currency)} at ${rateText(quote.rate, fc, currency)}, the exchange rate on ${formatDate(quote.rateDate)})` : "")
-    + ` · tailoring ${money(quote.lines[1].amount, currency)} · embroidery ${money(quote.lines[2].amount, currency)} · delivery ${money(quote.lines[3].amount, currency)}. Total ${money(quote.total, currency)}, deposit ${money(deposit, currency)} (60%). Tap "Accept quote" to go ahead, or ask us a question here.`);
+  addSystemMessage(order, `Your quote is ready. Total ${money(total, currency)}, deposit ${money(deposit, currency)} (${Math.round(DEPOSIT_RATE * 100)}%). Open the quote to see the itemised charges, then tap "Accept quote" to go ahead or ask a question here.`);
   return order;
 }
 

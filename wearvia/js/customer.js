@@ -169,9 +169,9 @@ function screenOutfit() {
       ${flowBar("design")}
       <div class="chip-grid">
         ${OUTFITS.map(o => `<button class="chip ${d.outfit === o.name ? "sel" : ""}" onclick="setDesign('outfit','${o.name}')">
-          ${o.name}<span class="chip-sub">from ${money(o.tailoring)}${approxMoney(o.tailoring, screenCurrency())}</span></button>`).join("")}
+          ${o.name}<span class="chip-sub">Price set by your tailor</span></button>`).join("")}
       </div>
-      ${approxNote(screenCurrency())}
+      <p class="meta centre">NebedaHub does not set tailoring prices. Your chosen tailor sends you a quote after reviewing your request.</p>
       <button class="style-cta" onclick="go('inspiration')">
         <span class="style-cta-icon" aria-hidden="true">📷</span>
         <span>${photos ? `<b>Your style photos (${photos})</b><small>Tap to add, change or remove</small>`
@@ -199,7 +199,7 @@ function screenDesign() {
           <span class="insp-strip-photos">${d.inspiration.photos.slice(0, 3).map(ref => `<img src="${photoUrl(ref)}" alt="">`).join("")}</span>
           <span><b>${d.inspiration.photos.length} style photo${d.inspiration.photos.length === 1 ? "" : "s"} attached</b><small>Edit photos, link or note</small></span><span aria-hidden="true">›</span>
         </button>
-        <div class="meta">Pick the options closest to your photos — they set your price. Anything different goes in your note.</div>` : ""}
+        <div class="meta">Pick the options closest to your photos. They help your tailor understand the work and prepare your quote. Anything different goes in your note.</div>` : ""}
       <div class="selopt"><span class="fl">Colour <b>${escapeHtml(colourName(d.colour))}</b></span>
         <span class="swatches">
           ${COLOURS.map(c => `<button class="sw ${d.colour === c.hex ? "sel" : ""}" style="background:${c.hex}" title="${c.name}" aria-label="${c.name}" onclick="setDesign('colour','${c.hex}')"></button>`).join("")}
@@ -410,8 +410,6 @@ function screenSend() {
   const seller = findSupplier(fabric.supplier_id);
   const profile = findProfile(d.profileId);
   const photos = hasInspiration(d.inspiration) ? d.inspiration.photos.length : 0;
-  const tailoring = findOutfit(d.outfit).tailoring;
-  const embroidery = embroideryPrice(d.embroidery);
   const tailor = draftDesigner();
   const currency = designerCurrency(tailor);
   const unit = designerFabricUnit(tailor);
@@ -441,7 +439,8 @@ function screenSend() {
         <ol>
           <li>${draftHasTailor() ? escapeHtml(draftDesigner().business_name) : "Your tailor"} looks at your design, photos and measurements.</li>
           <li>You chat here in the app to agree how many ${unitWord(unit, true)} of fabric you need.</li>
-          <li>They send your quote in ${escapeHtml(currencyInfo(currency).name)}: fabric (${unitWord(unit, true)} × ${money(perUnit, fc)}) + tailoring ${money(tailoring, currency)}${approxMoney(tailoring, currency)} + embroidery ${money(embroidery, currency)} + delivery ${money(DELIVERY_FEE, currency)}.</li>
+          <li>Your tailor enters their own tailoring price and any embroidery, delivery or extra charges, then sends the full itemised quote through ${APP_NAME}.</li>
+          <li>The quote is recorded in the tailor\'s currency. If your local currency is different, ${APP_NAME} also shows an approximate converted amount for you.</li>
           ${fc !== currency ? `<li>The seller prices this fabric in ${escapeHtml(currencyInfo(fc).name)}. ${draftHasTailor() ? escapeHtml(tailor.business_name) + "'s" : "Your tailor's"} quote converts it into ${escapeHtml(currencyInfo(currency).name)} at the day's exchange rate${fxRate(fc, currency) ? ` (today ${escapeHtml(rateText(fxRate(fc, currency), fc, currency))})` : ""}, and shows the rate used.</li>` : ""}
           <li>Accept it and pay a ${Math.round(DEPOSIT_RATE * 100)}% deposit. The fabric is only bought then.</li>
         </ol>
