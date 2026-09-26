@@ -1,0 +1,41 @@
+# Saves today's exchange rates (including NGN and GHS) into Supabase, so
+# quotes can convert a fabric seller's price into the tailor's currency and
+# customers see approximate prices in their own currency.
+#
+# Runs every day, and when you press "Run workflow"
+# (Actions → Exchange rates → Run workflow).
+#
+# One-off setting: Settings → Secrets and variables → Actions → New
+# repository secret → Name: SUPABASE_SECRET_KEY, Secret: the project's
+# SECRET key (Supabase → Project Settings → API Keys → Secret keys). It's
+# only used here, to call wearvia_save_exchange_rates; never put it in the app.
+
+name: Exchange rates
+
+on:
+  schedule:
+    - cron: "41 6 * * *"      # every day at 06:41 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: exchange-rates
+  cancel-in-progress: false
+
+jobs:
+  rates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Save today's exchange rates in Supabase
+        env:
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+        run: node scripts/update-exchange-rates.mjs
