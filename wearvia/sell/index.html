@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en-GB" data-app="seller">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>NebedaHub Seller</title>
+  <meta name="description" content="NebedaHub Seller — for fabric sellers. Put your fabrics in front of customers and tailors, and see the orders that use them.">
+  <link rel="canonical" href="https://nebedahub.com/sell/">
+  <meta name="theme-color" content="#0f1d17">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="../icons/seller-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="../icons/seller-apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="NH Seller">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+
+  <!-- Top bar: the app's name, what it's for, and who is signed in -->
+  <header class="appbar">
+    <a class="wordmark" href="#/"><span id="app-name">NebedaHub Seller</span></a>
+    <span class="shop-pill" id="shop-pill">For fabric sellers</span>
+    <div id="account" class="account"></div>
+  </header>
+
+  <main>
+    <!-- Sign in / create an account (live mode) -->
+    <div id="auth-view" class="auth-view" hidden></div>
+
+    <!-- Customer app: phone-sized, follows the order steps one screen at a time -->
+    <div id="customer-view" class="customer-view" hidden>
+      <div id="customer-app" class="capp"></div>
+    </div>
+
+    <!-- Business dashboard: tabs for the shop's back office -->
+    <div id="business-view" class="business-view" hidden>
+      <nav id="biz-tabs" class="biz-tabs" aria-label="Dashboard sections"></nav>
+      <section id="biz-content" class="biz"></section>
+    </div>
+
+    <!-- Fabric seller area: sellers run their market stall of fabrics -->
+    <div id="seller-view" class="seller-view" hidden>
+      <nav id="seller-tabs" class="biz-tabs" aria-label="Seller sections"></nav>
+      <section id="seller-content" class="biz seller"></section>
+    </div>
+
+    <!-- NebedaHub Business, before someone is a tailor: how to join -->
+    <div id="join-view" class="seller-view" hidden>
+      <nav id="join-tabs" class="biz-tabs" aria-label="Tailor sections"></nav>
+      <section id="join-content" class="biz seller"></section>
+    </div>
+
+    <!-- NebedaHub Admin: the platform's own tools -->
+    <div id="admin-view" class="seller-view" hidden>
+      <nav id="admin-tabs" class="biz-tabs" aria-label="Admin sections"></nav>
+      <section id="admin-content" class="biz"></section>
+    </div>
+  </main>
+
+  <footer class="footer"><span id="footer-text"></span></footer>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <!-- Scripts: Supabase and its settings, then data, then the screens, then app.js starts everything -->
+  <script src="../js/vendor/supabase.js"></script>
+  <script src="../js/config.js"></script>
+  <script src="../js/apps.js"></script>
+  <script src="../js/no-leakage.js"></script>
+  <script src="../js/data.js"></script>
+  <script src="../js/countries.js"></script>
+  <script src="../js/geo.js"></script>
+  <script src="../js/tailors-data.js"></script>
+  <script src="../js/cloud.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/photos.js"></script>
+  <script src="../js/sellers-data.js"></script>
+  <script src="../js/concept.js"></script>
+  <script src="../js/marketplace.js"></script>
+  <script src="../js/inspiration.js"></script>
+  <script src="../js/chat.js"></script>
+  <script src="../js/tailors.js"></script>
+  <script src="../js/customer.js"></script>
+  <script src="../js/seller.js"></script>
+  <script src="../js/seller-fabrics.js"></script>
+  <script src="../js/tailor-join.js"></script>
+  <script src="../js/dashboard.js"></script>
+  <script src="../js/quotes.js"></script>
+  <script src="../js/orders.js"></script>
+  <script src="../js/production.js"></script>
+  <script src="../js/team.js"></script>
+  <script src="../js/customers.js"></script>
+  <script src="../js/measurements.js"></script>
+  <script src="../js/fabrics.js"></script>
+  <script src="../js/payments.js"></script>
+  <script src="../js/prices.js"></script>
+  <script src="../js/weddings.js"></script>
+  <script src="../js/shop.js"></script>
+  <script src="../js/deliveries.js"></script>
+  <script src="../js/invoices.js"></script>
+  <script src="../js/tailor-admin.js"></script>
+  <script src="../js/admin.js"></script>
+  <script src="../js/app.js"></script>
+  <script src="../js/pwa.js"></script>
+</body>
+</html>

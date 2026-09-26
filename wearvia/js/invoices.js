@@ -6,9 +6,9 @@
 function renderInvoices(orderId) {
   if (orderId) {
     const order = findOrder(orderId);
-    if (!order) return `${bizHeader("Invoice not found")}<p><a href="#/biz/invoices">← Invoices</a></p>`;
+    if (!order) return `${bizHeader("Invoice not found")}<p><a href="#/invoices">← Invoices</a></p>`;
     return `
-      <p class="no-print"><a href="#/biz/invoices">← Invoices</a> · <a href="#/biz/orders/${order.id}">Order ${order.id}</a></p>
+      <p class="no-print"><a href="#/invoices">← Invoices</a> · <a href="#/orders/${order.id}">Order ${order.id}</a></p>
       <div class="card invoice-card">
         ${invoiceBody(order)}
         <div class="job-buttons no-print">
@@ -22,8 +22,8 @@ function renderInvoices(orderId) {
     const order = findOrder(inv.order_id);
     if (!order) return "";
     const balance = balanceOwed(order);
-    return `<tr class="clickable" onclick="go('biz/invoices/${order.id}')">
-      <td><a href="#/biz/invoices/${order.id}">${escapeHtml(inv.id)}</a></td>
+    return `<tr class="clickable" onclick="go('invoices/${order.id}')">
+      <td><a href="#/invoices/${order.id}">${escapeHtml(inv.id)}</a></td>
       <td>${formatDate(inv.created_at)}</td>
       <td>${order.id}</td>
       <td>${escapeHtml(customerName(order.customer_id))}</td>

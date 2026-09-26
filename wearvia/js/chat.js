@@ -123,7 +123,7 @@ function chatMessageHtml(m, side) {
     ${photos ? `<div class="chat-photos">${photos}</div>` : ""}
     ${m.body ? `<div class="chat-text">${escapeHtml(m.body)}</div>` : ""}
     ${m.contact_hidden ? `<div class="chat-hidden-note">🔒 ${escapeHtml(CONTACT_HIDDEN_NOTICE)}</div>` : ""}
-    ${m.contact_hidden && m.original_body && isAdminUser() ? `<details class="chat-original"><summary>Original (only the ${escapeHtml(APP_NAME)} admin sees this)</summary>${escapeHtml(m.original_body)}</details>` : ""}
+    ${m.contact_hidden && m.original_body && APP_KIND === "admin" && isAdminUser() ? `<details class="chat-original"><summary>Original (only the ${escapeHtml(APP_NAME)} admin sees this)</summary>${escapeHtml(m.original_body)}</details>` : ""}
     <div class="chat-when">${chatTime(m.created_at)}</div>
   </div>`;
 }

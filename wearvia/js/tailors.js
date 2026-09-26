@@ -1,6 +1,8 @@
 // ============================================================
 // tailors.js — Find tailors near me, each tailor's public page,
-// and "Join as a tailor"
+
+//
+// ("Join as a tailor" is in NebedaHub Business now: tailor-join.js.)
 //
 // Search: "Use my current location" (the browser asks permission), or
 // search by country, city and postcode/area. Filters: distance, speciality,
@@ -10,7 +12,7 @@
 // Tailors who hide their address are only ever placed to about 1 km.
 // ============================================================
 
-const WIDE_SCREENS = ["tailors", "tailor", "joinTailor"];
+const WIDE_SCREENS = ["tailors", "tailor"];
 const RADIUS_STEPS = [5, 10, 25, 50];                    // miles, or km — whichever the customer uses
 const TAILORS_PAGE = 20;
 
@@ -46,6 +48,7 @@ function screenTailors() {
   return `
     ${cTop("Find tailors near me", "home")}
     <div class="content tailor-search">
+      ${pickingTailor ? `<div class="notice pick-tailor-note"><b>Start an Order:</b> choose your tailor. Open one to see their work, then tap <b>Request a quote</b>.</div>` : ""}
       <p class="meta">Tailors and designers on ${APP_NAME}, nearest first. Tap one to see their work and request a quote.</p>
       <button type="button" class="cta locate-btn" onclick="searchNearMe()" ${busy ? "disabled" : ""}>
         ${s.status === "locating" ? `<span class="gen-spin"></span> Finding you…` : `<span aria-hidden="true">📍</span> Use my current location`}</button>
@@ -82,7 +85,7 @@ function screenTailors() {
       </details>
 
       <div id="tailor-results" aria-live="polite" data-status="${s.status}">${tailorResultsHtml()}</div>
-      <button type="button" class="linkish" onclick="go('joinTailor')">Are you a tailor or designer? Join ${APP_NAME} →</button>
+      <a class="linkish" href="${escapeHtml(appUrl("business", "welcome"))}">Are you a tailor or designer? Join ${APP_NAME} →</a>
     </div>
     ${cNav("tailors")}`;
 }
@@ -422,7 +425,9 @@ function requestQuoteFrom(designerId) {
   Promise.resolve(Cloud.live ? Cloud.ensurePrices(d.id) : null).then(() => {
     saveData();
     flashMessage = "";
-    go("outfit");
+    pickingTailor = false;
+    // An order that was already designed goes straight back to "Send to Tailor"
+    go(draft().designDone && !flowRedirect("send") ? "send" : "outfit");
   });
 }
 
@@ -436,71 +441,4 @@ function tailorTermsHtml(open) {
 function tailorTermsCheckbox() {
   return `<label class="check terms-check"><input type="checkbox" name="acceptTerms" value="yes" required>
     I agree to the ${APP_NAME} tailor terms: I won't take ${APP_NAME} customers off the platform.</label>`;
-}
-
-// ---- Join as a tailor (for someone already signed in, or in the demo) ----
-
-function screenJoinTailor() {
-  if (Cloud.live && !Cloud.me) {
-    return `${cTop("Join as a tailor", "tailors")}<div class="content">
-      <p>Create an account and choose <b>I'm a tailor or designer</b>.</p>
-      <button class="cta" onclick="Auth.startSignUp('designer')">Create a tailor account</button></div>`;
-  }
-  const mine = Cloud.live ? (Cloud.me.designers || []).find(x => x.is_owner) : null;
-  if (mine) {
-    return `${cTop("Join as a tailor", "tailors")}<div class="content">
-      <div class="notice">You already have a tailor business: <b>${escapeHtml(mine.business_name)}</b>.</div>
-      <button class="cta" onclick="go('biz/profile')">Open my Business dashboard</button></div>`;
-  }
-  return `
-    ${cTop("Join as a tailor", "tailors")}
-    <div class="content">
-      <p>Get found by customers near you. Your ${APP_NAME} dashboard handles quote requests, the chat with each customer, orders, payments and your team.</p>
-      <ol class="join-steps"><li>Tell us your business name and where you are.</li><li>Add your photo, specialities and portfolio in <b>My profile</b>.</li><li>The ${APP_NAME} team checks and approves you — then customers can find you.</li></ol>
-      <form class="stack" onsubmit="return joinAsTailor(event)">
-        <label class="field">Business name<input name="business" required minlength="2" maxlength="80" placeholder="e.g. Ade's Tailoring"></label>
-        <label class="field">Country<select name="country" required>${countryOptions("", "Choose your country")}</select></label>
-        <label class="field">City or town<input name="city" required maxlength="60" placeholder="e.g. Manchester"></label>
-        <label class="field">Phone <small>(only the ${APP_NAME} team sees it)</small><input name="phone" type="tel" maxlength="20"></label>
-        ${tailorTermsHtml(false)}
-        ${tailorTermsCheckbox()}
-        <p id="join-error" class="form-error" role="alert"></p>
-        <button class="cta" type="submit">Create my tailor profile</button>
-      </form>
-    </div>`;
-}
-
-function joinAsTailor(event) {
-  event.preventDefault();
-  const form = event.target;
-  const details = { businessName: form.business.value.trim(), country: form.country.value, city: form.city.value.trim(), phone: form.phone.value.trim(),
-                    acceptTerms: form.acceptTerms.checked };
-  if (details.businessName.length < 2) return formError("join-error", "Enter your business name.");
-  if (hideContactDetails(details.businessName).hidden) return formError("join-error", "Your business name can't include a phone number, email, website or social handle.");
-  if (!details.acceptTerms) return formError("join-error", "Please tick the box to agree to the tailor terms.");
-  if (!details.country) return formError("join-error", "Choose your country.");
-  const button = form.querySelector("button[type=submit]");
-  button.disabled = true;
-  button.textContent = "Creating…";
-  if (Cloud.live) {
-    Cloud.registerDesigner(details)
-      .then(() => { Auth.drawChrome(); toast("Your tailor profile is made. Add your photo and details, then wait for approval."); go("biz/profile"); })
-      .catch(error => { button.disabled = false; button.textContent = "Create my tailor profile"; formError("join-error", error.message); });
-    return false;
-  }
-  // Demo: a new tailor, waiting for the admin (you) to approve it in Business → Tailors
-  const id = "D" + (db.designers.reduce((max, d) => Math.max(max, Number(String(d.id).slice(1)) || 0), 0) + 1);
-  const d = refreshDesignerPublic({
-    id, business_name: details.businessName, country_code: details.country, city: details.city, postcode: "", address_line: "",
-    latitude: null, longitude: null, show_exact_address: false, speciality_tags: [], delivery_available: false, custom_orders: true,
-    rating: null, review_count: 0, profile_image: null, description: "", delivery_time: "7–14 days", admin_status: "pending",
-    admin_note: "", portfolio: [], phone: details.phone, location: "", demo: true, tailor_terms_accepted_at: new Date().toISOString()
-  });
-  db.designers.push(d);
-  db.prices = db.prices.concat(newPriceListFor(id));
-  db.session.designerId = id;
-  saveData();
-  toast(`${d.business_name} created. It waits for approval in Business → Tailors.`);
-  go("biz/profile");
-  return false;
 }

@@ -1,4 +1,5 @@
 # NebedaHub
 User-agent: *
 Allow: /
+Disallow: /admin/
 Sitemap: https://nebedahub.com/sitemap.xml

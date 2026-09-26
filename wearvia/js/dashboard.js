@@ -20,10 +20,6 @@ function renderDashboard() {
   const totals = businessTotals();
   const open = placedOrders().filter(isOpen);
   const late = open.filter(isLate);
-  // The fabric marketplace and new tailors are the admin's to look after
-  const lowStock = isAdminUser() ? activeFabrics().filter(f => f.status === "approved" && f.yards_available < LOW_STOCK_YARDS) : [];
-  const waitingFabrics = isAdminUser() ? activeFabrics().filter(f => f.status === "pending") : [];
-  const waitingTailors = isAdminUser() ? db.designers.filter(d => d.admin_status === "pending") : [];
   const awaitingReview = placedOrders().filter(o => o.stage === "delivered" && !o.review_rating);
   const waitingPayments = paymentsAwaiting();
   const waitingQuotes = quoteRequests().filter(o => quoteStatus(o) === "requested");
@@ -32,7 +28,7 @@ function renderDashboard() {
   const dueSoon = open.slice().sort((a, b) => a.due_date.localeCompare(b.due_date)).slice(0, 6);
   const rows = dueSoon.map(o => {
     const staff = staffForCurrentStep(o);
-    return `<tr onclick="go('biz/orders/${o.id}')" class="clickable">
+    return `<tr onclick="go('orders/${o.id}')" class="clickable">
       <td>${o.id}</td><td>${escapeHtml(customerName(o.customer_id))}</td><td>${escapeHtml(o.outfit_type)}</td>
       <td class="${isLate(o) ? "owed" : ""}">${formatDate(o.due_date)}${isLate(o) ? " · late" : ""}</td>
       <td>${stageBadge(o)}</td><td>${staff ? escapeHtml(staff.name) : "—"}</td></tr>`;
@@ -48,30 +44,24 @@ function renderDashboard() {
       <div class="stat"><div class="l">Pending Payments</div><div class="n">${money(totals.pending)}</div><div class="l">balances owed</div></div>
     </div>
 
-    ${late.length || lowStock.length || awaitingReview.length || waitingFabrics.length || waitingPayments.length || waitingQuotes.length || unreadChats.length || waitingTailors.length ? `<div class="alerts">
-      ${waitingTailors.length ? `<a class="alert" href="#/biz/tailors">🧵 ${waitingTailors.length} new tailor${waitingTailors.length > 1 ? "s" : ""} waiting for your approval</a>` : ""}
-      ${waitingQuotes.length ? `<a class="alert" href="#/biz/quotes">📝 ${waitingQuotes.length} customer${waitingQuotes.length > 1 ? "s" : ""} waiting for a quote</a>` : ""}
-      ${unreadChats.length ? `<a class="alert" href="#/biz/${isPlaced(unreadChats[0]) ? "orders" : "quotes"}/${unreadChats[0].id}">💬 New messages on ${unreadChats.map(o => o.id).join(", ")}</a>` : ""}
-      ${waitingPayments.length ? `<a class="alert" href="#/biz/payments">💷 ${waitingPayments.length} payment${waitingPayments.length > 1 ? "s" : ""} to confirm</a>` : ""}
-      ${waitingFabrics.length ? `<a class="alert" href="#/biz/sellers">🧶 ${waitingFabrics.length} seller fabric${waitingFabrics.length > 1 ? "s" : ""} to approve</a>` : ""}
-      ${late.length ? `<a class="alert" href="#/biz/orders">⚠ ${late.length} late order${late.length > 1 ? "s" : ""}</a>` : ""}
-      ${lowStock.length ? `<a class="alert" href="#/biz/fabrics">⚠ Low stock: ${lowStock.map(f => `${escapeHtml(f.name)} (${f.yards_available} yd)`).join(", ")}</a>` : ""}
+    ${late.length || awaitingReview.length || waitingPayments.length || waitingQuotes.length || unreadChats.length ? `<div class="alerts">
+      ${waitingQuotes.length ? `<a class="alert" href="#/quotes">📝 ${waitingQuotes.length} customer${waitingQuotes.length > 1 ? "s" : ""} waiting for a quote</a>` : ""}
+      ${unreadChats.length ? `<a class="alert" href="#/${isPlaced(unreadChats[0]) ? "orders" : "quotes"}/${unreadChats[0].id}">💬 New messages on ${unreadChats.map(o => o.id).join(", ")}</a>` : ""}
+      ${waitingPayments.length ? `<a class="alert" href="#/payments">💷 ${waitingPayments.length} payment${waitingPayments.length > 1 ? "s" : ""} to confirm</a>` : ""}
+      ${late.length ? `<a class="alert" href="#/orders">⚠ ${late.length} late order${late.length > 1 ? "s" : ""}</a>` : ""}
       ${awaitingReview.length ? `<span class="alert soft">${awaitingReview.length} delivered order${awaitingReview.length > 1 ? "s" : ""} awaiting a review</span>` : ""}
     </div>` : ""}
 
     <div class="optbtns quick">
-      <a class="optbtn" href="#/biz/quotes">Quote requests</a>
-      <a class="optbtn" href="#/biz/orders">All Orders (live)</a>
-      <a class="optbtn" href="#/biz/team">Tailor Team</a>
-      <a class="optbtn" href="#/biz/profile">My profile</a>
-      ${isAdminUser() ? `<a class="optbtn" href="#/biz/fabrics">Inventory</a>
-      <a class="optbtn" href="#/biz/sellers">Fabric Sellers</a>
-      <a class="optbtn" href="#/biz/tailors">Tailors</a>` : ""}
-      <a class="optbtn" href="#/biz/customers">Customers</a>
-      <a class="optbtn" href="#/biz/weddings">Wedding Order</a>
-      <a class="optbtn" href="#/biz/shop">Ready to Wear</a>
-      <a class="optbtn" href="#/biz/invoices">Invoices</a>
-      <a class="optbtn" href="#/biz/deliveries">Delivery</a>
+      <a class="optbtn" href="#/quotes">Quote requests</a>
+      <a class="optbtn" href="#/orders">All Orders (live)</a>
+      <a class="optbtn" href="#/team">Tailor Team</a>
+      <a class="optbtn" href="#/profile">My profile</a>
+      <a class="optbtn" href="#/customers">Customers</a>
+      <a class="optbtn" href="#/weddings">Wedding Order</a>
+      <a class="optbtn" href="#/shop">Ready to Wear</a>
+      <a class="optbtn" href="#/invoices">Invoices</a>
+      <a class="optbtn" href="#/deliveries">Delivery</a>
     </div>
 
     <div class="two-col">
@@ -118,7 +108,7 @@ function answerQuestion(question) {
   }
   if (q.includes("stock") || q.includes("fabric") || q.includes("inventory") || q.includes("yard")) {
     const low = activeFabrics().filter(f => f.status === "approved" && f.yards_available < LOW_STOCK_YARDS);
-    return low.length ? `Running low: ${low.map(f => `${escapeHtml(f.name)} (${f.yards_available} yd)`).join(", ")}. Restock from Fabric Inventory.` : `Every fabric has at least ${LOW_STOCK_YARDS} yd in stock.`;
+    return low.length ? `Running low: ${low.map(f => `${escapeHtml(f.name)} (${f.yards_available} yd)`).join(", ")}. The ${APP_NAME} admin looks after stock in NebedaHub Admin → Fabric inventory.` : `Every fabric has at least ${LOW_STOCK_YARDS} yd in stock.`;
   }
   if (q.includes("owe") || q.includes("balance") || q.includes("pending") || q.includes("payment") || q.includes("unpaid")) {
     const owing = placedOrders().filter(o => balanceOwed(o) > 0);

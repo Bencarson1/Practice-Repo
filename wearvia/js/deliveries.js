@@ -6,7 +6,7 @@
 function renderDeliveries() {
   const ready = placedOrders().filter(o => o.stage === "balance_paid" && !findDelivery(o.id));
   const readyRows = ready.map(o => `<tr>
-    <td><a href="#/biz/orders/${o.id}">${o.id}</a></td>
+    <td><a href="#/orders/${o.id}">${o.id}</a></td>
     <td>${escapeHtml(customerName(o.customer_id))}</td>
     <td>${escapeHtml(o.outfit_type)}</td>
     <td><form class="inline-form" onsubmit="return dispatchFromDetail(event, '${o.id}')">
@@ -18,7 +18,7 @@ function renderDeliveries() {
     const order = findOrder(d.order_id);
     const next = DELIVERY_STATUSES[DELIVERY_STATUSES.indexOf(d.status) + 1];
     return `<tr>
-      <td><a href="#/biz/orders/${d.order_id}">${escapeHtml(d.order_id)}</a></td>
+      <td><a href="#/orders/${d.order_id}">${escapeHtml(d.order_id)}</a></td>
       <td>${escapeHtml(order ? customerName(order.customer_id) : "—")}</td>
       <td>${escapeHtml(d.courier)}</td>
       <td><code>${escapeHtml(d.tracking_number)}</code></td>

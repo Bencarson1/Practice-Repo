@@ -1,14 +1,13 @@
 // ============================================================
-// app.js — page addresses (routing), the business tabs, and start-up
+// app.js — page addresses (routing), the tabs, and start-up
 //
-// Addresses look like:
-//   #/home, #/outfit, #/tracking/NT-1003     → customer app
-//   #/biz/dashboard, #/biz/orders/NT-1003    → business dashboard
-//   #/seller/fabrics, #/seller/edit/F12      → fabric seller area
-//   #/for-tailors                            → how to join as a tailor
+// Each NebedaHub app (see apps.js) has its own addresses:
+//   NebedaHub           /#/home, /#/outfit, /#/tracking/NT-1003
+//   NebedaHub Business  /business/#/dashboard, /business/#/orders/NT-1003
+//   NebedaHub Seller    /sell/#/fabrics, /sell/#/edit/F12
+//   NebedaHub Admin     /admin/#/overview, /admin/#/tailors
 // ============================================================
 
-// show: only for some people (the fabric marketplace and approving tailors are the admin's)
 const BIZ_TABS = [
   { key: "dashboard", label: "Dashboard", render: renderDashboard },
   { key: "profile", label: "My profile", render: renderMyProfile, badge: () => (bizDesigner() || {}).admin_status === "approved" ? 0 : 1 },
@@ -19,9 +18,6 @@ const BIZ_TABS = [
   { key: "team", label: "Tailor Team", render: renderTeam },
   { key: "customers", label: "Customers", render: renderCustomers },
   { key: "measurements", label: "Measurements", render: renderMeasurements },
-  { key: "fabrics", label: "Fabric Inventory", render: renderFabrics, show: isAdminUser },
-  { key: "sellers", label: "Fabric Sellers", render: renderSellerFabrics, show: isAdminUser },
-  { key: "tailors", label: "Tailors", render: renderTailorAdmin, show: isAdminUser, badge: () => db.designers.filter(d => d.admin_status === "pending").length },
   { key: "payments", label: "Payments", render: renderPayments },
   { key: "prices", label: "Prices", render: renderPrices },
   { key: "weddings", label: "Wedding Orders", render: renderWeddings },
@@ -29,6 +25,19 @@ const BIZ_TABS = [
   { key: "deliveries", label: "Deliveries", render: renderDeliveries },
   { key: "invoices", label: "Invoices", render: renderInvoices }
 ];
+
+// The platform's own tools: only in NebedaHub Admin (admin.js)
+const ADMIN_TABS = [
+  { key: "overview", label: "Overview", render: renderAdminOverview },
+  { key: "tailors", label: "Tailors", render: renderTailorAdmin, badge: () => db.designers.filter(d => d.admin_status === "pending").length },
+  { key: "sellers", label: "Fabric sellers", render: renderSellerFabrics, badge: () => activeFabrics().filter(f => f.status === "pending").length },
+  { key: "fabrics", label: "Fabric inventory", render: renderFabrics },
+  { key: "specialities", label: "Specialities", render: renderSpecialities },
+  { key: "contacts", label: "Hidden contact details", render: renderHiddenContacts }
+];
+
+// Screens someone without an account can open in each app
+const GUEST_SCREENS_BY_APP = { business: ["welcome"], seller: ["welcome"], admin: [] };
 
 let navDepth = 0;      // how many screens deep we are, so "‹ back" knows where to go
 let goingBack = false;
@@ -50,72 +59,66 @@ function back(fallback) {
     goingBack = true;
     history.back();
   } else {
-    go(fallback || "home", true);
+    go(fallback || APP.home, true);
   }
 }
 
 function currentRoute() {
   const parts = location.hash.replace(/^#\/?/, "").split("/").map(decodeURIComponent);
-  if (parts[0] === "biz") {
-    return { area: "business", screen: parts[1] || "dashboard", id: parts[2] };
-  }
-  if (parts[0] === "seller") {
-    return { area: "seller", screen: parts[1] || "fabrics", id: parts[2] };
-  }
-  if (parts[0] === "for-tailors") {
-    return { area: "tailors", screen: "welcome" };
-  }
-  return { area: "customer", screen: parts[0] || "home", id: parts[1] };
+  const area = APP_KIND;
+  if (area === "customer") return { area, screen: parts[0] || "home", id: parts[1] };
+  return { area, screen: parts[0] || APP.home, id: parts[1] };
+}
+
+// Without an account you can find tailors, and read how to join as a tailor or seller
+function guestCanOpen(route) {
+  if (route.area === "customer") return Cloud.GUEST_SCREENS.includes(route.screen);
+  return (GUEST_SCREENS_BY_APP[route.area] || []).includes(route.screen);
 }
 
 // Redraw whatever is on screen (called after any data change)
 function renderAll() {
-  if (!db || !document.getElementById("auth-view").hidden) return; // still loading, or signing in
+  if (appMoving || !db || !document.getElementById("auth-view").hidden) return; // still loading, or signing in
   const route = currentRoute();
-  // Without an account you can find tailors; anything else asks you to sign in
+  // Without an account you can only look around; anything else asks you to sign in
   if (Cloud.isGuest() && !guestCanOpen(route)) {
     Auth.show("signIn");
     return;
   }
-  if (!Cloud.canOpen(route.area)) {
-    go(Cloud.homeRoute(), true);
-    return;
-  }
-  const isBusiness = route.area === "business";
-  const isSeller = route.area === "seller";
-  const isTailors = route.area === "tailors";
-  const isCustomer = route.area === "customer";
-  document.getElementById("customer-view").hidden = !isCustomer;
-  document.getElementById("business-view").hidden = !isBusiness;
-  document.getElementById("seller-view").hidden = !isSeller;
-  document.getElementById("join-view").hidden = !isTailors;
-  document.getElementById("mode-customer").classList.toggle("on", isCustomer);
-  document.getElementById("mode-seller").classList.toggle("on", isSeller);
-  document.getElementById("mode-tailors").classList.toggle("on", isTailors);
-  document.getElementById("mode-business").classList.toggle("on", isBusiness);
-  document.body.classList.toggle("in-business", isBusiness);
+  const business = route.area === "business" && Cloud.isTeam() && !["welcome", "join"].includes(route.screen);
+  const view = route.area === "customer" ? "customer-view"
+    : route.area === "seller" ? "seller-view"
+    : route.area === "admin" ? "admin-view"
+    : business ? "business-view" : "join-view";
+  ["customer-view", "business-view", "seller-view", "join-view", "admin-view"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.hidden = id !== view;
+  });
+  document.body.classList.toggle("in-business", business);
   // Quotes and prices on screen use the right tailor's price list
   usePricesOf(contextDesignerId());
-  const shop = isBusiness ? bizDesigner() : null;
-  document.getElementById("shop-pill").innerHTML = shop ? `Business: <b>${escapeHtml(shop.business_name)}</b>` : `Tailors near you · <b>${escapeHtml(APP_NAME)}</b>`;
+  const shop = business ? bizDesigner() : null;
+  document.getElementById("shop-pill").innerHTML = shop ? `Business: <b>${escapeHtml(shop.business_name)}</b>` : escapeHtml(APP_PILLS[APP_KIND]);
   // On phones the customer app fills the screen below the top bar, whose height changes with its contents
   document.documentElement.style.setProperty("--appbar-h", document.querySelector(".appbar").offsetHeight + "px");
 
-  if (isSeller) {
+  if (route.area === "seller") {
     renderSellerArea(route.screen, route.id);
-  } else if (isTailors) {
-    renderTailorJoin();
-  } else if (isBusiness) {
+  } else if (route.area === "admin") {
+    renderAdminArea(route.screen, route.id);
+  } else if (route.area === "business" && !business) {
+    renderTailorJoin(route.screen);
+  } else if (business) {
     const tabs = BIZ_TABS.filter(t => !t.show || t.show());
     const tab = tabs.find(t => t.key === route.screen) || tabs[0];
     // The page first: opening a chat marks it read, so the badges are drawn after
     document.getElementById("biz-content").innerHTML = bizSwitcher() + (tab.key === "profile" ? "" : tailorStatusBanner(bizDesigner())) + tab.render(route.id);
     afterChatRender();
-    document.getElementById("biz-tabs").innerHTML = tabs.map(t => {
-      const badge = t.badge ? t.badge() : 0;
-      return `<a class="tab ${t.key === tab.key ? "active" : ""}" href="#/biz/${t.key}">${t.label}${badge ? `<span class="tab-badge" aria-label="${badge} need attention">${badge}</span>` : ""}</a>`;
-    }).join("");
-    document.title = `${tab.label} · ${(bizDesigner() || {}).business_name || SHOP_NAME} · ${APP_NAME}`;
+    document.getElementById("biz-tabs").innerHTML = tabsHtml(tabs, tab);
+    document.title = `${tab.label} · ${(bizDesigner() || {}).business_name || SHOP_NAME} · ${APP.name}`;
+  } else if (needsCustomerRecord()) {
+    document.getElementById("customer-app").innerHTML = notACustomerScreen();
+    document.title = APP.name;
   } else {
     renderCustomer(route.screen, route.id);
     const tailor = route.screen === "tailor" ? designerById((db.designers.find(d => d.slug === route.id) || {}).id) : null;
@@ -123,9 +126,72 @@ function renderAll() {
   }
 }
 
-// Without an account you can find tailors and read how to join as one
-function guestCanOpen(route) {
-  return route.area === "tailors" || (route.area === "customer" && Cloud.GUEST_SCREENS.includes(route.screen));
+const APP_PILLS = { customer: "Tailors near you", business: "For tailors and designers", seller: "For fabric sellers", admin: "Platform admin" };
+
+function tabsHtml(tabs, active) {
+  return tabs.map(t => {
+    const badge = t.badge ? t.badge() : 0;
+    return `<a class="tab ${t.key === active.key ? "active" : ""}" href="#/${t.key}">${t.label}${badge ? `<span class="tab-badge" aria-label="${badge} need attention">${badge}</span>` : ""}</a>`;
+  }).join("");
+}
+
+// ---- NebedaHub Admin ----
+
+function renderAdminArea(screen, id) {
+  const tabsEl = document.getElementById("admin-tabs");
+  const content = document.getElementById("admin-content");
+  if (!isAdminUser()) {
+    tabsEl.innerHTML = "";
+    content.innerHTML = noAccessCard("This account isn't a NebedaHub admin",
+      `NebedaHub Admin is only for the NebedaHub team. You're signed in as ${escapeHtml((Cloud.me || {}).email || "")}.`,
+      [["customer", "", "Open NebedaHub"], ["business", "", "Open NebedaHub Business"], ["seller", "", "Open NebedaHub Seller"]]);
+    document.title = APP.name;
+    return;
+  }
+  const tab = ADMIN_TABS.find(t => t.key === screen) || ADMIN_TABS[0];
+  content.innerHTML = tab.render(id);
+  tabsEl.innerHTML = tabsHtml(ADMIN_TABS, tab);
+  document.title = `${tab.label} · ${APP.name}`;
+}
+
+// "This account can't use this app" — with the way to the right one, and to sign out
+function noAccessCard(title, text, links, extra) {
+  return `<div class="card no-access">
+    <h1>${title}</h1>
+    <p class="muted">${text}</p>
+    ${extra || ""}
+    <div class="no-access-links">${links.map(([kind, path, label], i) =>
+      `<a class="button ${i ? "ghost" : "gold"}" href="${escapeHtml(appUrl(kind, path))}">${escapeHtml(label)}</a>`).join("")}</div>
+    ${Cloud.live && Cloud.me ? `<p class="hint">Or <button class="linkish strong" onclick="Auth.signOut()">sign out</button> and use a different email.</p>` : ""}
+  </div>`;
+}
+
+// ---- The customer app, for an account that was only ever a tailor ----
+// Customers get a customer record when they sign up. Tailors and their staff
+// don't, so the first time they open the customer app they can make one.
+
+function needsCustomerRecord() {
+  return APP_KIND === "customer" && Cloud.live && !!Cloud.me && !Cloud.me.customer_id;
+}
+
+function notACustomerScreen() {
+  const kind = Cloud.me.is_admin && !(Cloud.me.designers || []).length ? "admin" : "business";
+  return `<div class="content not-customer">
+    <div class="auth-brand">${APP_NAME}</div>
+    <h2>This is ${kind === "admin" ? "an admin" : "a tailor"} account</h2>
+    <p>${escapeHtml(Cloud.me.email)} is set up for ${APPS[kind].name}. You can open it, or use the same email to order outfits here too.</p>
+    <a class="cta" href="${escapeHtml(appUrl(kind, ""))}">Open ${APPS[kind].name}</a>
+    <button class="btn-outline" id="make-customer" onclick="startOrderingToo()">Order outfits with this account too</button>
+    <button class="linkish" onclick="Auth.signOut()">Sign out</button>
+  </div>`;
+}
+
+function startOrderingToo() {
+  const button = document.getElementById("make-customer");
+  if (button) { button.disabled = true; button.textContent = "Setting up…"; }
+  Cloud.becomeCustomer()
+    .then(() => { toast("Done — you can order outfits with this account now."); go("home", true); })
+    .catch(error => { toast(error.message); if (button) { button.disabled = false; button.textContent = "Order outfits with this account too"; } });
 }
 
 // A short message that fades away
@@ -176,14 +242,16 @@ window.addEventListener("hashchange", () => {
   if (inner) inner.scrollTop = 0;
 });
 
-document.getElementById("app-name").textContent = APP_NAME;
+Auth.drawBrand();
 
-Auth.loading();
-Cloud.start()
+if (!appMoving) Auth.loading();
+if (!appMoving) Cloud.start()
   .then(result => {
     if (result.recovery) return Auth.show("newPassword");
     if (!result.signedIn) {
-      // Someone arriving at a tailor page (e.g. from Google) can look around first
+      // Someone arriving at a tailor page (e.g. from Google), or at the tailor
+      // or seller welcome page, can look around first
+      if (APP_KIND !== "customer" && APP_KIND !== "admin" && !/^#\/./.test(location.hash)) history.replaceState(null, "", "#/welcome");
       if (guestCanOpen(currentRoute())) {
         return Cloud.startGuest().then(() => { Auth.hide(); Auth.drawChrome(); renderAll(); });
       }
@@ -193,7 +261,7 @@ Cloud.start()
     // Demo mode
     Auth.hide();
     Auth.drawChrome();
-    if (!location.hash || !/^#\//.test(location.hash)) history.replaceState(null, "", "#/home");
+    if (!location.hash || !/^#\//.test(location.hash)) history.replaceState(null, "", "#/" + APP.home);
     renderAll();
     // Uploaded photos load from the browser's photo store a moment later; draw again when they're in
     PhotoStore.ready.then(renderAll);
