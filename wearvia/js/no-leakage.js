@@ -11,7 +11,9 @@
 
 const CONTACT_HIDDEN_TOKEN = "[contact details hidden]";
 const CONTACT_HIDDEN_NOTICE = "Contact details are hidden. Please keep your order on NebedaHub so you're protected.";
-const PAY_PROTECTION_LINE = "Pay through NebedaHub to be protected: your money is safe until your outfit is delivered.";
+const PAY_PROTECTION_LINE = (typeof ONLINE_PAYMENTS_ENABLED !== "undefined" && ONLINE_PAYMENTS_ENABLED)
+  ? "Pay through NebedaHub to be protected. Never pay a seller outside the platform."
+  : "Online payments are not open yet. Never send money to a tailor or fabric seller outside NebedaHub.";
 const TAILOR_TERMS_VERSION = "2026-09";
 const TAILOR_TERMS = [
   "Customers who find you on NebedaHub stay NebedaHub customers: quotes, chats, payments and changes to their order go through NebedaHub.",
