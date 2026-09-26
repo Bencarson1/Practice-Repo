@@ -93,7 +93,7 @@ function screenMarket() {
   return `
     ${cTop("Fabric Marketplace", "home")}
     <div class="content">
-      <div class="meta">Fabrics from independent sellers, checked by Wearvia. Tap a fabric to see every photo.</div>
+      <div class="meta">Fabrics from independent sellers, checked by NebedaHub. Tap a fabric to see every photo.</div>
       ${marketFilterBar()}
       <div id="market-results" class="stack">${marketResults()}</div>
     </div>

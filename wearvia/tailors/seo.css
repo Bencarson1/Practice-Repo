@@ -1,4 +1,4 @@
-/* The public tailor pages (built by scripts/build-tailor-pages.mjs), in the Wearvia look */
+/* The public tailor pages (built by scripts/build-tailor-pages.mjs), in the NebedaHub look */
 :root { --navy: #0c1220; --gold: #c9a24a; --cream: #faf6ec; --line: #e7e0cf; --ink: #1c1811; --muted: #7a7262; }
 * { box-sizing: border-box; }
 body { margin: 0; font: 15px/1.5 Inter, Arial, sans-serif; background: var(--cream); color: var(--ink); }

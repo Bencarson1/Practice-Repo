@@ -34,7 +34,7 @@ const Auth = (() => {
 
   function loading(text) {
     document.getElementById("auth-view").hidden = false;
-    document.getElementById("auth-view").innerHTML = `<div class="auth-card"><p class="auth-loading"><span class="gen-spin"></span>${escapeHtml(text || "Loading Wearvia…")}</p></div>`;
+    document.getElementById("auth-view").innerHTML = `<div class="auth-card"><p class="auth-loading"><span class="gen-spin"></span>${escapeHtml(text || "Loading NebedaHub…")}</p></div>`;
   }
 
   function field(label, name, type, extra) {
@@ -113,8 +113,8 @@ const Auth = (() => {
     }
     el.innerHTML = `
       <div class="auth-card">
-        <div class="auth-brand">WEARVIA</div>
-        <div class="auth-tag">Bespoke · Ready to Wear · Tailors near you</div>
+        <div class="auth-brand">${APP_NAME}</div>
+        <div class="auth-tag">${APP_TAGLINE}</div>
         <h1>${title}</h1>
         ${body}
       </div>
@@ -258,7 +258,7 @@ const Auth = (() => {
         <button class="link-button" onclick="Cloud.enterDemo()">Open the demo</button>`;
     } else {
       account.innerHTML = "";
-      footer.innerHTML = `${APP_NAME} · Bespoke outfits from tailors near you`;
+      footer.innerHTML = `${APP_NAME} · ${APP_TAGLINE}`;
     }
   }
 

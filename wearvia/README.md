@@ -1,13 +1,13 @@
-# Wearvia
+# NebedaHub
 
-Wearvia is one web app for bespoke and ready-to-wear fashion:
+NebedaHub is one web app for bespoke and ready-to-wear fashion:
 
 - **Customers** design an outfit, see a design concept, save their measurements, choose a fabric and send it all to the tailor. They chat with Nebeda Threads in the app to agree how many yards they need, accept the tailor's quote, pay a deposit, track production and leave a review.
 - **Fabric sellers** run a market stall of fabrics: photos, prices, stock, and the orders that use their fabric.
 - **Tailors and designers** each run their own Business dashboard: their quote requests, chats, orders, production, tailor team, prices, payments, weddings, ready-to-wear, deliveries and invoices. They only ever see their own.
 - **Customers find tailors near them** (📍 *Find tailors near me*): by their location or by country, city and postcode, filtered by distance, speciality, delivery, custom tailoring and rating. Each tailor has a public page with their portfolio and reviews, and *Request a quote* sends the order to that tailor.
 
-The first shop on Wearvia is **Nebeda Threads** (Gillingham, Kent) — designer number one. New tailors join with *I'm a tailor or designer* and appear once the admin approves them. Prices are in **£ (GBP)**.
+The first shop on NebedaHub is **Nebeda Threads** (Gillingham, Kent) — designer number one. New tailors join with *I'm a tailor or designer* and appear once the admin approves them. Prices are in **£ (GBP)**.
 
 It's plain HTML, CSS and JavaScript. There is nothing to install and no build step.
 The look and the customer order flow come from `wearvia-prototype.html`; the full plan is in [`WEARVIA-SPEC.md`](../WEARVIA-SPEC.md).
@@ -42,25 +42,25 @@ Use the switch at the top right to move between the **Customer app**, the **Fabr
 - **Privacy:** a tailor who doesn't show their exact address is placed about 1 km from it and shown with only their postcode district (e.g. "SE15"); their exact address, postcode and position are never sent to anyone but them and the admin.
 - **Demo:** sample tailors in London, Manchester, Lagos and Abuja, marked *(demo)*, plus one waiting for approval. They only exist in the demo — never in the real database.
 
-## Keeping orders on Wearvia
+## Keeping orders on NebedaHub
 
 So customers and tailors are protected, orders stay in the app (`supabase/no-leakage.sql` does this in the database, so it can't be got round; `js/no-leakage.js` uses the same rules for the demo and the screens):
 
 - **Public profiles, search and the Google pages** show only the business name, area (e.g. "Gillingham · ME7"), specialities, photos, rating, reviews and *Request a quote*. No address, phone, email, website or social links. A tailor's position is always rounded to about 1 km (the old "show my exact address" switch is gone).
 - **The contact-details filter** hides phone numbers, email addresses, website links, WhatsApp / Instagram / social handles and "call me on…" / "pay me directly" / "outside the app" messages, replacing them with *[contact details hidden]*. It runs on every chat message (both sides), tailor descriptions, portfolio captions, services, reviews and the customer's style note. Measurements, dates, yards and prices are left alone.
-- **In the chat** a message that had contact details shows *"Contact details are hidden. Please keep your order on Wearvia so you're protected."* — and the same warning appears while typing. The original is kept for safety: only the Wearvia admin can read it (*Original* under the message).
+- **In the chat** a message that had contact details shows *"Contact details are hidden. Please keep your order on NebedaHub so you're protected."* — and the same warning appears while typing. The original is kept for safety: only the NebedaHub admin can read it (*Original* under the message).
 - **Delivery and fitting details:** once the customer's deposit is **confirmed**, both sides see a box with the tailor's business address and the customer's delivery address (the customer adds it on the deposit screen or in the box). Before that, neither side sees them.
 - **Customers' phone numbers and emails** aren't shown to tailors (only for walk-in customers the tailor added themselves). Everything goes through the chat.
-- **Quote and payment screens** say: *"Pay through Wearvia to be protected: your money is safe until your outfit is delivered."*
-- **Tailor terms:** tailors tick *I agree to the Wearvia tailor terms* when they sign up (or join, or in Business → My profile). The admin can't approve a new tailor until they have.
+- **Quote and payment screens** say: *"Pay through NebedaHub to be protected: your money is safe until your outfit is delivered."*
+- **Tailor terms:** tailors tick *I agree to the NebedaHub tailor terms* when they sign up (or join, or in Business → My profile). The admin can't approve a new tailor until they have.
 
 ## Pages for Google
 
-The app's addresses use `#`, which search engines mostly ignore, so `scripts/build-tailor-pages.mjs` writes ordinary pages from the approved tailors in Supabase (publishable key only): `wearvia/tailors/` (all countries), `wearvia/tailors/uk/london/`, `wearvia/tailors/nigeria/lagos/` and so on, and `wearvia/tailor/<web-address>/` for each tailor — each with its own title, description, heading, Open Graph tags and JSON-LD (LocalBusiness / ItemList), plus `sitemap.xml` and `robots.txt`. The pages also load the latest results live and link into the app. The GitHub Action `.github/workflows/tailor-pages.yml` rebuilds them every day and on every merge into `main`, and publishes the site to GitHub Pages. To build them yourself: `node scripts/build-tailor-pages.mjs` (or `OFFLINE=1 node scripts/build-tailor-pages.mjs` for just the standard city pages).
+The app's addresses use `#`, which search engines mostly ignore, so `scripts/build-tailor-pages.mjs` writes ordinary pages from the approved tailors in Supabase (publishable key only): `tailors/` (all countries), `tailors/uk/london/`, `tailors/nigeria/lagos/` and so on, and `tailor/<web-address>/` for each tailor — each with its own title, description, heading, Open Graph tags and JSON-LD (LocalBusiness / ItemList), plus `sitemap.xml` and `robots.txt`. The pages also load the latest results live and link into the app. The GitHub Action `.github/workflows/tailor-pages.yml` rebuilds them every day and on every merge into `main`, and publishes the site to GitHub Pages at **https://nebedahub.com/** — the files in this `wearvia/` folder are published at the top of the domain (the repository variable `SITE_URL` is `https://nebedahub.com`). The app used to be at `/wearvia/`: `scripts/old-address-redirects.mjs` keeps those old links working (including `#/…` app links and tailor pages) by sending them to their new addresses, and removes the old offline copy from phones that installed it. To build them yourself: `node scripts/build-tailor-pages.mjs` (or `OFFLINE=1 node scripts/build-tailor-pages.mjs` for just the standard city pages).
 
 ## Install it on a phone
 
-Wearvia can be added to the home screen: on iPhone, Safari → Share → *Add to Home Screen*; on Android, Chrome → ⋮ → *Install app*. It opens full screen with its own icon. `sw.js` only stores the app's own files so it opens quickly; it never stores anything from Supabase (orders, chats, photos, sign-ins).
+NebedaHub can be added to the home screen: on iPhone, Safari → Share → *Add to Home Screen*; on Android, Chrome → ⋮ → *Install app*. It opens full screen with its own icon. `sw.js` only stores the app's own files so it opens quickly; it never stores anything from Supabase (orders, chats, photos, sign-ins).
 
 ## The order steps
 
@@ -107,7 +107,7 @@ The app won't let anyone skip a step: for example, nobody can pay before the quo
 
 | Tab | What it does |
 |-----|--------------|
-| Dashboard | Order count, revenue, estimated profit, pending payments, customers waiting for a quote, new messages, late orders, low stock, what's due soon, and *Ask Wearvia AI* (answers from your data) |
+| Dashboard | Order count, revenue, estimated profit, pending payments, customers waiting for a quote, new messages, late orders, low stock, what's due soon, and *Ask NebedaHub AI* (answers from your data) |
 | Quote requests | Customers who sent their order in. Open one to chat, see their style photos, design and measurements, enter the yards (or change the fabric) and *Send quote*. A live preview shows the quote before you send it |
 | Orders | Every order being made, live (📷 marks orders with style photos, 💬 new messages). Take walk-in orders (you enter the yards). Open an order to chat with the customer, move it along, assign staff, take payments and dispatch it. If the customer uploaded a style, the order page opens with *Customer's style — copy this*: the photos (tap for full size), their note and the link |
 | Production | A board of every order by the last step it finished. Orders with style photos show the photos, note and link on their card so the tailors know what to copy |
@@ -127,7 +127,7 @@ The app won't let anyone skip a step: for example, nobody can pay before the quo
 
 | Tab | What it does |
 |-----|--------------|
-| Sell on Wearvia | Create a seller profile, or sign in as an existing shop (demo — no passwords yet) |
+| Sell on NebedaHub | Create a seller profile, or sign in as an existing shop (demo — no passwords yet) |
 | My fabrics | The seller's stall: every fabric with its status (*Live*, *Waiting for approval*, *Hidden*, *Sold out*). Edit, mark sold out / back in stock, or delete |
 | Add a fabric | Up to 5 photos (the first is the cover), name, type, colour, price per yard in £, yards in stock, smallest order (in yards) and a description |
 | Orders | Every order that used the seller's fabric: yards, price, who it's for (first name only) and where to send it. *Mark as sent* when it's posted |
@@ -167,10 +167,10 @@ Who can do what is decided by the database, not by the browser (see `supabase/se
 
 ## Connecting to Supabase (one-off set-up)
 
-The app is already pointed at the Wearvia Supabase project in `js/config.js` (the project URL and the *publishable* key — that key is meant to be public). **Never put the secret key in the app.**
+The app is already pointed at the NebedaHub Supabase project in `js/config.js` (the project URL and the *publishable* key — that key is meant to be public). **Never put the secret key in the app.**
 
 1. **Run the database scripts.** Supabase → *SQL Editor* → *New query* → paste all of `supabase/setup.sql` → *Run*. It adds the missing tables, columns, security rules and photo buckets without touching your existing data. Then open another *New query*, paste all of `supabase/yards.sql` → *Run*. It switches the fabric columns from metres to yards and converts what's in them (money already charged doesn't change). Then do the same with `supabase/prices.sql`: it adds the price list (Business → Prices), makes the database price every customer order, and removes old unused metre functions. Then `supabase/tailor-quote.sql`: customers' orders become quote requests that the tailor prices, adds the order chat and its private `chat-photos` bucket, and ends with a report where every line should say OK. Then `supabase/tailors-near-me.sql`: many tailors (profiles, countries, specialities, per-tailor price lists and notes, approvals, the distance search, the `designer-photos` bucket, and security rules so each tailor only sees their own). It ends with a report where every line should say OK. Then `supabase/no-leakage.sql`: the contact-details filter on chats, profiles and portfolios (the originals are kept for the admin), no public addresses, customers' contact details kept from tailors, the delivery and fitting details after a confirmed deposit, and the tailor terms — merge the app update straight after it. It ends with a report where every line should say OK. All six are safe to run again — but if you ever re-run setup.sql, prices.sql or tailor-quote.sql, run the files after it again, in order.
-2. **Set the sign-in addresses.** Supabase → *Authentication* → *URL Configuration*: set *Site URL* to the address where the app is published, and add the same address under *Redirect URLs*. The links in sign-up and password emails go there.
+2. **Set the sign-in addresses.** Supabase → *Authentication* → *URL Configuration*: set *Site URL* to `https://nebedahub.com`, and add `https://nebedahub.com/` and `https://nebedahub.com/**` under *Redirect URLs*. The links in sign-up and password emails go there.
 3. **Keep email confirmation on.** Supabase → *Authentication* → *Sign In / Providers* → *Email*: leave *Confirm email* switched on. Staff logins are only granted to confirmed emails.
 4. **Make yourself the owner.** Open the app, create an account with your email (choose *I want outfits made*) and confirm it. Then in the SQL Editor run
    `select public.wearvia_make_owner('your-email@example.com');`
@@ -239,7 +239,7 @@ After any change, the app calls `saveData()` and `renderAll()`. In demo mode `sa
 Open `js/data.js` and change the settings at the top:
 
 ```js
-const APP_NAME = "Wearvia";          // the platform name
+const APP_NAME = "NebedaHub";          // the platform name
 const SHOP_NAME = "Nebeda Threads";  // the first shop using it
 const CURRENCY = "£";
 const DEPOSIT_RATE = 0.6;            // 60% deposit
@@ -256,7 +256,7 @@ These parts work in the app but need real services before going live (see sectio
 
 - **AI design concept:** drawn in the browser from the customer's choices. Swap `conceptSVG()` in `concept.js` for an image-generation API.
 - **Payments:** a demo checkout. No money is taken; every payment made in the app waits for Nebeda Threads to confirm it. Stripe goes here — when it does, a Stripe webhook should mark payments as confirmed instead of a person.
-- **Ask Wearvia AI:** answers a set of common questions from your data. It isn't a language model.
+- **Ask NebedaHub AI:** answers a set of common questions from your data. It isn't a language model.
 - **Delivery tracking:** tracking numbers are made up. Connect Royal Mail, DHL or Shippo.
-- **Designers:** many tailors can join. Commission payouts between Wearvia and tailors need Stripe Connect first; the fabric marketplace (approving sellers' fabrics, stock) is run by the admin.
+- **Designers:** many tailors can join. Commission payouts between NebedaHub and tailors need Stripe Connect first; the fabric marketplace (approving sellers' fabrics, stock) is run by the admin.
 

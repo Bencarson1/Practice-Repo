@@ -1,5 +1,5 @@
 // ============================================================
-// tailors-data.js — many tailors (designers) on Wearvia
+// tailors-data.js — many tailors (designers) on NebedaHub
 //
 //   • Lookups: which tailor an order, a draft or the Business dashboard is for
 //   • Scoping: the Business dashboard only ever shows the tailor it's open
@@ -246,7 +246,7 @@ function tailorAreaText(d) {
 }
 
 function tailorRatingText(d) {
-  return d.review_count > 0 && d.rating ? `⭐ ${Number(d.rating).toFixed(1)} (${d.review_count} review${d.review_count === 1 ? "" : "s"})` : "New on Wearvia";
+  return d.review_count > 0 && d.rating ? `⭐ ${Number(d.rating).toFixed(1)} (${d.review_count} review${d.review_count === 1 ? "" : "s"})` : "New on NebedaHub";
 }
 
 // ---- Countries and specialities (from the database in live mode) ----
@@ -364,7 +364,7 @@ function addDemoTailors(data) {
     address_line: main.address_line || "", latitude: 51.3887, longitude: 0.5485, show_exact_address: false,
     speciality_tags: ["Agbada", "Wedding outfits", "Custom design"], delivery_available: true, custom_orders: true,
     admin_status: "approved", admin_note: "", profile_image: main.profile_image || "logo:NT:1e2a44",
-    description: main.description || "Bespoke agbada, wedding outfits and custom designs from Gillingham, Kent. The first shop on Wearvia.",
+    description: main.description || "Bespoke agbada, wedding outfits and custom designs from Gillingham, Kent. The first shop on NebedaHub.",
     portfolio: main.portfolio || samplePhotos("aso_oke", ["#c9a227", "#7c1f2e", "#efe6d2"], 3).map((image, i) => ({ id: `D1-P${i + 1}`, image, title: ["Wedding agbada", "Gold embroidery", "Aso oke"][i] }))
   });
   data.main_designer_id = main.id;

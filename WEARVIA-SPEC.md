@@ -1,7 +1,7 @@
-# Wearvia — App Specification
+# NebedaHub — App Specification
 
 **Owner:** Benjamen Oyekan
-**Product name:** Wearvia (formerly TailorFlow). Wearvia is the platform; Nebeda Threads is the first business using it.
+**Product name:** NebedaHub (formerly Wearvia, and before that TailorFlow). NebedaHub is the platform; Nebeda Threads is the first business using it.
 **Reference prototype:** `wearvia-prototype.html` in this repository. Treat it as the visual and behavioural reference for screens, flow and wording.
 
 ---

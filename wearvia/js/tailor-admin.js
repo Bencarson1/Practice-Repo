@@ -55,7 +55,7 @@ function renderMyProfile() {
       <div id="profile-logo" class="logo-row">${profileLogoRow(d)}</div>
       <div class="form-grid">
         <label>Business name<input name="business" required maxlength="80" value="${escapeHtml(d.business_name)}"></label>
-        <label>Web address <small class="muted">wearvia…/tailor/<b>this</b>/</small><input name="slug" maxlength="60" pattern="[a-z0-9-]+" value="${escapeHtml(d.slug || "")}"></label>
+        <label>Web address <small class="muted">nebedahub.com/tailor/<b>this</b>/</small><input name="slug" maxlength="60" pattern="[a-z0-9-]+" value="${escapeHtml(d.slug || "")}"></label>
         <p class="hint wide">🔒 Customers contact you through ${APP_NAME}: phone numbers, emails, websites and social handles are hidden from your profile and portfolio automatically.</p>
         <label class="wide">About your business<textarea name="description" rows="4" maxlength="1200" placeholder="What you make, how long it takes, how fittings work…">${escapeHtml(d.description || "")}</textarea></label>
       </div>

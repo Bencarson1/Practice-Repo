@@ -1,4 +1,4 @@
-# Wearvia — current Supabase database (exported 24 Sept 2026)
+# NebedaHub — current Supabase database (exported 24 Sept 2026)
 
 Project URL: https://ylngxdwywqteanpelsqb.supabase.co
 

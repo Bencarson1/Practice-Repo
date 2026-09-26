@@ -1,7 +1,8 @@
 {
-  "name": "Wearvia — tailors near you",
-  "short_name": "Wearvia",
-  "description": "Find tailors near you, then design, order and track bespoke outfits.",
+  "name": "NebedaHub",
+  "short_name": "NebedaHub",
+  "description": "Everything Fashion, All in One Place. Find tailors near you, then design, order and track bespoke outfits.",
+  "id": "/",
   "start_url": "./index.html#/home",
   "scope": "./",
   "display": "standalone",

@@ -180,7 +180,7 @@ const Cloud = (() => {
     if (/row-level security|permission denied|42501/i.test(text)) return "You don't have permission to do that.";
     if (/Failed to fetch|NetworkError|Load failed/i.test(text)) return "Couldn't reach the server. Check your internet connection and try again.";
     if (/wearvia_bootstrap|function .* does not exist|PGRST202/i.test(text)) return "The database isn't set up yet. Run supabase/setup.sql in Supabase first.";
-    return text;
+    return newName(text);
   }
 
   // ---- Browsing tailors without an account ----
@@ -458,12 +458,16 @@ const Cloud = (() => {
 
   // ---- Order chats ----
 
-  // originals: only loaded for the Wearvia admin (the database gives nobody else any)
+  // The database still writes the platform's old name (Wearvia) in a few
+  // places — system chat messages and some error messages. Show the new one.
+  function newName(text) { return String(text).replace(/\bWearvia\b/g, APP_NAME); }
+
+  // originals: only loaded for the NebedaHub admin (the database gives nobody else any)
   function messagesFrom(rows, numberOf, originals) {
     const original = new Map((originals || []).map(o => [o.source_id, o.original]));
     return rows.filter(m => numberOf.has(m.order_id)).map(m => ({
-      id: m.id, order_id: numberOf.get(m.order_id), sender_kind: m.sender_kind, sender_name: m.sender_name || "",
-      body: m.body || "", photos: (m.photos || []).map(p => `sb:${CHAT}/${p}`), created_at: new Date(m.created_at).toISOString(),
+      id: m.id, order_id: numberOf.get(m.order_id), sender_kind: m.sender_kind, sender_name: newName(m.sender_name || ""),
+      body: m.sender_kind === "system" ? newName(m.body || "") : m.body || "", photos: (m.photos || []).map(p => `sb:${CHAT}/${p}`), created_at: new Date(m.created_at).toISOString(),
       contact_hidden: !!m.contact_hidden, original_body: original.get(m.id) || undefined
     }));
   }
@@ -515,7 +519,7 @@ const Cloud = (() => {
     });
   }
 
-  // The Wearvia admin sees what was hidden, for safety
+  // The NebedaHub admin sees what was hidden, for safety
   async function loadHiddenOriginals() {
     const rows = await fetchAll("hidden_contact_details", "created_at", "source, source_id, original", q => q.eq("source", "chat")).catch(() => []);
     const original = new Map(rows.map(o => [o.source_id, o.original]));
@@ -973,7 +977,7 @@ const Cloud = (() => {
     return data;
   }
 
-  // The tailor agrees not to take Wearvia customers off the platform
+  // The tailor agrees not to take NebedaHub customers off the platform
   async function acceptTailorTerms(designerId, quiet) {
     const { error } = await state.client.rpc("wearvia_accept_tailor_terms", { p_designer_id: designerId, p_version: TAILOR_TERMS_VERSION });
     if (error) throw new Error(friendly(error));
