@@ -52,16 +52,19 @@ function renderDashboard() {
 
     <div class="statgrid">
       <div class="stat"><div class="l">Total Orders</div><div class="n">${placedOrders().length}</div><div class="l">${open.length} in progress</div></div>
-      <div class="stat"><div class="l">Revenue</div><div class="n">${totalsHtml(totals.revenue, bizCurrency())}</div><div class="l">payments + ready-to-wear</div></div>
+      ${businessPaymentsOpen() ? `<div class="stat"><div class="l">Revenue</div><div class="n">${totalsHtml(totals.revenue, bizCurrency())}</div><div class="l">payments + ready-to-wear</div></div>
       <div class="stat"><div class="l">Est. Profit</div><div class="n">${totalsHtml(totals.profit, bizCurrency())}</div><div class="l">after fabric &amp; delivery</div></div>
-      <div class="stat"><div class="l">Pending Payments</div><div class="n">${totalsHtml(totals.pending, bizCurrency())}</div><div class="l">balances owed</div></div>
+      <div class="stat"><div class="l">Pending Payments</div><div class="n">${totalsHtml(totals.pending, bizCurrency())}</div><div class="l">balances owed</div></div>` : `<div class="stat"><div class="l">Quote Requests</div><div class="n">${waitingQuotes.length}</div><div class="l">waiting for action</div></div>
+      <div class="stat"><div class="l">Unread Chats</div><div class="n">${unreadChats.length}</div><div class="l">customer conversations</div></div>
+      <div class="stat"><div class="l">Late Orders</div><div class="n">${late.length}</div><div class="l">need attention</div></div>`}
     </div>
-    ${[totals.revenue, totals.profit, totals.pending].some(t => t.size > 1) ? `<p class="hint">Totals in different currencies are shown side by side, never added together.</p>` : ""}
+    ${businessPaymentsOpen() && [totals.revenue, totals.profit, totals.pending].some(t => t.size > 1) ? `<p class="hint">Totals in different currencies are shown side by side, never added together.</p>` : ""}
+    ${!businessPaymentsOpen() ? `<div class="card attention"><b>Payments are not open yet.</b><p class="hint">Use the dashboard for quotes, chats, measurements and production preparation. Do not collect NebedaHub customer money outside the platform.</p></div>` : ""}
 
-    ${late.length || awaitingReview.length || waitingPayments.length || waitingQuotes.length || unreadChats.length ? `<div class="alerts">
+    ${late.length || awaitingReview.length || (businessPaymentsOpen() && waitingPayments.length) || waitingQuotes.length || unreadChats.length ? `<div class="alerts">
       ${waitingQuotes.length ? `<a class="alert" href="#/quotes">📝 ${waitingQuotes.length} customer${waitingQuotes.length > 1 ? "s" : ""} waiting for a quote</a>` : ""}
       ${unreadChats.length ? `<a class="alert" href="#/${isPlaced(unreadChats[0]) ? "orders" : "quotes"}/${unreadChats[0].id}">💬 New messages on ${unreadChats.map(o => o.id).join(", ")}</a>` : ""}
-      ${waitingPayments.length ? `<a class="alert" href="#/payments">💳 ${waitingPayments.length} payment${waitingPayments.length > 1 ? "s" : ""} to confirm</a>` : ""}
+      ${businessPaymentsOpen() && waitingPayments.length ? `<a class="alert" href="#/payments">💳 ${waitingPayments.length} payment${waitingPayments.length > 1 ? "s" : ""} to confirm</a>` : ""}
       ${late.length ? `<a class="alert" href="#/orders">⚠ ${late.length} late order${late.length > 1 ? "s" : ""}</a>` : ""}
       ${awaitingReview.length ? `<span class="alert soft">${awaitingReview.length} delivered order${awaitingReview.length > 1 ? "s" : ""} awaiting a review</span>` : ""}
     </div>` : ""}
