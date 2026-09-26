@@ -45,7 +45,7 @@ const Cloud = (() => {
   }
 
   function enterDemo() {
-    try { localStorage.setItem(MODE_KEY, "demo"); } catch (e) { /* private browsing */ }
+    try { localStorage.setItem(MODE_KEY, "demo"); sessionStorage.setItem("wearvia-demo-start", "1"); } catch (e) { /* private browsing */ }
     location.hash = "#/" + APP.home;
     location.reload();
   }

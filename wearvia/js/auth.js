@@ -299,7 +299,8 @@ const Auth = (() => {
         <button class="link-button" onclick="Cloud.leaveDemo()">Leave demo</button>`;
     } else if (Cloud.isGuest()) {
       account.innerHTML = `<button class="chip-button" onclick="Auth.show('signIn')">Sign in</button>`;
-      footer.innerHTML = `${APP.name} · ${APP_KIND === "customer" ? "Tailors near you" : "For " + APP.who}. <button class="link-button" onclick="Auth.show('signIn')">Sign in</button>${APP_KIND === "customer" ? " to order" : ""}.`;
+      footer.innerHTML = `${APP.name} · ${APP_KIND === "customer" ? "Tailors near you" : "For " + APP.who}. <button class="link-button" onclick="Auth.show('signIn')">Sign in</button>${APP_KIND === "customer" ? " to order" : ""} ·
+        <button class="link-button" onclick="Cloud.enterDemo()">Open the demo</button>`;
     } else if (Cloud.me) {
       const me = Cloud.me;
       const role = APP_KIND === "admin" ? (me.is_admin ? "Admin" : "")
