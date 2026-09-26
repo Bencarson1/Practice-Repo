@@ -1,16 +1,19 @@
 // ============================================================
-// sw.js — lets Wearvia be installed on a phone's home screen and open
+// sw.js — lets NebedaHub be installed on a phone's home screen and open
 // without a connection.
 //
-// It only ever stores Wearvia's OWN files (the page, styles, scripts,
+// It only ever stores NebedaHub's OWN files (the page, styles, scripts,
 // icons). It never stores anything from another address — so nothing from
 // Supabase (orders, chats, photos, sign-ins), postcodes.io or OpenStreetMap
 // is ever kept on the device by this file. Pages and scripts are fetched
 // fresh from the internet first, so updates show straight away; the stored
 // copy is only used when there's no connection.
+//
+// The app used to live at /wearvia/ (cache "wearvia-shell-v1"); that old
+// copy is deleted when this version starts.
 // ============================================================
 
-const VERSION = "wearvia-shell-v1";
+const VERSION = "nebedahub-shell-v1";
 const SHELL = [
   "./", "./index.html", "./manifest.webmanifest", "./css/style.css",
   "./icons/icon-192.png", "./icons/icon-512.png", "./icons/apple-touch-icon.png"
@@ -22,7 +25,7 @@ self.addEventListener("install", event => {
 
 self.addEventListener("activate", event => {
   event.waitUntil(caches.keys()
-    .then(keys => Promise.all(keys.filter(k => k.startsWith("wearvia-") && k !== VERSION).map(k => caches.delete(k))))
+    .then(keys => Promise.all(keys.filter(k => /^(wearvia|nebedahub)-/.test(k) && k !== VERSION).map(k => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
 

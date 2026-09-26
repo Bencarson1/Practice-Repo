@@ -7,10 +7,10 @@
 //
 //   db.messages:   { id, order_id, sender_kind, sender_name, body, photos, created_at,
 //                    contact_hidden, original_body }
-//                  sender_kind is "customer", "team" or "system" (Wearvia's own
+//                  sender_kind is "customer", "team" or "system" (NebedaHub's own
 //                  notes, e.g. "Your quote is ready"). Phone numbers, emails,
 //                  links and social handles are hidden (contact_hidden); only
-//                  the Wearvia admin gets original_body, for safety.
+//                  the NebedaHub admin gets original_body, for safety.
 //   db.chat_reads: { order_id, side, last_read_at } — when the customer / the
 //                  team last read each chat, for the unread badges
 //
@@ -47,7 +47,7 @@ function chatReadAt(orderId, side) {
   return row ? row.last_read_at : null;
 }
 
-// Messages the other side (or Wearvia) wrote since this side last read the chat
+// Messages the other side (or NebedaHub) wrote since this side last read the chat
 function unreadCount(orderId, side) {
   const readAt = chatReadAt(orderId, side);
   return orderMessages(orderId).filter(m => m.sender_kind !== side && (!readAt || m.created_at > readAt)).length;

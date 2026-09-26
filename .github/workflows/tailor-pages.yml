@@ -6,7 +6,8 @@
 #
 # One-off setting: Settings → Pages → "Build and deployment" → Source:
 # "GitHub Actions". Optional: Settings → Secrets and variables → Actions →
-# Variables → SITE_URL (only if you use your own domain, e.g. https://wearvia.com).
+# Variables → SITE_URL = https://nebedahub.com (the site's own domain; set in
+# Settings → Pages → Custom domain).
 #
 # Only the PUBLISHABLE key is used (it's already public in wearvia/js/config.js).
 # Never add the secret key here.
@@ -41,20 +42,21 @@ jobs:
 
       - name: Build the tailor pages from Supabase
         env:
-          SITE_URL: ${{ vars.SITE_URL || format('https://{0}.github.io/{1}', github.repository_owner, github.event.repository.name) }}
+          SITE_URL: ${{ vars.SITE_URL || 'https://nebedahub.com' }}
         run: node scripts/build-tailor-pages.mjs
 
       - name: Put the site together
+        env:
+          SITE_URL: ${{ vars.SITE_URL || 'https://nebedahub.com' }}
         run: |
           mkdir -p _site
-          cp -R wearvia _site/wearvia
+          # The app is the whole site: https://nebedahub.com/
+          cp -R wearvia/. _site/
+          rm -rf _site/supabase _site/README.md
           cp wearvia-prototype.html _site/ 2>/dev/null || true
-          # The site's front door goes to the app
-          printf '<!DOCTYPE html><meta charset="utf-8"><title>Wearvia</title><meta http-equiv="refresh" content="0; url=wearvia/"><link rel="canonical" href="wearvia/"><a href="wearvia/">Open Wearvia</a>\n' > _site/index.html
-          # robots.txt only counts at the top of a website (it's used as-is with your own domain)
-          cp wearvia/robots.txt _site/robots.txt
-          cp wearvia/sitemap.xml _site/sitemap.xml
-          rm -rf _site/wearvia/supabase
+          cp CNAME _site/CNAME 2>/dev/null || true
+          # Old links (https://nebedahub.com/wearvia/…) go to their new addresses
+          node scripts/old-address-redirects.mjs _site
           touch _site/.nojekyll
 
       - uses: actions/configure-pages@v5
@@ -68,7 +70,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}wearvia/
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4

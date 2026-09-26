@@ -1,5 +1,5 @@
 // The public tailor pages: after the page (built from the database each day)
-// has loaded, fetch the latest from Wearvia so ratings, new tailors,
+// has loaded, fetch the latest from NebedaHub so ratings, new tailors,
 // portfolios and reviews are always current. Uses the public publishable key
 // and only public information (js/config.js).
 (function () {
@@ -11,7 +11,7 @@
     headers: { apikey: SUPABASE_PUBLISHABLE_KEY, Authorization: "Bearer " + SUPABASE_PUBLISHABLE_KEY, "Content-Type": "application/json" },
     body: JSON.stringify(args)
   }).then(r => (r.ok ? r.json() : Promise.reject(new Error(r.status))));
-  const rating = t => t.review_count > 0 && t.rating ? `${Number(t.rating).toFixed(1)}★ (${t.review_count} review${t.review_count === 1 ? "" : "s"})` : "New on Wearvia";
+  const rating = t => t.review_count > 0 && t.rating ? `${Number(t.rating).toFixed(1)}★ (${t.review_count} review${t.review_count === 1 ? "" : "s"})` : "New on NebedaHub";
   const initials = n => String(n || "?").split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join("");
 
   if (P.kind === "city") {

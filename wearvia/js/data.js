@@ -4,14 +4,15 @@
 // ============================================================
 
 // ---- Settings you can change ----
-const APP_NAME = "Wearvia";          // the platform name shown in the app
-const SHOP_NAME = "Nebeda Threads";  // the first shop (designer number one) on Wearvia; every tailor has their own name
+const APP_NAME = "NebedaHub";        // the platform name shown in the app
+const APP_TAGLINE = "Everything Fashion, All in One Place.";  // shown under the name (home, sign-in, tailor pages)
+const SHOP_NAME = "Nebeda Threads";  // the first shop (designer number one) on NebedaHub; every tailor has their own name
 const CURRENCY = "£";
 const STORAGE_KEY = "wearvia-app-v2";
 const DEPOSIT_RATE = 0.6;            // 60% deposit, balance after quality control
 let DELIVERY_FEE = 15;               // starting price; the real one is in the price list (below)
 const LOW_STOCK_YARDS = 10;          // "low stock" warning below this many yards
-const YARDS_PER_METRE = 1.0936;      // only used to convert data saved before Wearvia switched to yards
+const YARDS_PER_METRE = 1.0936;      // only used to convert data saved before NebedaHub switched to yards
 const METRES_PER_YARD = 0.9144;
 
 // ---- The confirmed order lifecycle (WEARVIA-SPEC.md, section 2) ----
@@ -731,7 +732,7 @@ function requestQuote(details) {
   if (Cloud.live) return Cloud.requestQuote(details);
   const fabric = details.fabric;
   const tailor = designerById(details.designerId) || mainDesigner();
-  if (tailor.admin_status !== "approved") throw new Error(`${tailor.business_name} isn't taking orders on Wearvia right now. Please choose another tailor.`);
+  if (tailor.admin_status !== "approved") throw new Error(`${tailor.business_name} isn't taking orders on NebedaHub right now. Please choose another tailor.`);
   if (tailor.custom_orders === false) throw new Error(`${tailor.business_name} isn't taking custom orders at the moment.`);
   const id = nextOrderId();
   const order = {

@@ -1,5 +1,5 @@
 // ============================================================
-// no-leakage.js — keeps orders on Wearvia
+// no-leakage.js — keeps orders on NebedaHub
 //
 // Finds phone numbers, email addresses, website links, WhatsApp /
 // Instagram / social handles and "call me on…" style messages, and hides
@@ -10,15 +10,15 @@
 // ============================================================
 
 const CONTACT_HIDDEN_TOKEN = "[contact details hidden]";
-const CONTACT_HIDDEN_NOTICE = "Contact details are hidden. Please keep your order on Wearvia so you're protected.";
-const PAY_PROTECTION_LINE = "Pay through Wearvia to be protected: your money is safe until your outfit is delivered.";
+const CONTACT_HIDDEN_NOTICE = "Contact details are hidden. Please keep your order on NebedaHub so you're protected.";
+const PAY_PROTECTION_LINE = "Pay through NebedaHub to be protected: your money is safe until your outfit is delivered.";
 const TAILOR_TERMS_VERSION = "2026-09";
 const TAILOR_TERMS = [
-  "Customers who find you on Wearvia stay Wearvia customers: quotes, chats, payments and changes to their order go through Wearvia.",
-  "You won't share or ask for phone numbers, email addresses, website links, WhatsApp, Instagram or other social handles in chats, your profile or your portfolio. Wearvia hides them automatically.",
-  "You won't ask a Wearvia customer to pay you directly or to order from you outside Wearvia, now or later.",
+  "Customers who find you on NebedaHub stay NebedaHub customers: quotes, chats, payments and changes to their order go through NebedaHub.",
+  "You won't share or ask for phone numbers, email addresses, website links, WhatsApp, Instagram or other social handles in chats, your profile or your portfolio. NebedaHub hides them automatically.",
+  "You won't ask a NebedaHub customer to pay you directly or to order from you outside NebedaHub, now or later.",
   "Business and delivery addresses are shared in the app once the customer's deposit is confirmed — for delivery and fittings only.",
-  "Wearvia can hide or remove a tailor who takes customers off the platform."
+  "NebedaHub can hide or remove a tailor who takes customers off the platform."
 ];
 
 // The same patterns as the database (Postgres \m / \M are \b here)
@@ -35,8 +35,8 @@ const CONTACT_RULES = [
   ["handle", /(^|[^a-z0-9._%+\]-])@[a-z0-9._]{2,30}/gi],
   ["handle", new RegExp(`\\b(my|our)\\s+(${CONTACT_SOCIAL}|number|phone|mobile|cell|email|e-mail|contact|line|website|site|page|handle)(\\s+(handle|page|account|name|id|number|no))?\\s*(is|:|-|=)\\s*[^\\s,;!?[]+`, "gi")],
   ["handle", new RegExp(`\\b(${CONTACT_SOCIAL})\\s*(handle|page|account|name|id|number|no)?\\s*(:|=|@)\\s*@?[a-z0-9._+-]{2,30}`, "gi")],
-  ["contact_request", /\b(call|text|ring|phone|whats\s?app|dm|reach|contact|e-?mail|message|pay)\s+(me|us)\s+(on|at|via|through|directly|outside|privately|off)\b(?!\s+(here|this app|the app|wearvia))/gi],
-  ["contact_request", /\b(outside|off)\s+(of\s+)?(the\s+)?(app|wearvia|platform)\b/gi],
+  ["contact_request", /\b(call|text|ring|phone|whats\s?app|dm|reach|contact|e-?mail|message|pay)\s+(me|us)\s+(on|at|via|through|directly|outside|privately|off)\b(?!\s+(here|this app|the app|wearvia|nebedahub))/gi],
+  ["contact_request", /\b(outside|off)\s+(of\s+)?(the\s+)?(app|wearvia|nebedahub|platform)\b/gi],
   ["phone", /\b((zero|oh|one|two|three|four|five|six|seven|eight|nine|double|triple)[\s,.-]*){7,}/gi]
 ];
 

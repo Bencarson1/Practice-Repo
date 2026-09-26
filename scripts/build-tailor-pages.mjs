@@ -2,7 +2,7 @@
 // ============================================================
 // build-tailor-pages.mjs — real, crawlable pages for search engines
 //
-// The Wearvia app uses # addresses (index.html#/tailors), which Google
+// The NebedaHub app uses # addresses (index.html#/tailors), which Google
 // mostly ignores. This script writes ordinary HTML pages that work on
 // GitHub Pages, each with its own title, description, heading, Open Graph
 // tags and JSON-LD (LocalBusiness / ItemList):
@@ -13,6 +13,9 @@
 //   wearvia/tailor/<slug>/index.html              one tailor
 //   wearvia/sitemap.xml and robots.txt
 //
+// (The app's files live in the wearvia/ folder, but the site publishes them
+// at the top of the domain: https://nebedahub.com/tailors/uk/london/.)
+//
 // It reads APPROVED tailors from Supabase with the publishable key only
 // (the same public data anyone can see — never exact hidden addresses).
 // Each page also loads live results in the browser and links into the app.
@@ -20,7 +23,7 @@
 // Run:   node scripts/build-tailor-pages.mjs
 // Settings (environment variables, all optional):
 //   SITE_URL   the published address of the site, e.g.
-//              https://bencarson1.github.io/Practice-Repo   (default)
+//              https://nebedahub.com   (default)
 //   OFFLINE=1  build without Supabase (just the standard city pages)
 //   SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY  (default: wearvia/js/config.js)
 // ============================================================
@@ -32,8 +35,8 @@ import { createRequire } from "module";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const APP_DIR = path.join(ROOT, "wearvia");
-const SITE_URL = (process.env.SITE_URL || "https://bencarson1.github.io/Practice-Repo").replace(/\/+$/, "");
-const APP_URL = SITE_URL + "/wearvia";
+const SITE_URL = (process.env.SITE_URL || "https://nebedahub.com").replace(/\/+$/, "");
+const APP_URL = SITE_URL;                       // the app is at the top of the site
 const OFFLINE = process.env.OFFLINE === "1";
 const config = fs.readFileSync(path.join(APP_DIR, "js", "config.js"), "utf8");
 const SUPABASE_URL = process.env.SUPABASE_URL || (config.match(/SUPABASE_URL\s*=\s*"([^"]+)"/) || [])[1];
@@ -94,7 +97,7 @@ const esc = s => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g,
 const slugify = s => String(s || "").normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 const cut = (s, n) => { s = String(s || "").replace(/\s+/g, " ").trim(); return s.length > n ? s.slice(0, n - 1).replace(/\s\S*$/, "") + "…" : s; };
 const json = obj => JSON.stringify(obj).replace(/</g, "\\u003c");
-const ratingText = t => t.review_count > 0 && t.rating ? `${Number(t.rating).toFixed(1)}★ (${t.review_count} review${t.review_count === 1 ? "" : "s"})` : "New on Wearvia";
+const ratingText = t => t.review_count > 0 && t.rating ? `${Number(t.rating).toFixed(1)}★ (${t.review_count} review${t.review_count === 1 ? "" : "s"})` : "New on NebedaHub";
 const areaText = t => [t.city || t.location, t.postcode_area].filter(Boolean).join(" · ");
 
 function write(rel, html) {
@@ -103,7 +106,7 @@ function write(rel, html) {
   fs.writeFileSync(file, html);
 }
 
-// ---- The page shell (the Wearvia look) ----
+// ---- The page shell (the NebedaHub look) ----
 
 function page({ rel, title, description, heading, intro, body, jsonLd, image, live }) {
   const depth = rel.split("/").length - 1;                 // tailors/uk/london/index.html → 3
@@ -119,7 +122,7 @@ function page({ rel, title, description, heading, intro, body, jsonLd, image, li
   <link rel="canonical" href="${esc(url)}">
   <meta name="theme-color" content="#0c1220">
   <meta property="og:type" content="website">
-  <meta property="og:site_name" content="Wearvia">
+  <meta property="og:site_name" content="NebedaHub">
   <meta property="og:title" content="${esc(title)}">
   <meta property="og:description" content="${esc(description)}">
   <meta property="og:url" content="${esc(url)}">
@@ -132,7 +135,7 @@ function page({ rel, title, description, heading, intro, body, jsonLd, image, li
   <script type="application/ld+json">${json(jsonLd)}</script>
 </head>
 <body>
-  <header class="bar"><a class="brand" href="${up}index.html#/home">Wearvia</a>
+  <header class="bar"><a class="brand" href="${up}index.html#/home">NebedaHub</a>
     <a class="bar-link" href="${up}index.html#/tailors">📍 Find tailors near me</a></header>
   <main>
     <nav class="crumbs" aria-label="Breadcrumb">${breadcrumbs(rel, up)}</nav>
@@ -140,7 +143,7 @@ function page({ rel, title, description, heading, intro, body, jsonLd, image, li
     ${intro ? `<p class="intro">${intro}</p>` : ""}
     ${body}
   </main>
-  <footer>Wearvia — bespoke outfits from tailors near you. <a href="${up}index.html#/joinTailor">Are you a tailor? Join Wearvia</a> ·
+  <footer>NebedaHub — Everything Fashion, All in One Place. <a href="${up}index.html#/joinTailor">Are you a tailor? Join NebedaHub</a> ·
     <a href="${up}tailors/">All countries</a></footer>
   ${live ? `<script src="${up}js/config.js"></script>
   <script>window.WEARVIA_PAGE = ${json(Object.assign({ app: up + "index.html", root: up }, live))};</script>
@@ -174,7 +177,7 @@ function localBusiness(t, country) {
   const url = `${APP_URL}/tailor/${t.slug}/`;
   const data = {
     "@type": ["LocalBusiness", "ClothingStore"], "@id": url, name: t.business_name, url,
-    description: cut(t.description || `${t.business_name}, a tailor on Wearvia.`, 300),
+    description: cut(t.description || `${t.business_name}, a tailor on NebedaHub.`, 300),
     address: Object.assign({ "@type": "PostalAddress", addressCountry: t.country_code || undefined, addressLocality: t.city || undefined },
       t.postcode_area ? { postalCode: t.postcode_area } : {}),
     areaServed: t.city ? { "@type": "City", name: t.city } : undefined,
@@ -251,8 +254,8 @@ for (const t of tailors) {
     ${citySlug ? `<p><a href="../../tailors/${esc(citySlug)}/">More tailors in ${esc(t.city)}</a></p>` : ""}`;
   write(rel, page({
     rel, image: t.profile_image_url,
-    title: `${t.business_name} — tailor in ${where || "your area"} | Wearvia`,
-    description: cut(`${t.business_name}: ${specs ? specs + ". " : ""}${t.description || "Bespoke tailoring"}${where ? " in " + where : ""}. ${ratingText(t)}. Request a quote on Wearvia.`, 158),
+    title: `${t.business_name} — tailor in ${where || "your area"} | NebedaHub`,
+    description: cut(`${t.business_name}: ${specs ? specs + ". " : ""}${t.description || "Bespoke tailoring"}${where ? " in " + where : ""}. ${ratingText(t)}. Request a quote on NebedaHub.`, 158),
     heading: t.business_name, intro: specs ? `Tailor in ${esc(where)} · ${esc(specs)}` : `Tailor in ${esc(where)}`,
     body, jsonLd: Object.assign({ "@context": "https://schema.org" }, localBusiness(t, country)), live: { kind: "tailor", slug: t.slug }
   }));
@@ -274,13 +277,13 @@ for (const code of countryCodes) {
     const body = `
       <p class="actions"><a class="cta" href="../../../index.html#/tailors">📍 Tailors near my location</a></p>
       <h2 data-live="count">${list.length ? `${list.length} tailor${list.length === 1 ? "" : "s"} in ${esc(p.name)}` : `Tailors in ${esc(p.name)}`}</h2>
-      <ul class="cards" id="live-list">${list.map(t => tailorCard(t, "../../../")).join("") || `<li class="empty">No tailors in ${esc(p.name)} have joined Wearvia yet. <a href="../../../index.html#/joinTailor">Are you a tailor here? Join free.</a></li>`}</ul>
+      <ul class="cards" id="live-list">${list.map(t => tailorCard(t, "../../../")).join("") || `<li class="empty">No tailors in ${esc(p.name)} have joined NebedaHub yet. <a href="../../../index.html#/joinTailor">Are you a tailor here? Join free.</a></li>`}</ul>
       <p><a href="../">All cities in ${esc(country.name)}</a></p>`;
     write(rel, page({
       rel,
-      title: `Tailors in ${p.name}, ${country.name} — bespoke agbada, suits & dresses | Wearvia`,
-      description: cut(`Find tailors in ${p.name}${list.length ? ` — ${list.length} on Wearvia` : ""}${specs.length ? ": " + specs.join(", ") : ""}. Compare ratings, see portfolios and request a quote online.`, 158),
-      heading: `Tailors in ${p.name}`, intro: `${country.flag} ${esc(p.name)}, ${esc(country.name)} · tailors and designers on Wearvia, with ratings and portfolios.`,
+      title: `Tailors in ${p.name}, ${country.name} — bespoke agbada, suits & dresses | NebedaHub`,
+      description: cut(`Find tailors in ${p.name}${list.length ? ` — ${list.length} on NebedaHub` : ""}${specs.length ? ": " + specs.join(", ") : ""}. Compare ratings, see portfolios and request a quote online.`, 158),
+      heading: `Tailors in ${p.name}`, intro: `${country.flag} ${esc(p.name)}, ${esc(country.name)} · tailors and designers on NebedaHub, with ratings and portfolios.`,
       body,
       jsonLd: itemList(`Tailors in ${p.name}`, `${APP_URL}/tailors/${country.slug}/${citySlug}/`,
         list.map(t => ({ url: `${APP_URL}/tailor/${t.slug}/`, item: localBusiness(t, country) }))),
@@ -296,8 +299,8 @@ for (const code of countryCodes) {
     ${all.length ? `<h2>Tailors in ${esc(country.name)}</h2><ul class="cards">${all.slice(0, 60).map(t => tailorCard(t, "../../")).join("")}</ul>` : ""}`;
   write(rel, page({
     rel,
-    title: `Tailors in ${country.name} — find a tailor near you | Wearvia`,
-    description: cut(`Tailors and fashion designers in ${country.name} on Wearvia${all.length ? ` (${all.length})` : ""}: ${cities.slice(0, 5).map(([, p]) => p.name).join(", ")}. Request a quote online.`, 158),
+    title: `Tailors in ${country.name} — find a tailor near you | NebedaHub`,
+    description: cut(`Tailors and fashion designers in ${country.name} on NebedaHub${all.length ? ` (${all.length})` : ""}: ${cities.slice(0, 5).map(([, p]) => p.name).join(", ")}. Request a quote online.`, 158),
     heading: `Tailors in ${country.name}`, intro: `${country.flag} Choose a city, or find tailors near your location.`,
     body, jsonLd: itemList(`Tailors in ${country.name}`, `${APP_URL}/tailors/${country.slug}/`,
       cities.map(([citySlug, p]) => ({ url: `${APP_URL}/tailors/${country.slug}/${citySlug}/`, name: `Tailors in ${p.name}` })))
@@ -308,10 +311,10 @@ for (const code of countryCodes) {
 // All countries
 write("tailors/index.html", page({
   rel: "tailors/index.html",
-  title: "Find tailors near you — bespoke tailoring in the UK, Nigeria and worldwide | Wearvia",
-  description: `Find tailors and fashion designers near you on Wearvia${tailors.length ? ` — ${tailors.length} tailors` : ""} in ${countryCodes.length} countries. Agbada, kaftan, suits, wedding outfits and more.`,
+  title: "Find tailors near you — bespoke tailoring in the UK, Nigeria and worldwide | NebedaHub",
+  description: `Find tailors and fashion designers near you on NebedaHub${tailors.length ? ` — ${tailors.length} tailors` : ""} in ${countryCodes.length} countries. Agbada, kaftan, suits, wedding outfits and more.`,
   heading: "Find tailors near you",
-  intro: "Tailors and designers on Wearvia, by country and city. Use your location in the app to see who's nearest.",
+  intro: "Tailors and designers on NebedaHub, by country and city. Use your location in the app to see who's nearest.",
   body: `<p class="actions"><a class="cta" href="../index.html#/tailors">📍 Use my location</a></p>
     ${countryCodes.map(code => { const c = byCode.get(code); const cities = Array.from(places.get(code).entries());
       return `<h2><a href="${c.slug}/">${c.flag} Tailors in ${esc(c.name)}</a></h2>
@@ -319,7 +322,7 @@ write("tailors/index.html", page({
   jsonLd: itemList("Tailors by country", `${APP_URL}/tailors/`, countryCodes.map(code => ({ url: `${APP_URL}/tailors/${byCode.get(code).slug}/`, name: `Tailors in ${byCode.get(code).name}` })))
 }));
 urls.unshift({ loc: `${APP_URL}/tailors/` });
-urls.unshift({ loc: `${APP_URL}/index.html` });
+urls.unshift({ loc: `${APP_URL}/` });
 
 // Sitemap and robots.txt
 const today = new Date().toISOString().slice(0, 10);
@@ -328,7 +331,7 @@ write("sitemap.xml", `<?xml version="1.0" encoding="UTF-8"?>
 ${urls.map(u => `  <url><loc>${esc(u.loc)}</loc><lastmod>${u.lastmod || today}</lastmod></url>`).join("\n")}
 </urlset>
 `);
-write("robots.txt", `# Wearvia
+write("robots.txt", `# NebedaHub
 User-agent: *
 Allow: /
 Sitemap: ${APP_URL}/sitemap.xml

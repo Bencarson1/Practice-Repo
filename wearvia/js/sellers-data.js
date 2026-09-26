@@ -326,7 +326,7 @@ function addSampleSellers(data) {
 }
 
 // ---- Switching from metres to yards ----
-// Wearvia sold fabric by the metre before version 4. Demo data saved in the
+// NebedaHub sold fabric by the metre before version 4. Demo data saved in the
 // browser (and a half-finished order) is converted with the same rules as
 // supabase/yards.sql: prices × 0.9144, lengths × 1.0936, stock rounded down
 // to 0.1 yd, the smallest order to the nearest 0.5 yd. Money already charged

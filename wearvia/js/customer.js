@@ -130,8 +130,8 @@ function screenHome() {
   const resume = inProgress ? FLOW.slice().reverse().find(f => !flowRedirect(f.screen)) : null;
   return `
     <div class="hero">
-      <div class="brand">WEARVIA</div>
-      <div class="tagline">Bespoke · Ready to Wear · African Luxury</div>
+      <div class="brand">${APP_NAME}</div>
+      <div class="tagline">${APP_TAGLINE}</div>
       <h2>Your Style.<br>Our Craft.<br>Timeless You.</h2>
       <button class="btn near-btn" onclick="go('tailors')"><span aria-hidden="true">📍</span> Find tailors near me</button>
       ${resume ? `<button class="btn2" onclick="go('${resume.screen}')">Continue your ${escapeHtml(d.outfit)} order with ${escapeHtml(draftDesigner().business_name)}</button>` : ""}
@@ -445,7 +445,7 @@ function sendToTailor() {
     .finally(() => { sendingRequest = false; });
 }
 
-// ---- Keeping orders on Wearvia ----
+// ---- Keeping orders on NebedaHub ----
 
 function payProtectionLine() {
   return `<p class="protect-line">🛡️ ${escapeHtml(PAY_PROTECTION_LINE)}</p>`;
