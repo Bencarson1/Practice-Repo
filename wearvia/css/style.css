@@ -594,6 +594,28 @@ td select { width: auto !important; }
 .sstatus-new { background: #fbe3cf; color: #8a4a12; }
 .sstatus-sent { background: #e2efe4; color: var(--paid); }
 .sstatus-cancelled { background: #e4e1da; color: #4d4638; }
+.sstatus-confirmed { background: #e3ebf6; color: #1e3a5f; }
+.status-declined { background: #f7dcd6; color: var(--owed); }
+
+/* NebedaHub Sellers: the application's progress, and dispatching an order */
+.seller-status h2 { margin-bottom: 6px; }
+.seller-status p { margin: 6px 0; }
+.status-steps { list-style: none; padding: 0; margin: 0 0 8px; display: flex; flex-wrap: wrap; gap: 6px 18px; font-weight: 600; font-size: 13px; }
+.status-steps li { display: flex; align-items: center; gap: 7px; color: var(--muted); }
+.status-steps li span { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line); background: #fff; flex: 0 0 auto; }
+.status-steps li.done { color: var(--paid); }
+.status-steps li.done span { background: var(--paid); border-color: var(--paid); }
+.status-steps li.now { color: var(--ink); }
+.status-steps li.now span { border-color: var(--gold); background: var(--gold); box-shadow: 0 0 0 3px rgba(201,162,74,.25); }
+.dispatch-form { border-top: 1px dashed var(--line); margin-top: 8px; padding-top: 10px; display: flex; flex-direction: column; gap: 10px; }
+.dispatch-form .ship-to { border: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.dispatch-form .ship-to legend { font-weight: 600; margin-bottom: 4px; padding: 0; }
+.dispatch-form .ship-to input { width: auto; }
+.dispatch-photo { width: 120px; max-width: 100%; border-radius: 10px; border: 1px solid var(--line); margin-top: 4px; }
+.seller-profile h2 { margin: 14px 0 8px; font-size: 19px; }
+.seller-profile h2:first-child { margin-top: 0; }
+.application-photos { display: flex; flex-wrap: wrap; gap: 6px; }
+.application-photos img { width: 84px; height: 84px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); }
 
 .fabric-form fieldset { border: none; padding: 0; margin: 0 0 14px; }
 .fabric-form legend { font-weight: 600; margin-bottom: 8px; font-size: 14px; }
@@ -1003,6 +1025,8 @@ details.card-lite > summary { list-style-position: inside; }
 .profile-form h2 { margin-top: 18px; }
 .spec-picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(135px, 1fr)); gap: 4px 8px; }
 .spec-picker .check, .profile-form .check { flex-direction: row; align-items: center; color: var(--ink); min-height: 40px; }
+.seller-profile .check, .dispatch-form .check { flex-direction: row; align-items: flex-start; color: var(--ink); }
+.seller-profile .check input, .dispatch-form .check input { width: 18px; height: 18px; flex: none; margin-top: 1px; }
 .location-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; }
 .file-button { position: relative; overflow: hidden; }
 .file-button input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }

@@ -236,7 +236,11 @@ function renderOrderDetail(orderId) {
           <div class="kv"><span>Currency</span><b>${escapeHtml(currencyInfo(cur).name)} (${escapeHtml(cur)})</b></div>
           ${order.exchange_rate ? `<div class="kv"><span>Exchange rate</span><b>${escapeHtml(rateText(order.exchange_rate, order.fabric_currency_code, cur))}${order.exchange_rate_date ? ` · ${formatDate(order.exchange_rate_date)}` : ""}</b></div>
           <div class="kv"><span>Seller is paid</span><b>${money(order.fabric_cost_in_fabric_currency, order.fabric_currency_code)}</b></div>` : ""}
-          ${fabricOrderRow ? `<div class="kv"><span>Fabric from seller</span><b>${fabricOrderRow.status === "sent" ? "Sent " + formatDate(fabricOrderRow.sent_at) : fabricOrderRow.status === "new" ? "Not sent yet" : "Cancelled"}</b></div>` : ""}
+          ${fabricOrderRow ? `<div class="kv"><span>Fabric from seller</span><b>${fabricOrderRow.status === "sent" ? "Dispatched " + formatDate(fabricOrderRow.sent_at)
+              : fabricOrderRow.status === "confirmed" ? "Stock confirmed — to be dispatched" : fabricOrderRow.status === "new" ? "Waiting for the seller to confirm" : "Cancelled"}</b></div>
+            ${fabricOrderRow.status === "sent" ? `<div class="kv"><span>Tracking</span><b>${escapeHtml(fabricOrderRow.courier || "Courier")} · ${escapeHtml(fabricOrderRow.tracking_number || "—")}</b></div>
+              ${fabricOrderRow.dispatch_note ? `<div class="kv"><span>Seller's note</span><b>${escapeHtml(fabricOrderRow.dispatch_note)}</b></div>` : ""}
+              ${fabricOrderRow.dispatch_photo ? `<img class="dispatch-photo" src="${photoUrl(fabricOrderRow.dispatch_photo)}" alt="The seller's dispatch photo">` : ""}` : ""}` : ""}
           ${order.quoted_at ? `<div class="kv"><span>Quote</span><b>Accepted ${formatDate(order.accepted_at)}</b></div>` : ""}`)}
         ${measurementsCard(order)}
         <div class="card">${deliveryBoxHtml(order, "team")}</div>

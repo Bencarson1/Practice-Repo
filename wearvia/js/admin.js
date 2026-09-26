@@ -4,6 +4,7 @@
 //                            what's waiting for approval
 //   Hidden contact details   chat messages the filter changed, with what
 //                            was really written (only the admin sees it)
+//   Seller applications      new fabric sellers: approve, ask for changes, hide
 // The other admin tabs live with the code they share: Tailors and
 // Specialities in tailor-admin.js, Fabric sellers in seller-fabrics.js,
 // Fabric inventory in fabrics.js. The database decides who is an admin
@@ -20,6 +21,7 @@ function renderAdminOverview() {
   const tailors = adminTailors();
   const byStatus = status => tailors.filter(d => d.admin_status === status);
   const waitingTailors = byStatus("pending");
+  const waitingSellers = db.suppliers.filter(s => s.admin_status === "pending");
   const waitingFabrics = activeFabrics().filter(f => f.status === "pending");
   const lowStock = activeFabrics().filter(f => f.status === "approved" && f.yards_available < LOW_STOCK_YARDS);
   const placed = db.orders.filter(isPlaced);
@@ -40,17 +42,18 @@ function renderAdminOverview() {
     ${bizHeader(`${APP_NAME} overview`, `Everyone on ${APP_NAME}, ${formatDate(today())}.`)}
     <div class="statgrid">
       ${stat("Tailors", tailors.length, `${byStatus("approved").length} approved · ${waitingTailors.length} waiting`, "#/tailors")}
-      ${stat("Fabric sellers", db.suppliers.length, `${activeFabrics().filter(f => f.status === "approved").length} fabrics live`, "#/sellers")}
+      ${stat("Fabric sellers", db.suppliers.length, `${db.suppliers.filter(isSellerLive).length} approved · ${waitingSellers.length} waiting`, "#/applications")}
       ${stat("Customers", db.customers.length, "with an account or added by a tailor", "#/overview")}
       ${stat("Orders", placed.length, `${requests.length} quote request${requests.length === 1 ? "" : "s"} · ${money(value)}`, "#/overview")}
     </div>
 
     <div class="card">
       <h2>Waiting for approval</h2>
-      ${waitingTailors.length || waitingFabrics.length ? `<div class="alerts">
+      ${waitingTailors.length || waitingFabrics.length || waitingSellers.length ? `<div class="alerts">
+        ${waitingSellers.length ? `<a class="alert" href="#/applications">🏪 ${waitingSellers.length} new fabric seller${waitingSellers.length > 1 ? "s" : ""}: ${waitingSellers.slice(0, 4).map(s => escapeHtml(s.name)).join(", ")}</a>` : ""}
         ${waitingTailors.length ? `<a class="alert" href="#/tailors">🧵 ${waitingTailors.length} new tailor${waitingTailors.length > 1 ? "s" : ""}: ${waitingTailors.slice(0, 4).map(d => escapeHtml(d.business_name)).join(", ")}${waitingTailors.length > 4 ? "…" : ""}</a>` : ""}
         ${waitingFabrics.length ? `<a class="alert" href="#/sellers">🧶 ${waitingFabrics.length} seller fabric${waitingFabrics.length > 1 ? "s" : ""} to check</a>` : ""}
-      </div>` : `<p class="empty">Nothing waiting. New tailors and sellers' fabrics appear here.</p>`}
+      </div>` : `<p class="empty">Nothing waiting. New tailors, fabric sellers and sellers' fabrics appear here.</p>`}
       ${lowStock.length || hidden ? `<div class="alerts">
         ${lowStock.length ? `<a class="alert soft" href="#/fabrics">⚠ Low stock: ${lowStock.map(f => `${escapeHtml(f.name)} (${f.yards_available} yd)`).join(", ")}</a>` : ""}
         ${hidden ? `<a class="alert soft" href="#/contacts">🔒 ${hidden} chat message${hidden > 1 ? "s" : ""} had contact details hidden</a>` : ""}
@@ -91,11 +94,74 @@ function adminTailorsTable() {
 
 function adminSellersTable() {
   const sellers = db.suppliers.slice().sort((a, b) => a.name.localeCompare(b.name));
-  return adminTable(["Shop", "Where", "Fabrics", "Waiting", "Orders"], sellers.map(s => {
+  return adminTable(["Shop", "Where", "Status", "Fabrics", "Waiting", "Orders"], sellers.map(s => {
     const fabrics = sellerFabrics(s.id);
-    return `<tr><td>${escapeHtml(s.name)}</td><td>${escapeHtml(s.location || "—")}</td><td>${fabrics.length}</td>
+    return `<tr><td>${escapeHtml(s.name)}</td><td>${escapeHtml(s.location || "—")}</td>
+      <td><span class="badge status-${escapeHtml(s.admin_status || "approved")}">${escapeHtml(SELLER_STATUS_LABELS[s.admin_status || "approved"])}</span></td><td>${fabrics.length}</td>
       <td>${fabrics.filter(f => f.status === "pending").length || "—"}</td><td>${sellerOrders(s.id).length}</td></tr>`;
   }), "No fabric sellers yet.");
+}
+
+// ---- Seller applications: approve, ask for changes or hide ----
+
+let sellerAppFilter = "pending";
+
+function renderSellerApplications() {
+  const groups = { pending: "Waiting", approved: "Approved", declined: "Changes asked", hidden: "Hidden" };
+  const all = db.suppliers;
+  const status = s => s.admin_status || "approved";
+  const shown = all.filter(s => status(s) === sellerAppFilter)
+    .sort((a, b) => String(b.submitted_at || b.created_at || "").localeCompare(String(a.submitted_at || a.created_at || "")));
+  const rows = shown.map(s => {
+    const country = countryByCode(s.country_code);
+    const fabrics = sellerFabrics(s.id);
+    return `<div class="tailor-admin-row seller-app-row">
+      <img class="tailor-logo" src="${escapeHtml(sellerLogoUrl(s))}" alt="">
+      <div class="grow">
+        <b>${escapeHtml(s.name)}</b> <span class="badge status-${escapeHtml(status(s))}">${escapeHtml(SELLER_STATUS_LABELS[status(s)])}</span>
+        <div class="muted small-text">${country ? country.flag + " " + escapeHtml(country.name) : "No country"}${s.city ? " · " + escapeHtml(s.city) : ""} · shown as “${escapeHtml(s.location || "—")}” · ${escapeHtml(s.currency_code || "GBP")}</div>
+        <div class="small-text">${escapeHtml(s.contact_name || "No contact name")}${s.phone ? ` · 📞 ${escapeHtml(s.phone)}` : ""}${s.email ? ` · ✉ ${escapeHtml(s.email)}` : ""}</div>
+        <div class="small-text">${escapeHtml([s.address_line, s.city, s.postcode].filter(Boolean).join(", ") || "No address")}</div>
+        ${s.sells ? `<div class="small-text"><span class="muted">Sells:</span> ${escapeHtml(s.sells)}</div>` : ""}
+        ${(s.sample_photos || []).length ? `<div class="application-photos">${s.sample_photos.map((ref, i) => `<img src="${escapeHtml(photoUrl(ref))}" alt="Sample photo ${i + 1}" loading="lazy">`).join("")}</div>` : ""}
+        <div class="small-text">${fabrics.length} fabric${fabrics.length === 1 ? "" : "s"} added${s.submitted_at ? ` · applied ${formatDate(String(s.submitted_at).slice(0, 10))}` : ""}
+          ${s.seller_terms_accepted_at ? ` · <span class="paid">✓ accepted the seller terms</span>` : s.submitted_at ? ` · <span class="owed">hasn't accepted the seller terms</span>` : ""}</div>
+        ${s.admin_note ? `<div class="small-text owed">Your note: ${escapeHtml(s.admin_note)}</div>` : ""}
+      </div>
+      <div class="nowrap job-buttons">
+        ${status(s) !== "approved" ? `<button class="small gold" onclick="setSellerStatus('${s.id}', 'approved')">✓ Approve</button>` : ""}
+        ${status(s) === "pending" ? `<button class="small ghost" onclick="setSellerStatus('${s.id}', 'declined')">Ask for changes</button>` : ""}
+        ${status(s) !== "hidden" ? `<button class="small danger" onclick="setSellerStatus('${s.id}', 'hidden')">Hide</button>` : ""}
+      </div>
+    </div>`;
+  }).join("");
+  return `
+    ${bizHeader("Seller applications", `New fabric sellers apply in ${APPS.seller.name}. Their fabrics only reach customers once you approve the shop here (and each fabric in Seller fabrics). Contact details are only shown to you.`)}
+    <div class="card">
+      <div class="chips">${Object.keys(groups).map(k => `<button class="chip ${k === sellerAppFilter ? "active" : ""}" onclick="sellerAppFilter='${k}';renderAll()">${groups[k]} (${all.filter(s => status(s) === k).length})</button>`).join("")}</div>
+      ${rows || `<p class="empty">No ${groups[sellerAppFilter].toLowerCase()} sellers.</p>`}
+    </div>`;
+}
+
+function setSellerStatus(id, status) {
+  const s = findSupplier(id);
+  if (status === "approved" && s.submitted_at && !s.seller_terms_accepted_at && !Cloud.live) {
+    alert(`${s.name} hasn't accepted the ${APP_NAME} seller terms yet.`);
+    return;
+  }
+  let note = "";
+  if (status === "declined" || status === "hidden") {
+    note = prompt(status === "declined" ? `What should ${s.name} change? They'll see this note.` : `Why hide ${s.name}? They'll see this note.`, "");
+    if (note === null) return;
+  }
+  const done = () => { toast(`${s.name}: ${SELLER_STATUS_LABELS[status].toLowerCase()}.`); renderAll(); };
+  if (Cloud.live) {
+    Cloud.reviewSeller(id, status, note).then(done, error => alert(error.message));
+    return;
+  }
+  reviewSellerApplication(id, status, note);
+  saveData();
+  done();
 }
 
 function adminCustomersTable() {

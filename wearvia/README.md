@@ -6,10 +6,10 @@ NebedaHub is bespoke and ready-to-wear fashion in four apps — like Uber and Ub
 |---|---|---|---|
 | **NebedaHub** | `https://nebedahub.com/` | Customers: find tailors, order, chat, pay, track, buy fabric | *Create an account* |
 | **NebedaHub Business** | `https://nebedahub.com/business/` | Tailors, designers and their staff: the Business dashboard | *Join as a tailor or designer* (waits for the admin's approval), or *I work for a tailor* for staff |
-| **NebedaHub Seller** | `https://nebedahub.com/sell/` | Fabric sellers: their shop, fabrics and orders | *Open your fabric shop* |
+| **NebedaHub Sellers** | `https://nebedahub.com/sellers/` (old `/sell/` links still work) | Fabric sellers: apply, add fabrics, confirm and dispatch orders | *Open your fabric shop*, then the seller application (waits for admin approval) |
 | **NebedaHub Admin** | `https://nebedahub.com/admin/` | Only the NebedaHub admin: approvals, tailors, sellers, customers, orders | None — admins are made in Supabase |
 
-The same email can be used in more than one app, and each app keeps its own sign-in (signing in to NebedaHub doesn't sign you in to NebedaHub Business). If someone signs in to an app their account isn't for, they get a friendly message instead of the wrong screens — for example *"This account isn't a tailor yet. Join as a tailor"* in NebedaHub Business, *"This account isn't a fabric seller yet. Create your shop"* in NebedaHub Seller, *"This account isn't a NebedaHub admin"* with links to the other apps, or, for a tailor opening the customer app, *Open NebedaHub Business* or *Order outfits with this account too*.
+The same email can be used in more than one app, and each app keeps its own sign-in (signing in to NebedaHub doesn't sign you in to NebedaHub Business). If someone signs in to an app their account isn't for, they get a friendly message instead of the wrong screens — for example *"This account isn't a tailor yet. Join as a tailor"* in NebedaHub Business, *"This account isn't a fabric seller yet. Apply to sell"* in NebedaHub Sellers, *"This account isn't a NebedaHub admin"* with links to the other apps, or, for a tailor opening the customer app, *Open NebedaHub Business* or *Order outfits with this account too*.
 
 - **Customers** design an outfit, see a design concept, save their measurements, choose a fabric and send it all to the tailor. They chat with Nebeda Threads in the app to agree how many yards they need, accept the tailor's quote, pay a deposit, track production and leave a review.
 - **Fabric sellers** run a market stall of fabrics: photos, prices, stock, and the orders that use their fabric.
@@ -36,13 +36,13 @@ cd wearvia
 python3 -m http.server 8000
 ```
 
-Then go to <http://localhost:8000> (customers), <http://localhost:8000/business/>, <http://localhost:8000/sell/> or <http://localhost:8000/admin/>. Press `Ctrl + C` in the terminal to stop the server.
+Then go to <http://localhost:8000> (customers), <http://localhost:8000/business/>, <http://localhost:8000/sellers/> or <http://localhost:8000/admin/>. Press `Ctrl + C` in the terminal to stop the server.
 
 The app opens on a **Sign in** page. To look around without an account, press **Try the demo** (or open the page with `?demo=1` on the end of the address, e.g. `index.html?demo=1`). The demo uses sample data kept in that browser only — nothing is sent to Supabase, so it's safe to show anyone.
 
 Each app is opened at its own address (there's no switch between them). The demo is turned on separately in each app, but they all share the same sample data in that browser — so a tailor you create in NebedaHub Business appears in NebedaHub Admin → Tailors to approve. In the demo, *Dashboard for* at the top of the Business dashboard switches between tailors, so you can see that each one only sees their own customers and orders.
 
-**Old links still work.** Links from before the split go to the right app: `#/biz/…` → `/business/#/…`, `#/seller/…` → `/sell/#/…`, `#/for-tailors` → `/business/#/welcome`, `#/joinTailor` → `/business/#/join` (`js/apps.js`), and old `/wearvia/…` addresses go to their new ones (`scripts/old-address-redirects.mjs`).
+**Old links still work.** Links from before the split go to the right app: `#/biz/…` → `/business/#/…`, `#/seller/…` → `/sellers/#/…`, `/sell/…` → `/sellers/…`, `#/for-tailors` → `/business/#/welcome`, `#/joinTailor` → `/business/#/join` (`js/apps.js`), and old `/wearvia/…` addresses go to their new ones (`scripts/old-address-redirects.mjs`).
 
 ## Tailors near me
 
@@ -82,7 +82,7 @@ The app's addresses use `#`, which search engines mostly ignore, so `scripts/bui
 
 ## Install it on a phone
 
-Each app can be added to the home screen on its own — open its address, then on iPhone, Safari → Share → *Add to Home Screen*; on Android, Chrome → ⋮ → *Install app*. They install as separate apps with their own names and icons (NebedaHub, NH Business, NH Seller, NH Admin), each with its own `manifest.webmanifest` and `sw.js` in its folder (scope `/`, `/business/`, `/sell/`, `/admin/`); the shared work is in `js/sw-core.js`. It only stores the app's own files so it opens quickly; it never stores anything from Supabase (orders, chats, photos, sign-ins).
+Each app can be added to the home screen on its own — open its address, then on iPhone, Safari → Share → *Add to Home Screen*; on Android, Chrome → ⋮ → *Install app*. They install as separate apps with their own names and icons (NebedaHub, NH Business, NH Sellers, NH Admin), each with its own `manifest.webmanifest` and `sw.js` in its folder (scope `/`, `/business/`, `/sellers/`, `/admin/`); the shared work is in `js/sw-core.js`. It only stores the app's own files so it opens quickly; it never stores anything from Supabase (orders, chats, photos, sign-ins).
 
 ## The order steps
 
@@ -113,7 +113,7 @@ The app won't let anyone skip a step: for example, nobody can pay before the quo
 
 | Screen | What it does |
 |--------|--------------|
-| Home | Find tailors, start an order (you pick the tailor first), explore the marketplace; small links to NebedaHub Seller and NebedaHub Business |
+| Home | Find tailors, start an order (you pick the tailor first), explore the marketplace; small links to NebedaHub Sellers and NebedaHub Business |
 | Outfit picker & Design | Agbada, Kaftan, Senator, Bubu, Two Piece, Dress, Wedding, Suit, Aso Ebi, Custom; colour, embroidery, sleeve, neck |
 | Upload a Style | *I have a photo of the style I want*: up to 5 photos (Instagram, TikTok or Pinterest screenshots, or camera photos), the link to the post, and a note such as "same dress but longer sleeves and in green" |
 | AI Design Concept | A drawing made from the customer's choices. *Regenerate* makes a new version. Uploaded style photos show above it as *Your inspiration* |
@@ -149,24 +149,31 @@ The app won't let anyone skip a step: for example, nobody can pay before the quo
 |-----|--------------|
 | Overview | Every tailor, fabric seller, customer and order on NebedaHub, and what's waiting for approval (new tailors, sellers' fabrics), low stock and hidden contact details |
 | Tailors | Approve new tailors, hide one (with a note they see) or put them back |
-| Fabric sellers | Approve sellers' fabrics or hide them (with a reason the seller sees), and see every seller's shop, fabrics and sales |
+| Seller applications | New fabric sellers' applications: contact details, address, what they sell and sample photos. *Approve*, *Ask for changes* (with a note) or *Hide*. A shop's fabrics only reach customers once the shop is approved |
+| Seller fabrics | Approve sellers' fabrics or hide them (with a reason the seller sees), and see every seller's shop, fabrics and sales |
 | Fabric inventory | Live stock in yards, low-stock warnings (under 10 yd), restocking, new fabrics and suppliers |
 | Specialities | The list tailors choose from and customers filter by |
 | Hidden contact details | Chat messages where the filter hid contact details, with what was really written |
 
-**NebedaHub Seller** (`/sell/`)
+**NebedaHub Sellers** (`/sellers/`)
 
 | Tab | What it does |
 |-----|--------------|
-| Sell on NebedaHub | Create a seller profile, or sign in as an existing shop (demo — no passwords yet) |
-| My fabrics | The seller's stall: every fabric with its status (*Live*, *Waiting for approval*, *Hidden*, *Sold out*). Edit, mark sold out / back in stock, or delete |
+| Sell on NebedaHub | How selling works (Apply → NebedaHub review → Approved), why sell, and *Start your application* or *Sign in* (in the demo: choose a shop) |
+| Apply to sell / Shop & application | Business name, contact name, phone (with country code), email, address, country, city and postcode, the area customers see, what they sell, up to 5 sample photos, currency, delivery time, logo and the seller terms. Customers and tailors only ever see the shop name, area, logo and fabrics |
+| My fabrics | The seller's stall: every fabric with its status (*Live*, *Waiting for approval*, *Hidden*, *Out of stock*). Edit, mark out of stock / back in stock, or delete |
 | Add a fabric | Up to 5 photos (the first is the cover), name, type, colour, price per yard (or metre) in the seller's own currency, stock, smallest order and a description |
-| Orders | Every order that used the seller's fabric: yards, price, who it's for (first name only) and where to send it. *Mark as sent* when it's posted |
-| Shop profile | Shop name, country, location, phone (with country code), currency, delivery time and logo |
+| Orders | Every order that uses the seller's fabric: length, price, who it's for (first name only) and the tailor to send it to. **Confirm stock**, then **Dispatch…** with the courier, tracking number, an optional photo of the parcel and a note. The tailor's address, and dispatching, only unlock once the customer's deposit is confirmed. The tailor sees the tracking on their order |
 
-How approval works: new fabrics wait for the NebedaHub admin to approve them (NebedaHub Admin → Fabric sellers) before customers see them. Changing a live fabric's photos, name, type, colour or description sends it back for a quick check; price and stock changes go live straight away. If the admin hides a fabric, the seller sees the reason on their stall.
+**The application.** A new shop starts as *In review*: the seller sees *Application submitted → NebedaHub review → Approved* at the top of every page, and can add fabrics while they wait — nobody else sees them. The admin approves the shop in NebedaHub Admin → *Seller applications* (or asks for changes with a note; the seller fixes it and presses *Send my application again*). Shops from before applications existed are already approved.
 
-Sample customers, fabrics, orders, payments and fabric sellers load automatically so you can try everything straight away. Twelve sample sellers are included — four with full market stalls (Mama Titi Wax Prints, Kente Corner, Indigo Adire Studio and Lace Lounge), with one fabric waiting for approval, one hidden and one sold out. Their photos are drawn patterns, so you can replace them with real ones.
+**Roles are kept apart.** Being a tailor and being a fabric seller are separate approvals: a tailor who wants to sell fabric applies in NebedaHub Sellers, and a seller who wants to tailor joins in NebedaHub Business — each waits for the admin. The database enforces it (`supabase/sellers.sql`): only a shop's own account can add or change its fabrics and move its orders along; a tailor can read the seller's progress on their own orders but can't change it.
+
+**Sending straight to the customer** is built in but switched off (fabric goes to the customer's tailor), so customers' addresses stay private. Turning it on later needs a small database change that gives the seller the customer's address after the deposit.
+
+How fabric approval works: new fabrics wait for the NebedaHub admin to approve them (NebedaHub Admin → Seller fabrics) before customers see them. Changing a live fabric's photos, name, type, colour or description sends it back for a quick check; price and stock changes go live straight away. If the admin hides a fabric, the seller sees the reason on their stall.
+
+Sample customers, fabrics, orders, payments and fabric sellers load automatically so you can try everything straight away. The Sellers demo opens as **Lagos Wax Prints** (Lagos, naira, by the yard) with orders to confirm, dispatch and one already dispatched; **Aba Textile Hub** is a new shop waiting in NebedaHub Admin → Seller applications. Twelve more sample sellers are included — four with full market stalls (Mama Titi Wax Prints, Kente Corner, Indigo Adire Studio and Lace Lounge), with one fabric waiting for approval, one hidden and one sold out. Their photos are drawn patterns, so you can replace them with real ones.
 
 ## Try it out
 
@@ -179,7 +186,7 @@ Sample customers, fabrics, orders, payments and fabric sellers load automaticall
 - **Pay the balance:** back in the Customer app, open the order and click *Pay balance*. Then confirm it in Business → Payments.
 - **Deliver it:** in the order page, click *Dispatch order*, then move the parcel along until it's *Delivered*.
 - **Review it:** in the Customer app, open the order and click *Leave a Review*.
-- **Sell fabric:** NebedaHub Seller → *Create your seller profile* → add a fabric with some photos. Then NebedaHub Admin → *Fabric sellers* → *Approve*. It now shows in the customer app's Fabric Marketplace (🧶 Fabrics). When a customer orders an outfit in it, the order appears in the seller's *Orders* tab.
+- **Sell fabric:** NebedaHub Sellers → *Sign out* → *Start your application* → fill it in → *Send my application* → add a fabric with some photos. Then NebedaHub Admin → *Seller applications* → *Approve*, and *Seller fabrics* → *Approve*. It now shows in the customer app's Fabric Marketplace (🧶 Fabrics). When a customer orders an outfit in it, the order appears in the seller's *Orders* tab.
 
 ## Where is my data saved?
 
@@ -200,8 +207,8 @@ Who can do what is decided by the database, not by the browser (see `supabase/se
 
 The app is already pointed at the NebedaHub Supabase project in `js/config.js` (the project URL and the *publishable* key — that key is meant to be public). **Never put the secret key in the app.**
 
-1. **Run the database scripts.** Supabase → *SQL Editor* → *New query* → paste all of `supabase/setup.sql` → *Run*. It adds the missing tables, columns, security rules and photo buckets without touching your existing data. Then open another *New query*, paste all of `supabase/yards.sql` → *Run*. It switches the fabric columns from metres to yards and converts what's in them (money already charged doesn't change). Then do the same with `supabase/prices.sql`: it adds the price list (Business → Prices), makes the database price every customer order, and removes old unused metre functions. Then `supabase/tailor-quote.sql`: customers' orders become quote requests that the tailor prices, adds the order chat and its private `chat-photos` bucket, and ends with a report where every line should say OK. Then `supabase/tailors-near-me.sql`: many tailors (profiles, countries, specialities, per-tailor price lists and notes, approvals, the distance search, the `designer-photos` bucket, and security rules so each tailor only sees their own). It ends with a report where every line should say OK. Then `supabase/no-leakage.sql`: the contact-details filter on chats, profiles and portfolios (the originals are kept for the admin), no public addresses, customers' contact details kept from tailors, the delivery and fitting details after a confirmed deposit, and the tailor terms — merge the app update straight after it. It ends with a report where every line should say OK. Then `supabase/worldwide.sql`: currencies, the daily exchange rates, yards or metres, customers' country and units — merge the app update straight after it. Its report tries a London (GBP) and a Lagos (NGN) tailor quoting a Lagos seller's fabric and undoes it; every line should say OK. All seven are safe to run again — but if you ever re-run an earlier file, run the files after it again, in order.
-2. **Set the sign-in addresses.** Supabase → *Authentication* → *URL Configuration*: set *Site URL* to `https://nebedahub.com`, and under *Redirect URLs* add `https://nebedahub.com/**` (or each app on its own: `https://nebedahub.com/`, `https://nebedahub.com/business/`, `https://nebedahub.com/sell/`, `https://nebedahub.com/admin/`). Each app asks Supabase to send its sign-up and password emails back to itself, so the link opens the app the person used. If you changed the email templates (*Authentication* → *Emails*), their links must use `{{ .ConfirmationURL }}` (not `{{ .SiteURL }}`), or every link lands in the customer app.
+1. **Run the database scripts.** Supabase → *SQL Editor* → *New query* → paste all of `supabase/setup.sql` → *Run*. It adds the missing tables, columns, security rules and photo buckets without touching your existing data. Then open another *New query*, paste all of `supabase/yards.sql` → *Run*. It switches the fabric columns from metres to yards and converts what's in them (money already charged doesn't change). Then do the same with `supabase/prices.sql`: it adds the price list (Business → Prices), makes the database price every customer order, and removes old unused metre functions. Then `supabase/tailor-quote.sql`: customers' orders become quote requests that the tailor prices, adds the order chat and its private `chat-photos` bucket, and ends with a report where every line should say OK. Then `supabase/tailors-near-me.sql`: many tailors (profiles, countries, specialities, per-tailor price lists and notes, approvals, the distance search, the `designer-photos` bucket, and security rules so each tailor only sees their own). It ends with a report where every line should say OK. Then `supabase/no-leakage.sql`: the contact-details filter on chats, profiles and portfolios (the originals are kept for the admin), no public addresses, customers' contact details kept from tailors, the delivery and fitting details after a confirmed deposit, and the tailor terms — merge the app update straight after it. It ends with a report where every line should say OK. Then `supabase/worldwide.sql`: currencies, the daily exchange rates, yards or metres, customers' country and units — merge the app update straight after it. Its report tries a London (GBP) and a Lagos (NGN) tailor quoting a Lagos seller's fabric and undoes it; every line should say OK. Then `supabase/sellers.sql` — **before** merging the NebedaHub Sellers update: seller applications and approval, fabrics only from approved shops, sellers' contact details kept private, seller orders (stock confirmed, dispatched with tracking), the private `seller-files` bucket, and rules so tailors can't use selling tools. Its report tries a new seller applying, the admin approving and a dispatch with your own accounts, then undoes it; it ends with *ALL DONE — OK*. All eight are safe to run again — but if you ever re-run an earlier file, run the files after it again, in order.
+2. **Set the sign-in addresses.** Supabase → *Authentication* → *URL Configuration*: set *Site URL* to `https://nebedahub.com`, and under *Redirect URLs* add `https://nebedahub.com/**` (or each app on its own: `https://nebedahub.com/`, `https://nebedahub.com/business/`, `https://nebedahub.com/sellers/`, `https://nebedahub.com/admin/`). Each app asks Supabase to send its sign-up and password emails back to itself, so the link opens the app the person used. If you changed the email templates (*Authentication* → *Emails*), their links must use `{{ .ConfirmationURL }}` (not `{{ .SiteURL }}`), or every link lands in the customer app.
 3. **Turn on the daily exchange rates.** GitHub → the repository → *Settings → Secrets and variables → Actions → New repository secret*: name `SUPABASE_SECRET_KEY`, value the project's **secret** key (Supabase → *Project Settings → API Keys*). Then *Actions → Exchange rates → Run workflow* once. It runs by itself every morning after that. (The secret key is only ever used by that Action — never in the app.)
 4. **Keep email confirmation on.** Supabase → *Authentication* → *Sign In / Providers* → *Email*: leave *Confirm email* switched on. Staff logins are only granted to confirmed emails.
 5. **Make yourself the owner.** Open the app, create an account with your email (choose *I want outfits made*) and confirm it. Then in the SQL Editor run
@@ -214,7 +221,8 @@ The app is already pointed at the NebedaHub Supabase project in `js/config.js` (
 wearvia/
 ├── index.html           NebedaHub, the customer app (https://nebedahub.com/)
 ├── business/            NebedaHub Business: index.html, manifest.webmanifest, sw.js
-├── sell/                NebedaHub Seller: the same three files
+├── sellers/             NebedaHub Sellers: the same three files
+├── sell/                The old address: sends visitors to /sellers/ and removes the old installed copy
 ├── admin/               NebedaHub Admin: the same three files
 ├── supabase/
 │   ├── setup.sql        Run once in the Supabase SQL Editor: tables, security rules, photo buckets
@@ -223,7 +231,8 @@ wearvia/
 │   ├── tailor-quote.sql Run after prices.sql: quote requests, the tailor's quote, and the order chat
 │   ├── tailors-near-me.sql Run after tailor-quote.sql: many tailors, profiles, approvals, the distance search
 │   ├── no-leakage.sql   Run after tailors-near-me.sql: hides contact details, delivery details after the deposit, tailor terms
-│   └── worldwide.sql    Run last: currencies, daily exchange rates, yards or metres, inches or centimetres
+│   ├── worldwide.sql    Currencies, daily exchange rates, yards or metres, inches or centimetres
+│   └── sellers.sql      Run last: seller applications, private seller details, seller orders and dispatch
 ├── tailors/             Pages for Google, built by scripts/build-tailor-pages.mjs (plus seo.css / seo.js)
 ├── tailor/              One page per approved tailor (built by the same script)
 ├── manifest.webmanifest, sw.js, icons/   Installable customer app; each app's icons are in icons/
@@ -253,7 +262,7 @@ wearvia/
     ├── marketplace.js   The customer Fabric Marketplace: photo grid, filters, fabric page
     ├── inspiration.js   Upload a Style: the customer's photos, link and note, and how the shop sees them
     ├── chat.js          The chat on every order: messages, photos, unread badges
-    ├── seller.js        NebedaHub Seller
+    ├── seller.js        NebedaHub Sellers: onboarding, the application, fabrics, orders and dispatch
     ├── seller-fabrics.js Admin → Fabric sellers: approve or hide sellers' fabrics
     ├── customer.js      Every customer app screen
     ├── dashboard.js     Business dashboard and Ask AI

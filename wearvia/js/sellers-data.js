@@ -6,10 +6,15 @@
 // cloud.js (tables suppliers, fabrics and fabric_order_lines — see
 // supabase/setup.sql); in demo mode they stay in the browser.
 //
-// A fabric's status is "pending" (waiting for Nebeda Threads),
-// "approved" (live in the marketplace) or "hidden" (taken down by
-// Nebeda Threads). Deleted fabrics keep their row with deleted_at set,
-// so old orders can still show what was bought.
+// A shop's status (its application) is "pending" (the NebedaHub team is
+// reviewing it), "approved", "declined" (asked to change something) or
+// "hidden". Only approved shops' fabrics are on the marketplace.
+// A fabric's status is "pending" (waiting for the NebedaHub admin),
+// "approved" (live once its shop is approved) or "hidden" (taken down by
+// the admin). Deleted fabrics keep their row with deleted_at set, so old
+// orders can still show what was bought.
+// A seller's order goes New → Stock confirmed → Dispatched ("sent"), to
+// the customer's tailor (sending to the customer is ready but switched off).
 // ============================================================
 
 const FABRIC_TYPES = ["Ankara", "Aso Oke", "Kente", "Lace", "Adire", "Brocade", "Senator", "Cashmere", "Wool", "Linen", "Silk", "Cotton", "Other"];
@@ -27,6 +32,18 @@ const FABRIC_COLOURS = [
 const DELIVERY_TIMES = ["Same day", "Next day", "1–3 days", "2–4 days", "3–5 days", "5–7 days", "1–2 weeks"];
 
 const FABRIC_STATUS_LABELS = { pending: "Waiting for approval", approved: "Live", hidden: "Hidden" };
+const SELLER_STATUS_LABELS = { pending: "In review", approved: "Approved", declined: "Changes needed", hidden: "Hidden" };
+const FABRIC_ORDER_LABELS = { new: "New", confirmed: "Stock confirmed", sent: "Dispatched", cancelled: "Cancelled" };
+const MAX_SAMPLE_PHOTOS = 5;
+// Where a seller sends an order. "customer" is kept for later: the database
+// refuses it for now, so customers' addresses stay private.
+const SHIP_TO_OPTIONS = [{ key: "tailor", label: "Send to the customer's tailor", ready: true },
+                         { key: "customer", label: "Send straight to the customer", ready: false }];
+const SELLER_TERMS = [
+  "I'll keep NebedaHub customers and tailors on NebedaHub: no phone numbers, emails, websites or social handles in my shop, fabrics or messages.",
+  "All payments go through NebedaHub. I won't ask anyone to pay me directly.",
+  "I'll only list fabric I have in stock, confirm each order, and send it with a tracking number."
+];
 
 // Which drawn pattern a fabric type uses when it has no photos
 const TYPE_PATTERN = {
@@ -59,9 +76,14 @@ function isSoldOut(fabric) {
   return !!fabric.sold_out || fabric.yards_available < (fabric.min_order_yards || 0.5);
 }
 
-// Customers can see approved fabrics; they can buy them if they are also in stock
+// An approved shop (shops from before applications existed count as approved)
+function isSellerLive(seller) {
+  return !seller || !seller.admin_status || seller.admin_status === "approved";
+}
+
+// Customers can see approved fabrics from approved shops; they can buy them if they are also in stock
 function isOnMarket(fabric) {
-  return !fabric.deleted_at && fabric.status === "approved";
+  return !fabric.deleted_at && fabric.status === "approved" && isSellerLive(findSupplier(fabric.supplier_id));
 }
 
 function isBuyable(fabric) {
@@ -197,6 +219,16 @@ function saveSellerProfile(sellerId, values) {
   seller.phone = values.phone;
   seller.delivery_estimate = values.delivery_estimate;
   seller.country_code = values.country_code || null;
+  // The application (a new shop is sent for review; the database does this in live mode)
+  ["contact_name", "email", "address_line", "city", "postcode", "sells", "sample_photos"].forEach(k => {
+    if (values[k] !== undefined) seller[k] = values[k];
+  });
+  if (values.accept_terms && !seller.seller_terms_accepted_at) seller.seller_terms_accepted_at = new Date().toISOString();
+  if (!seller.admin_status) {
+    seller.admin_status = "pending";
+    seller.admin_note = "";
+    seller.submitted_at = new Date().toISOString();
+  }
   const currency = values.currency_code || countryCurrency(values.country_code) || "GBP";
   // Demo: a seller who changes currency has their prices converted (the database does this in live mode)
   if (!Cloud.live && seller.currency_code && seller.currency_code !== currency) {
@@ -259,6 +291,24 @@ function deleteSellerFabric(fabricId) {
 
 // ---- Writes by Nebeda Threads ----
 
+// Approve, decline (with a note), hide or reopen a seller's application
+function reviewSellerApplication(sellerId, status, note) {
+  const seller = findSupplier(sellerId);
+  seller.admin_status = status;
+  seller.admin_note = status === "declined" || status === "hidden" ? (note || "").trim() : "";
+  seller.reviewed_at = new Date().toISOString();
+  return seller;
+}
+
+// The seller sends their application again after changing what was asked
+function resubmitSellerApplication(sellerId) {
+  const seller = findSupplier(sellerId);
+  if (seller.admin_status !== "declined") return seller;
+  seller.admin_status = "pending";
+  seller.submitted_at = new Date().toISOString();
+  return seller;
+}
+
 function reviewFabric(fabricId, status, note) {
   const fabric = findFabric(fabricId);
   fabric.status = status;
@@ -283,7 +333,8 @@ function fabricOrderFor(order) {
     total: order.fabric_cost_in_fabric_currency != null ? order.fabric_cost_in_fabric_currency : order.fabric_cost,
     currency_code: order.fabric_currency_code || (fabric ? fabricCurrency(fabric) : "GBP"),
     customer_id: order.customer_id, deliver_to: `${designerName(order.designer_id)}, ${(designerById(order.designer_id) || { location: "" }).location}`,
-    status: "new", created_at: order.created_at, sent_at: null
+    status: "new", created_at: order.created_at, sent_at: null, confirmed_at: null, courier: "", tracking_number: "",
+    dispatch_photo: null, dispatch_note: "", ship_to: "tailor"
   };
 }
 
@@ -293,11 +344,42 @@ function recordFabricOrder(order) {
   db.fabric_orders.push(fabricOrderFor(order));
 }
 
-function markFabricOrderSent(fabricOrderId) {
+// Can this order be sent yet? Only once the customer's deposit is confirmed
+function fabricOrderUnlocked(line) {
+  if (Cloud.live) return !!line.unlocked;
+  const order = db.orders.find(o => o.id === line.order_id);
+  return order ? !!order.deposit_paid_at : !!line.deposit_confirmed;
+}
+
+// Where the seller sends it: the customer's tailor (their address once the deposit is confirmed)
+function fabricOrderSendTo(line) {
+  if (Cloud.live) return { name: line.send_to_name || line.deliver_to, address: line.send_to_address || "" };
+  const order = db.orders.find(o => o.id === line.order_id);
+  const d = order ? designerById(order.designer_id) : null;
+  const name = d ? d.business_name : (line.deliver_to || "").split(",")[0];
+  const address = !fabricOrderUnlocked(line) ? "" : d
+    ? [d.address_line, d.city, d.postcode, (countryByCode(d.country_code) || {}).name].filter(Boolean).join(", ")
+    : line.demo_address || "";
+  return { name, address };
+}
+
+function confirmFabricOrder(fabricOrderId) {
   const row = db.fabric_orders.find(o => o.id === fabricOrderId);
   if (!row || row.status !== "new") return null;
-  row.status = "sent";
-  row.sent_at = today();
+  row.status = "confirmed";
+  row.confirmed_at = today();
+  return row;
+}
+
+function dispatchFabricOrder(fabricOrderId, details) {
+  const row = db.fabric_orders.find(o => o.id === fabricOrderId);
+  if (!row || (row.status !== "new" && row.status !== "confirmed")) return null;
+  if (!details.tracking_number) throw new Error("Add the tracking number first.");
+  if (!fabricOrderUnlocked(row)) throw new Error("Wait until the customer's deposit is confirmed before you send the fabric.");
+  if (details.ship_to !== "tailor") throw new Error("Sending fabric straight to the customer isn't available yet. Please send it to their tailor.");
+  Object.assign(row, { status: "sent", sent_at: today(), confirmed_at: row.confirmed_at || today(), courier: details.courier || "",
+    tracking_number: details.tracking_number, dispatch_photo: details.dispatch_photo || null, dispatch_note: details.dispatch_note || "",
+    ship_to: details.ship_to });
   return row;
 }
 
@@ -532,8 +614,69 @@ function upgradeData(data) {
   if (!data.chat_reads) data.chat_reads = [];
   data.draft = upgradeDraftToQuotes(data.draft, data);
   upgradeDataToWorldwide(data);
-  data.version = 6;
+  upgradeDataToSellerApps(data);
+  data.version = 7;
   return data;
+}
+
+// Version 7: fabric shops apply and are approved like tailors. Every shop
+// from before is approved. The demo gets Lagos Wax Prints (the seller the
+// Sellers app opens as), with orders to confirm and send, and a new shop
+// waiting for the admin in NebedaHub Admin → Seller applications.
+function upgradeDataToSellerApps(data) {
+  data.suppliers.forEach(s => {
+    if (!s.admin_status) s.admin_status = "approved";
+    ["admin_note", "contact_name", "email", "address_line", "city", "postcode", "sells"].forEach(k => { if (s[k] === undefined) s[k] = ""; });
+    if (!s.sample_photos) s.sample_photos = [];
+  });
+  (data.fabric_orders || []).forEach(l => {
+    if (l.courier === undefined) Object.assign(l, { courier: "", tracking_number: "", dispatch_photo: null, dispatch_note: "", ship_to: "tailor", confirmed_at: null });
+  });
+  if (data.seller_apps_added) return;
+  const lagos = { id: "S15", name: "Lagos Wax Prints", location: "Idumota Market, Lagos Island", city: "Lagos", phone: "+234 803 555 0199",
+    delivery_estimate: "2–4 days", rating: 4.8, logo: "logo:LW:1d7a5a", country_code: "NG", currency_code: "NGN", created_at: addDays(-60),
+    admin_status: "approved", admin_note: "", submitted_at: addDays(-62) + "T10:00:00Z", reviewed_at: addDays(-61) + "T10:00:00Z",
+    contact_name: "Funmi Adeyemi", email: "hello@lagoswaxprints.example", address_line: "14 Idumota Market Road", postcode: "102273",
+    sells: "Dutch wax and Ankara prints, George and lace for aso ebi.", sample_photos: samplePhotos("ankara", ["#1d7a5a", "#e8c21e", "#a3242e"], 2),
+    seller_terms_accepted_at: addDays(-62) + "T10:00:00Z" };
+  const applicant = { id: "S16", name: "Aba Textile Hub", location: "Ariaria Market, Aba", city: "Aba", phone: "+234 806 555 0123",
+    delivery_estimate: "3–5 days", rating: null, logo: null, country_code: "NG", currency_code: "NGN", created_at: addDays(-1),
+    admin_status: "pending", admin_note: "", submitted_at: addDays(-1) + "T09:30:00Z", reviewed_at: null,
+    contact_name: "Chidi Okafor", email: "chidi@abatextiles.example", address_line: "Shop 22, Ariaria International Market", postcode: "450211",
+    sells: "Hand-woven Akwete cloth and Ankara, wholesale and by the yard.", sample_photos: samplePhotos("kente", ["#a3242e", "#1f2a44", "#e8c21e"], 3),
+    seller_terms_accepted_at: addDays(-1) + "T09:30:00Z" };
+  [lagos, applicant].forEach(x => { if (!data.suppliers.some(s => s.id === x.id)) data.suppliers.push(x); });
+  const f = (id, seller, name, type, colour, price, stock, kind, colours, description, extra) => Object.assign({
+    id, name, category: type, colour_name: colour, color: colours[0], price_per_yard: price, supplier_id: seller, currency_code: "NGN",
+    yards_available: stock, min_order_yards: 2, description, photos: samplePhotos(kind, colours, 3),
+    status: "approved", sold_out: false, deleted_at: null, created_at: addDays(-20), review_note: ""
+  }, extra || {});
+  [f("F26", "S15", "Idumota Emerald Wax", "Ankara", "Green", 7500, 80, "ankara", ["#1d7a5a", "#e8c21e", "#f4f1ea"],
+     "Dutch wax print in emerald and gold. 100% cotton, 46 inches wide, sold by the yard."),
+   f("F27", "S15", "Eko Coral George", "Brocade", "Red", 18000, 30, "brocade", ["#a3242e", "#c9a24a", "#fff2cc"],
+     "Coral George wrapper with gold embroidery, for weddings and aso ebi."),
+   f("F28", "S15", "Lagoon Blue Ankara", "Ankara", "Blue", 6000, 4, "ankara", ["#1e3a5f", "#e8871e", "#f4f1ea"],
+     "Blue and orange Ankara. Only a few yards left — more arriving soon.", { sold_out: true }),
+   f("F29", "S16", "Akwete Royal Weave", "Aso Oke", "Burgundy", 12000, 25, "aso_oke", ["#7c1f2e", "#c9a24a", "#1f2a44"],
+     "Hand-woven Akwete cloth from Aba.", { status: "pending" })
+  ].forEach(fabric => { if (!data.fabrics.some(x => x.id === fabric.id)) data.fabrics.push(fabric); });
+  // Orders for Lagos Wax Prints' fabric from the demo tailors: one to confirm, one to send, one sent
+  const line = (id, ref, fabric, name, yards, price, status, days, extra) => Object.assign({
+    id, ref, order_id: ref.replace("FO-", "NT-"), seller_id: "S15", fabric_id: fabric, fabric_name: name, yards, price_per_yard: price,
+    total: yards * price, currency_code: "NGN", customer_first_name: "", deliver_to: "Ikoyi Couture House, Lagos",
+    demo_address: "5 Bourdillon Road, Ikoyi, Lagos, Nigeria", status, created_at: addDays(-days), sent_at: null, confirmed_at: null,
+    courier: "", tracking_number: "", dispatch_photo: null, dispatch_note: "", ship_to: "tailor", deposit_confirmed: true
+  }, extra || {});
+  if (!data.fabric_orders) data.fabric_orders = [];
+  [line("FOL-1", "FO-2103", "F26", "Idumota Emerald Wax", 6, 7500, "new", 1, { customer_first_name: "Tolu" }),
+   line("FOL-2", "FO-2102", "F27", "Eko Coral George", 5, 18000, "confirmed", 3, { customer_first_name: "Kemi", confirmed_at: addDays(-2) }),
+   line("FOL-3", "FO-2101", "F26", "Idumota Emerald Wax", 4.5, 7500, "sent", 9,
+        { customer_first_name: "Bayo", confirmed_at: addDays(-8), sent_at: addDays(-7), courier: "GIG Logistics", tracking_number: "GIG-48213377" }),
+   line("FOL-4", "FO-2104", "F26", "Idumota Emerald Wax", 3, 7500, "new", 0, { customer_first_name: "Ada", deposit_confirmed: false })
+  ].forEach(l => { if (!data.fabric_orders.some(x => x.id === l.id)) data.fabric_orders.push(l); });
+  // The Sellers demo opens as Lagos Wax Prints
+  if (!data.session.sellerId) data.session.sellerId = "S15";
+  data.seller_apps_added = true;
 }
 
 // Version 6: everything saved before currencies existed is in pounds. The demo

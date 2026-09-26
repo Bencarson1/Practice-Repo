@@ -53,7 +53,7 @@ function renderSellerFabrics() {
   }).join("");
 
   return `
-    ${bizHeader("Fabric Sellers", `Check fabrics from independent sellers before customers see them in the Fabric Marketplace.`)}
+    ${bizHeader("Seller fabrics", `Check fabrics from independent sellers before customers see them in the Fabric Marketplace. A fabric only goes live once its shop is approved too (Seller applications).`)}
     ${waiting.length ? `<div class="alerts"><span class="alert">${waiting.length} fabric${waiting.length > 1 ? "s" : ""} waiting for approval</span></div>` : ""}
     <div class="chips">${Object.keys(tests).map(k =>
       `<button class="chip ${k === sellerFabricFilter ? "active" : ""}" onclick="sellerFabricFilter='${k}';renderAll()">${k} (${all.filter(tests[k]).length})</button>`).join("")}</div>
@@ -70,7 +70,9 @@ function renderSellerFabrics() {
 function approveSellerFabric(fabricId) {
   const fabric = reviewFabric(fabricId, "approved");
   saveData();
-  toast(`${fabric.name} is live in the Fabric Marketplace.`);
+  const shop = findSupplier(fabric.supplier_id);
+  toast(isSellerLive(shop) ? `${fabric.name} is live in the Fabric Marketplace.`
+    : `${fabric.name} approved. It goes live once you approve ${shop ? shop.name : "the shop"} in Seller applications.`);
   renderAll();
 }
 

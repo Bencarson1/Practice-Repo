@@ -1,6 +1,6 @@
 // ============================================================
 // sw-core.js — the offline copy for each NebedaHub app. Each app has its
-// own tiny sw.js (/sw.js, /business/sw.js, /sell/sw.js, /admin/sw.js) that
+// own tiny sw.js (/sw.js, /business/sw.js, /sellers/sw.js, /admin/sw.js) that
 // says which app it is and then loads this file, so each one installs as a
 // separate app with its own scope.
 //
@@ -17,7 +17,7 @@ const SCOPE = new URL("./", self.location.href).pathname;          // "/", "/bus
 const ROOT = new URL(NH_APP.root, self.location.href).pathname;    // "/" — where css/, js/ and icons/ live
 const SHARED = ["css/", "js/", "icons/"].map(dir => ROOT + dir);
 // The other apps' folders: the customer app (scope "/") leaves those to their own offline copies
-const OTHER_APPS = NH_APP.name === "customer" ? ["business/", "sell/", "admin/"].map(dir => SCOPE + dir) : [];
+const OTHER_APPS = NH_APP.name === "customer" ? ["business/", "sellers/", "sell/", "admin/"].map(dir => SCOPE + dir) : [];
 
 self.addEventListener("install", event => {
   event.waitUntil(caches.open(NH_APP.version).then(cache => cache.addAll(NH_APP.shell)).then(() => self.skipWaiting()));

@@ -4,7 +4,7 @@
 // NebedaHub is four apps on one Supabase database, like Uber and Uber Driver:
 //   NebedaHub           /           customers: find tailors, order, chat, pay, track
 //   NebedaHub Business  /business/  tailors, designers and their staff
-//   NebedaHub Seller    /sell/      fabric sellers
+//   NebedaHub Sellers   /sellers/   fabric sellers (it used to be /sell/)
 //   NebedaHub Admin     /admin/     the NebedaHub admin only
 // Each page says which app it is with <html data-app="…">. They share this
 // code, but each has its own address, sign-in, look and installable app.
@@ -13,7 +13,7 @@
 const APPS = {
   customer: { name: "NebedaHub", dir: "", home: "home", who: "customers" },
   business: { name: "NebedaHub Business", dir: "business/", home: "dashboard", who: "tailors and designers" },
-  seller: { name: "NebedaHub Seller", dir: "sell/", home: "fabrics", who: "fabric sellers" },
+  seller: { name: "NebedaHub Sellers", dir: "sellers/", home: "fabrics", who: "fabric sellers" },
   admin: { name: "NebedaHub Admin", dir: "admin/", home: "overview", who: "the NebedaHub admin" }
 };
 const APP_KIND = APPS[document.documentElement.dataset.app] ? document.documentElement.dataset.app : "customer";
