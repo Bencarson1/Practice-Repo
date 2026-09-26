@@ -27,9 +27,9 @@ function renderOrdersTab(orderId) {
       <td class="${isLate(o) ? "owed" : ""}">${formatDate(o.due_date)}</td>
       <td>${stageBadge(o)}</td>
       <td>${money(o.quote_total, orderCurrency(o))}</td>
-      <td class="${balance > 0 ? "owed" : "paid"}">${balance > 0 ? money(balance, orderCurrency(o)) : "Paid"}</td>
+      <td class="${balance > 0 ? "owed" : "paid"}">${businessPaymentsOpen() && balance > 0 ? money(balance, orderCurrency(o)) : businessPaymentsOpen() ? "Paid" : "Payments not open"}</td>
       <td class="nowrap"><a class="button small" href="#/orders/${o.id}">Open</a>
-        <button class="small danger" onclick="deleteOrder('${o.id}')">Delete</button></td>
+        ${canManageBusinessSettings() ? `<button class="small danger" onclick="deleteOrder('${o.id}')">Delete</button>` : ""}</td>
     </tr>`;
   }).join("");
 
@@ -44,7 +44,10 @@ function renderOrdersTab(orderId) {
     ${bizHeader("All Orders — Live", "Every order across every customer, with the step it's on now.")}
     ${waiting.length ? `<a class="alert quote-alert" href="#/quotes">📝 ${waiting.length} quote request${waiting.length === 1 ? "" : "s"} — customers waiting for you or deciding on a quote →</a>` : ""}
 
-    <div class="card">
+    ${Cloud.live && !businessPaymentsOpen() ? `<div class="card attention">
+      <h2>New walk-in orders are paused</h2>
+      <p class="hint">Protected payments are not open yet. To avoid creating unpaid fabric obligations or off-platform payments, new live walk-in orders are temporarily disabled. You can still receive and prepare customer quote requests.</p>
+    </div>` : `<div class="card">
       <h2>New walk-in order</h2>
       <p class="hint">For orders taken in the shop or by phone: you enter the ${unitWord(unit, true)} directly. Prices are in ${escapeHtml(currencyInfo(currency).name)}; fabric from a seller in another currency is converted at today's rate, which is saved on the order. (Online customers send their order to you as a <a href="#/quotes">quote request</a> instead, and you agree the length with them in the chat.) The price is worked out the same way (fabric + tailoring + embroidery + delivery) and the order starts once a deposit is paid. Leave the tailoring, embroidery and delivery prices blank to use the <a href="#/prices">price list</a>, or type your own price for this order.</p>
       <form id="order-form" class="form-grid" onsubmit="return createWalkInOrder(event)">
@@ -70,7 +73,7 @@ function renderOrdersTab(orderId) {
         <label>Paid by${select("method", PAYMENT_METHODS.map(m => ({ value: m, label: m })))}</label>
         <div class="form-actions"><button type="submit">Create order</button></div>
       </form>
-    </div>
+    </div>`}
 
     <div class="card">
       <h2>All orders</h2>
@@ -85,6 +88,7 @@ function renderOrdersTab(orderId) {
 
 function createWalkInOrder(event) {
   event.preventDefault();
+  if (Cloud.live && !businessPaymentsOpen()) { alert("Protected payments are not open yet. Live walk-in orders are temporarily paused."); return false; }
   const form = event.target;
   const fabric = findFabric(form.fabric.value);
   const currency = bizCurrency();
@@ -189,14 +193,16 @@ function renderOrderDetail(orderId) {
 
   // What the "next" button does depends on the step
   let nextAction = "";
-  if (depositAwaiting(order) && !depositStarted(order)) {
+  if (depositAwaiting(order) && !businessPaymentsOpen()) {
+    nextAction = `<span class="owed">Protected payments are not open yet.</span> Keep the order prepared, but do not collect customer money outside NebedaHub.`;
+  } else if (depositAwaiting(order) && !depositStarted(order)) {
     nextAction = `<span class="owed">Waiting for the customer to pay the deposit of ${money(order.deposit_amount, cur)}.</span> You can record it below if they paid in the shop.`;
   } else if (depositAwaiting(order)) {
     nextAction = `<span class="owed">Deposit awaiting confirmation.</span> Confirm it under Payments below to start production.`;
   } else if (!next) {
     nextAction = `<span class="paid">✓ Delivered${order.review_rating ? " and reviewed" : " — waiting for the customer's review"}</span>`;
   } else if (next.key === "balance_paid" && balance > 0) {
-    nextAction = `<span class="owed">Waiting for the balance of ${money(balance, cur)}.</span> Record it under Payments below.`;
+    nextAction = businessPaymentsOpen() ? `<span class="owed">Waiting for the balance of ${money(balance, cur)}.</span> Record it under Payments below.` : `<span class="owed">Protected payments are not open yet.</span>`;
   } else if (next.key === "delivered" && !delivery) {
     nextAction = `<form class="inline-form" onsubmit="return dispatchFromDetail(event, '${order.id}')">
       <select name="courier"><option>DHL</option><option>Royal Mail</option></select>
@@ -217,7 +223,7 @@ function renderOrderDetail(orderId) {
 
   const payments = db.payments.filter(p => p.order_id === order.id).map(p =>
     `<tr><td>${formatDate(p.date)}</td><td>${escapeHtml(p.kind)}</td><td>${escapeHtml(p.method)}</td><td>${money(p.amount, p.currency_code || cur)}</td>
-      <td>${paymentStatusCell(p)}</td></tr>`).join("");
+      <td>${businessPaymentsOpen() ? paymentStatusCell(p) : `<span class="badge status-pending">Historical/test record</span>`}</td></tr>`).join("");
 
   return `
     <p><a href="#/orders">← All orders</a></p>
@@ -263,11 +269,11 @@ function renderOrderDetail(orderId) {
             <thead><tr><th>Date</th><th>Type</th><th>Method</th><th>Amount</th><th>Status</th></tr></thead>
             <tbody>${payments || "<tr><td colspan='5' class='empty'>No payments yet — the customer pays the deposit in the app.</td></tr>"}</tbody>
           </table></div>
-          ${balance > 0 ? `<form class="inline-form" onsubmit="return payFromDetail(event, '${order.id}')">
+          ${businessPaymentsOpen() && balance > 0 ? `<form class="inline-form" onsubmit="return payFromDetail(event, '${order.id}')">
             <input name="amount" type="number" min="0.01" max="${balance}" step="0.01" value="${balance}" aria-label="Amount in ${escapeHtml(cur)}"> <span class="muted">${escapeHtml(cur)}</span>
             <select name="method">${PAYMENT_METHODS.map(m => `<option>${m}</option>`).join("")}</select>
             <button type="submit">Record payment</button>
-          </form>` : ""}
+          </form>` : !businessPaymentsOpen() ? `<p class="hint">Protected in-app payments are not open yet. Do not record or collect a customer payment outside NebedaHub.</p>` : ""}
           <p><a href="#/invoices/${order.id}">View invoice →</a>${delivery ? ` · Tracking ${escapeHtml(delivery.courier)} ${escapeHtml(delivery.tracking_number)}` : ""}</p>
           ${order.review_rating ? `<p class="review"><span class="gold">${"★".repeat(order.review_rating)}</span> ${escapeHtml(order.review_text)}</p>` : ""}
         </div>
@@ -304,6 +310,7 @@ function assignStaff(orderId, role, staffId) {
 
 function payFromDetail(event, orderId) {
   event.preventDefault();
+  if (!businessPaymentsOpen()) { alert("Protected payments are not open yet."); return false; }
   const order = findOrder(orderId);
   const amount = Number(event.target.amount.value);
   if (amount > balanceOwed(order)) {
