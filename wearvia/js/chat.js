@@ -104,9 +104,10 @@ function markChatRead(order, side) {
 function chatTime(iso) {
   const d = new Date(iso);
   if (isNaN(d)) return "";
-  const time = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  // In the viewer's own format and time zone
+  const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
   if (d.toDateString() === new Date().toDateString()) return time;
-  return `${d.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} · ${time}`;
+  return `${d.toLocaleDateString(undefined, { day: "numeric", month: "short" })} · ${time}`;
 }
 
 function chatMessageHtml(m, side) {

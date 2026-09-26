@@ -36,7 +36,7 @@ function renderTeam() {
       <form class="form-grid" onsubmit="return addStaff(event)">
         <label>Name<input name="name" required></label>
         <label>Role<select name="role">${STAFF_ROLES.map(r => `<option value="${r.key}">${r.label}</option>`).join("")}</select></label>
-        <label>Phone<input name="phone" type="tel"></label>
+        <label>Phone${phoneFieldHtml("phone", "", bizDesigner().country_code)}</label>
         <div class="form-actions"><button type="submit">Add</button></div>
       </form>
     </div>
@@ -102,7 +102,7 @@ function removeTeamLogin(kind, id) {
 function addStaff(event) {
   event.preventDefault();
   const form = event.target;
-  db.staff.push({ id: newId("T", db.staff), designer_id: bizDesignerId(), name: form.name.value.trim(), role: form.role.value, phone: form.phone.value.trim() });
+  db.staff.push({ id: newId("T", db.staff), designer_id: bizDesignerId(), name: form.name.value.trim(), role: form.role.value, phone: readPhone(form, "phone") });
   saveData();
   renderAll();
   return false;

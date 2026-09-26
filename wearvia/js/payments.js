@@ -17,31 +17,33 @@ function paymentStatusCell(p) {
 function confirmPaymentFromList(paymentId, accept) {
   const p = db.payments.find(x => x.id === paymentId);
   if (!p) return;
-  if (!accept && !confirm(`Reject this ${money(p.amount)} payment for ${p.order_id}? Only do this if the money never arrived.`)) return;
+  if (!accept && !confirm(`Reject this ${money(p.amount, paymentCurrency(p))} payment for ${p.order_id}? Only do this if the money never arrived.`)) return;
   confirmPayment(paymentId, accept);
   saveData();
-  toast(accept ? `${money(p.amount)} confirmed for ${p.order_id}.` : `Payment rejected for ${p.order_id}.`);
+  toast(accept ? `${money(p.amount, paymentCurrency(p))} confirmed for ${p.order_id}.` : `Payment rejected for ${p.order_id}.`);
   renderAll();
 }
 
 function renderPayments() {
   // Only orders that still have money owed can take a payment
   const orderOptions = placedOrders().filter(o => balanceOwed(o) > 0).map(o =>
-    `<option value="${o.id}">${o.id} — ${escapeHtml(customerName(o.customer_id))} (owes ${money(balanceOwed(o))})</option>`).join("");
+    `<option value="${o.id}">${o.id} — ${escapeHtml(customerName(o.customer_id))} (owes ${money(balanceOwed(o), orderCurrency(o))})</option>`).join("");
 
-  let totalOwed = 0;
+  // Owed per currency, never added together
+  const totalOwed = moneyTotals();
   const balanceRows = placedOrders().map(order => {
     const paid = amountPaid(order.id);
     const balance = balanceOwed(order);
-    if (balance > 0) totalOwed += balance;
+    const cur = orderCurrency(order);
+    if (balance > 0) addMoney(totalOwed, cur, balance);
     const due = stageIndex(order) >= STAGES.findIndex(s => s.key === "quality_control");
     return `<tr>
       <td><a href="#/orders/${order.id}">${order.id}</a></td>
       <td>${escapeHtml(customerName(order.customer_id))}</td>
-      <td>${money(order.quote_total)}</td>
-      <td>${money(order.deposit_amount)}</td>
-      <td>${money(paid)}</td>
-      <td class="${balance > 0 ? "owed" : "paid"}">${balance > 0 ? money(balance) + (due ? " — due now" : " — after QC") : "Paid in full"}</td>
+      <td>${money(order.quote_total, cur)}</td>
+      <td>${money(order.deposit_amount, cur)}</td>
+      <td>${money(paid, cur)}</td>
+      <td class="${balance > 0 ? "owed" : "paid"}">${balance > 0 ? money(balance, cur) + (due ? " — due now" : " — after QC") : "Paid in full"}</td>
     </tr>`;
   }).join("");
 
@@ -52,7 +54,7 @@ function renderPayments() {
       <td>${formatDate(p.date)}</td>
       <td><a href="#/orders/${p.order_id}">${escapeHtml(p.order_id)}</a></td>
       <td>${escapeHtml(order ? customerName(order.customer_id) : "Unknown")}</td>
-      <td>${escapeHtml(p.kind)}</td><td>${escapeHtml(p.method)}</td><td>${money(p.amount)}</td>
+      <td>${escapeHtml(p.kind)}</td><td>${escapeHtml(p.method)}</td><td>${money(p.amount, paymentCurrency(p))}</td>
       <td>${paymentStatusCell(p)}</td>
     </tr>`;
   }).join("");
@@ -65,7 +67,7 @@ function renderPayments() {
       <td>${escapeHtml(order ? customerName(order.customer_id) : "Unknown")}</td>
       <td>${escapeHtml(p.kind)}</td>
       <td>${escapeHtml(p.method)}</td>
-      <td>${money(p.amount)}</td>
+      <td>${money(p.amount, paymentCurrency(p))}</td>
       <td>${escapeHtml(PAYMENT_STATUS_LABELS[p.status] || "Confirmed")}</td>
     </tr>`;
   }).join("");
@@ -86,7 +88,7 @@ function renderPayments() {
       ${orderOptions === "" ? "<p class='empty'>Every order is paid in full. 🎉</p>" : `
       <form id="payment-form" class="form-grid" onsubmit="return recordPayment(event)">
         <label>Order<select name="order" required>${orderOptions}</select></label>
-        <label>Amount (${CURRENCY})<input name="amount" type="number" min="0.01" step="0.01" required></label>
+        <label>Amount <small class="muted">(in the order's currency)</small><input name="amount" type="number" min="0.01" step="0.01" required></label>
         <label>Method<select name="method">${PAYMENT_METHODS.map(m => `<option>${m}</option>`).join("")}</select></label>
         <label>Date<input name="date" type="date" value="${today()}" required></label>
         <div class="form-actions"><button type="submit">Record payment</button></div>
@@ -94,7 +96,7 @@ function renderPayments() {
     </div>
 
     <div class="card">
-      <h2>Balances <span class="total">Total owed: ${money(totalOwed)}</span></h2>
+      <h2>Balances <span class="total">Total owed: ${totalsHtml(totalOwed, bizCurrency())}</span></h2>
       <div class="table-wrap"><table>
         <thead><tr><th>Order</th><th>Customer</th><th>Total</th><th>Deposit</th><th>Paid</th><th>Balance</th></tr></thead>
         <tbody>${balanceRows || "<tr><td colspan='6' class='empty'>No orders yet.</td></tr>"}</tbody>
@@ -119,12 +121,12 @@ function recordPayment(event) {
   const balance = balanceOwed(order);
 
   if (amount > balance) {
-    alert(`That is more than the ${money(balance)} still owed on ${order.id}.`);
+    alert(`That is more than the ${money(balance, orderCurrency(order))} still owed on ${order.id}.`);
     return false;
   }
   recordOrderPayment(order, amount, form.method.value, form.date.value, true);
   saveData();
-  toast(`${money(amount)} recorded for ${order.id}.`);
+  toast(`${money(amount, orderCurrency(order))} recorded for ${order.id}.`);
   renderAll();
   return false;
 }

@@ -354,6 +354,10 @@ function screenTailorPage(slug) {
   const rtw = !Cloud.live ? rtwOf(d.id) : [];
   const country = countryByCode(d.country_code);
   const link = new URL(`tailor/${d.slug}/`, location.href.split("#")[0]).href;
+  const currency = designerCurrency(d);
+  // "Tailoring from": the lowest outfit price in their price list (in their currency)
+  const listed = pricesOf(d.id).filter(p => p.kind === "outfit" && (p.currency_code || currency) === currency).map(p => p.price);
+  const fromPrice = listed.length ? Math.min(...listed) : d.from_price != null ? d.from_price : null;
   const canOrder = d.admin_status === "approved" && d.custom_orders !== false;
 
   return `
@@ -380,7 +384,10 @@ function screenTailorPage(slug) {
       ${(d.portfolio || []).length ? `<div><b>Portfolio</b><div class="portfolio-grid">${d.portfolio.map((p, i) => `
         <button type="button" class="portfolio-item" onclick="openPortfolio('${d.id}', ${i})" aria-label="Open photo ${i + 1}${p.title ? ": " + escapeHtml(p.title) : ""}">
           <img src="${escapeHtml(photoUrl(p.image))}" alt="${escapeHtml(p.title || "Portfolio photo")}" loading="lazy">${p.title ? `<span>${escapeHtml(p.title)}</span>` : ""}</button>`).join("")}</div></div>` : ""}
-      ${(d.services || []).length ? `<div><b>Services</b>${d.services.map(sv => `<div class="qline"><span>${escapeHtml(sv.name)}</span><span>${sv.price != null ? money(sv.price) : ""}</span></div>`).join("")}</div>` : ""}
+      ${fromPrice != null ? `<div class="mrow"><span>Tailoring from</span><span><b>${money(fromPrice, currency)}</b>${approxMoney(fromPrice, currency)}</span></div>` : ""}
+      ${(d.services || []).length ? `<div><b>Services</b>${d.services.map(sv => `<div class="qline"><span>${escapeHtml(sv.name)}</span><span>${sv.price != null ? money(sv.price, currency) + approxMoney(sv.price, currency) : ""}</span></div>`).join("")}</div>` : ""}
+      <div class="mrow"><span>Prices in</span><span>${escapeHtml(currencyInfo(currency).name)} (${escapeHtml(currency)}) · fabric in ${unitWord(designerFabricUnit(d), true)}</span></div>
+      ${approxNote(currency)}
       <div class="mrow"><span>Usual making time</span><span>${escapeHtml(d.delivery_time || "7–14 days")}</span></div>
       <div><b>Reviews</b>${reviews.length ? reviews.map(r => `<div class="review"><span class="gold">${"★".repeat(r.rating)}</span> ${escapeHtml(r.text || r.outfit || "")}<div class="fl">${escapeHtml(r.who || "A customer")}${r.outfit ? " · " + escapeHtml(r.outfit) : ""}</div></div>`).join("")
         : `<p class="meta">No reviews yet — reviews appear after a customer's outfit is delivered.</p>`}</div>

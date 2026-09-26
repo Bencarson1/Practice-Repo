@@ -28,7 +28,7 @@ function renderSellerFabrics() {
         <div class="review-body">
           <div class="row-between wrap"><h3>${escapeHtml(f.name)}</h3>${sellerStatusBadge(f)}</div>
           <p class="muted">${escapeHtml(f.category)} · ${escapeHtml(f.colour_name)} · ${photos.length} photo${photos.length === 1 ? "" : "s"}${f.photos && f.photos.length ? "" : " (no photos — showing a swatch)"}</p>
-          <p><strong class="gold">${money(f.price_per_yard)}</strong> per yard · ${f.yards_available} yd in stock · min ${f.min_order_yards} yd</p>
+          <p><strong class="gold">${escapeHtml(fabricPriceText(f, sellerFabricUnit(seller)))}</strong> · ${lengthText(f.yards_available, sellerFabricUnit(seller))} in stock · min ${lengthText(f.min_order_yards, sellerFabricUnit(seller))}</p>
           <p>Seller: <b>${escapeHtml(seller ? seller.name : "—")}</b>${seller ? ` · ${escapeHtml(seller.location)} · ${escapeHtml(seller.phone || "")}` : ""}</p>
           ${f.description ? `<p class="desc">${escapeHtml(f.description)}</p>` : ""}
           ${f.status === "hidden" && f.review_note ? `<p class="review-note">Reason given: “${escapeHtml(f.review_note)}”</p>` : ""}
@@ -48,7 +48,7 @@ function renderSellerFabrics() {
       <td>${escapeHtml(s.location)}</td><td class="nowrap">${escapeHtml(s.phone || "—")}</td><td>${escapeHtml(s.delivery_estimate)}</td>
       <td>${fabrics.filter(f => f.status === "approved").length} live / ${fabrics.length}</td>
       <td>${fabrics.filter(f => f.status === "pending").length || "—"}</td>
-      <td>${orders.length} · ${money(orders.reduce((t, o) => t + o.total, 0))}</td>
+      <td>${orders.length} · ${escapeHtml(totalsText(sumByCurrency(orders, o => o.total, o => o.currency_code || sellerCurrency(s)), sellerCurrency(s)))}</td>
     </tr>`;
   }).join("");
 

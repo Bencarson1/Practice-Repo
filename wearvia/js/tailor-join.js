@@ -107,9 +107,9 @@ function tailorJoinForm() {
       <ol class="join-steps"><li>Tell us your business name and where you are.</li><li>Add your photo, specialities and portfolio in <b>My profile</b>.</li><li>The ${APP_NAME} team checks and approves you — then customers can find you.</li></ol>
       <form class="stack" onsubmit="return joinAsTailor(event)">
         <label class="field">Business name<input name="business" required minlength="2" maxlength="80" placeholder="e.g. Ade's Tailoring"></label>
-        <label class="field">Country<select name="country" required>${countryOptions("", "Choose your country")}</select></label>
+        <label class="field">Country <small>(your prices are in its currency — you can change that later)</small><select name="country" required onchange="if (this.form.phone_cc) this.form.phone_cc.value = this.value">${countryOptions(browserCountry(), "Choose your country")}</select></label>
         <label class="field">City or town<input name="city" required maxlength="60" placeholder="e.g. Manchester"></label>
-        <label class="field">Phone <small>(only the ${APP_NAME} team sees it)</small><input name="phone" type="tel" maxlength="20"></label>
+        <label class="field">Phone <small>(only the ${APP_NAME} team sees it)</small>${phoneFieldHtml("phone", "", browserCountry())}</label>
         ${tailorTermsHtml(false)}
         ${tailorTermsCheckbox()}
         <p id="join-error" class="form-error" role="alert"></p>
@@ -121,7 +121,7 @@ function tailorJoinForm() {
 function joinAsTailor(event) {
   event.preventDefault();
   const form = event.target;
-  const details = { businessName: form.business.value.trim(), country: form.country.value, city: form.city.value.trim(), phone: form.phone.value.trim(),
+  const details = { businessName: form.business.value.trim(), country: form.country.value, city: form.city.value.trim(), phone: readPhone(form, "phone"),
                     acceptTerms: form.acceptTerms.checked };
   if (details.businessName.length < 2) return formError("join-error", "Enter your business name.");
   if (hideContactDetails(details.businessName).hidden) return formError("join-error", "Your business name can't include a phone number, email, website or social handle.");
@@ -145,7 +145,8 @@ function joinAsTailor(event) {
     admin_note: "", portfolio: [], phone: details.phone, location: "", demo: true, tailor_terms_accepted_at: new Date().toISOString()
   });
   db.designers.push(d);
-  db.prices = db.prices.concat(newPriceListFor(id));
+  d.currency_code = countryCurrency(details.country) || "GBP";   // their country's currency; they can change it in My profile
+  db.prices = db.prices.concat(newPriceListFor(id, null, d.currency_code));
   db.session.designerId = id;
   saveData();
   toast(`${d.business_name} created. It waits for approval in ${APPS.admin.name} → Tailors.`);

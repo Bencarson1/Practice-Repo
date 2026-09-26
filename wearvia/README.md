@@ -16,7 +16,7 @@ The same email can be used in more than one app, and each app keeps its own sign
 - **Tailors and designers** each run their own Business dashboard in NebedaHub Business: their quote requests, chats, orders, production, tailor team, prices, payments, weddings, ready-to-wear, deliveries and invoices. They only ever see their own.
 - **Customers find tailors near them** (📍 *Find tailors near me*): by their location or by country, city and postcode, filtered by distance, speciality, delivery, custom tailoring and rating. Each tailor has a public page with their portfolio and reviews, and *Request a quote* sends the order to that tailor.
 
-The first shop on NebedaHub is **Nebeda Threads** (Gillingham, Kent) — designer number one. New tailors join in NebedaHub Business and appear once the admin approves them in NebedaHub Admin. Customers press **Start an Order** and pick their tailor first (Find tailors near me → a tailor → *Request a quote*). Prices are in **£ (GBP)**.
+The first shop on NebedaHub is **Nebeda Threads** (Gillingham, Kent) — designer number one. New tailors join in NebedaHub Business and appear once the admin approves them in NebedaHub Admin. Customers press **Start an Order** and pick their tailor first (Find tailors near me → a tailor → *Request a quote*). NebedaHub works worldwide: every tailor and fabric seller has their own currency (see [Worldwide](#worldwide-currencies-yards-or-metres-phones-and-dates)); everything from before is in **£ (GBP)**.
 
 It's plain HTML, CSS and JavaScript. There is nothing to install and no build step.
 The look and the customer order flow come from `wearvia-prototype.html`; the full plan is in [`WEARVIA-SPEC.md`](../WEARVIA-SPEC.md).
@@ -52,6 +52,17 @@ Each app is opened at its own address (there's no switch between them). The demo
 - **Approving:** the admin sees **NebedaHub Admin → Tailors**: approve, hide (with a note the tailor sees) or put back; and **Admin → Specialities** to add specialities. Until approved, a tailor can set everything up but customers can't find them or send them requests.
 - **Privacy:** a tailor who doesn't show their exact address is placed about 1 km from it and shown with only their postcode district (e.g. "SE15"); their exact address, postcode and position are never sent to anyone but them and the admin.
 - **Demo:** sample tailors in London, Manchester, Lagos and Abuja, marked *(demo)*, plus one waiting for approval. They only exist in the demo — never in the real database.
+
+## Worldwide: currencies, yards or metres, phones and dates
+
+- **Currencies.** Every tailor, fabric seller, price, fabric, order, invoice and payment has a currency (ISO code: GBP, NGN, GHS, USD, EUR, CAD, ZAR, KES …). A new tailor or seller gets their country's currency and can change it in *Business → My profile* or the seller's *Shop profile* (their prices are converted at that day's rate and tidied). Money is written the currency's own way: **£1,250**, **₦250,000**, **$1,250.00**, GH₵1,250.00, KSh 1,250.00. Everything that was in the database before is GBP, and its money never changed.
+- **Quotes are in the tailor's currency.** When a tailor quotes fabric from a seller who uses another currency (a London tailor and a Lagos seller, say), **the database** converts the fabric cost when the quote is sent (`wearvia_send_quote`), saves the exchange rate and its date on the order, and the quote says so: *"4.5 yd × ₦15,000 = ₦67,500 · £1 = ₦1,752.98 on 25 Sep 2026"*. The customer pays the tailor's currency; the seller's order line stays in naira, so the seller is paid what they asked. Walk-in orders work the same way.
+- **Exchange rates.** One rate per currency (against the US dollar) in the `exchange_rates` table, updated every day by the GitHub Action **Exchange rates** (`scripts/update-exchange-rates.mjs`) from free feeds that include NGN and GHS (open.er-api.com, with fawazahmed0/currency-api as a back-up). A quote is refused if the rates are more than a week old, rather than use a stale rate. Customers see an **approximate** price in their own currency after a price in another one — *"₦15,000 / yd ≈ £9"* — always marked "≈" with a note that it's approximate and what they'll actually pay in.
+- **Yards or metres.** Fabric stock is always stored in yards. Tailors and sellers in the UK, Nigeria, Ghana and the USA see and type yards; everyone else sees and types metres (1 yd = 0.9144 m exactly — the database converts). The marketplace shows each fabric per yard or metre to match the tailor the customer is ordering from.
+- **Inches or centimetres.** Customers choose (on the measurements screen, or in Profile); measurements are stored in inches. Tailors see both.
+- **Phone numbers** have a country code picker (sign-up, joining as a tailor, seller shop profile, walk-in customers, team members, the customer's profile) and are saved as e.g. *+234 803 555 0142*.
+- **Dates and times** show in the viewer's own format and time zone (chat times, due dates, invoices).
+- **Dashboard totals** are kept per currency and shown side by side (*£1,250 · ₦250,000*) — never added together.
 
 ## Keeping orders on NebedaHub
 
@@ -149,9 +160,9 @@ The app won't let anyone skip a step: for example, nobody can pay before the quo
 |-----|--------------|
 | Sell on NebedaHub | Create a seller profile, or sign in as an existing shop (demo — no passwords yet) |
 | My fabrics | The seller's stall: every fabric with its status (*Live*, *Waiting for approval*, *Hidden*, *Sold out*). Edit, mark sold out / back in stock, or delete |
-| Add a fabric | Up to 5 photos (the first is the cover), name, type, colour, price per yard in £, yards in stock, smallest order (in yards) and a description |
+| Add a fabric | Up to 5 photos (the first is the cover), name, type, colour, price per yard (or metre) in the seller's own currency, stock, smallest order and a description |
 | Orders | Every order that used the seller's fabric: yards, price, who it's for (first name only) and where to send it. *Mark as sent* when it's posted |
-| Shop profile | Shop name, location, phone, delivery time and logo |
+| Shop profile | Shop name, country, location, phone (with country code), currency, delivery time and logo |
 
 How approval works: new fabrics wait for the NebedaHub admin to approve them (NebedaHub Admin → Fabric sellers) before customers see them. Changing a live fabric's photos, name, type, colour or description sends it back for a quick check; price and stock changes go live straight away. If the admin hides a fabric, the seller sees the reason on their stall.
 
@@ -189,10 +200,11 @@ Who can do what is decided by the database, not by the browser (see `supabase/se
 
 The app is already pointed at the NebedaHub Supabase project in `js/config.js` (the project URL and the *publishable* key — that key is meant to be public). **Never put the secret key in the app.**
 
-1. **Run the database scripts.** Supabase → *SQL Editor* → *New query* → paste all of `supabase/setup.sql` → *Run*. It adds the missing tables, columns, security rules and photo buckets without touching your existing data. Then open another *New query*, paste all of `supabase/yards.sql` → *Run*. It switches the fabric columns from metres to yards and converts what's in them (money already charged doesn't change). Then do the same with `supabase/prices.sql`: it adds the price list (Business → Prices), makes the database price every customer order, and removes old unused metre functions. Then `supabase/tailor-quote.sql`: customers' orders become quote requests that the tailor prices, adds the order chat and its private `chat-photos` bucket, and ends with a report where every line should say OK. Then `supabase/tailors-near-me.sql`: many tailors (profiles, countries, specialities, per-tailor price lists and notes, approvals, the distance search, the `designer-photos` bucket, and security rules so each tailor only sees their own). It ends with a report where every line should say OK. Then `supabase/no-leakage.sql`: the contact-details filter on chats, profiles and portfolios (the originals are kept for the admin), no public addresses, customers' contact details kept from tailors, the delivery and fitting details after a confirmed deposit, and the tailor terms — merge the app update straight after it. It ends with a report where every line should say OK. All six are safe to run again — but if you ever re-run setup.sql, prices.sql or tailor-quote.sql, run the files after it again, in order.
+1. **Run the database scripts.** Supabase → *SQL Editor* → *New query* → paste all of `supabase/setup.sql` → *Run*. It adds the missing tables, columns, security rules and photo buckets without touching your existing data. Then open another *New query*, paste all of `supabase/yards.sql` → *Run*. It switches the fabric columns from metres to yards and converts what's in them (money already charged doesn't change). Then do the same with `supabase/prices.sql`: it adds the price list (Business → Prices), makes the database price every customer order, and removes old unused metre functions. Then `supabase/tailor-quote.sql`: customers' orders become quote requests that the tailor prices, adds the order chat and its private `chat-photos` bucket, and ends with a report where every line should say OK. Then `supabase/tailors-near-me.sql`: many tailors (profiles, countries, specialities, per-tailor price lists and notes, approvals, the distance search, the `designer-photos` bucket, and security rules so each tailor only sees their own). It ends with a report where every line should say OK. Then `supabase/no-leakage.sql`: the contact-details filter on chats, profiles and portfolios (the originals are kept for the admin), no public addresses, customers' contact details kept from tailors, the delivery and fitting details after a confirmed deposit, and the tailor terms — merge the app update straight after it. It ends with a report where every line should say OK. Then `supabase/worldwide.sql`: currencies, the daily exchange rates, yards or metres, customers' country and units — merge the app update straight after it. Its report tries a London (GBP) and a Lagos (NGN) tailor quoting a Lagos seller's fabric and undoes it; every line should say OK. All seven are safe to run again — but if you ever re-run an earlier file, run the files after it again, in order.
 2. **Set the sign-in addresses.** Supabase → *Authentication* → *URL Configuration*: set *Site URL* to `https://nebedahub.com`, and under *Redirect URLs* add `https://nebedahub.com/**` (or each app on its own: `https://nebedahub.com/`, `https://nebedahub.com/business/`, `https://nebedahub.com/sell/`, `https://nebedahub.com/admin/`). Each app asks Supabase to send its sign-up and password emails back to itself, so the link opens the app the person used. If you changed the email templates (*Authentication* → *Emails*), their links must use `{{ .ConfirmationURL }}` (not `{{ .SiteURL }}`), or every link lands in the customer app.
-3. **Keep email confirmation on.** Supabase → *Authentication* → *Sign In / Providers* → *Email*: leave *Confirm email* switched on. Staff logins are only granted to confirmed emails.
-4. **Make yourself the owner.** Open the app, create an account with your email (choose *I want outfits made*) and confirm it. Then in the SQL Editor run
+3. **Turn on the daily exchange rates.** GitHub → the repository → *Settings → Secrets and variables → Actions → New repository secret*: name `SUPABASE_SECRET_KEY`, value the project's **secret** key (Supabase → *Project Settings → API Keys*). Then *Actions → Exchange rates → Run workflow* once. It runs by itself every morning after that. (The secret key is only ever used by that Action — never in the app.)
+4. **Keep email confirmation on.** Supabase → *Authentication* → *Sign In / Providers* → *Email*: leave *Confirm email* switched on. Staff logins are only granted to confirmed emails.
+5. **Make yourself the owner.** Open the app, create an account with your email (choose *I want outfits made*) and confirm it. Then in the SQL Editor run
    `select public.wearvia_make_owner('your-email@example.com');`
    Then sign in to NebedaHub Admin at `https://nebedahub.com/admin/` with the same email.
 
@@ -210,7 +222,8 @@ wearvia/
 │   ├── prices.sql       Run after yards.sql: the price list, and orders priced by the database
 │   ├── tailor-quote.sql Run after prices.sql: quote requests, the tailor's quote, and the order chat
 │   ├── tailors-near-me.sql Run after tailor-quote.sql: many tailors, profiles, approvals, the distance search
-│   └── no-leakage.sql   Run last: hides contact details, delivery details after the deposit, tailor terms
+│   ├── no-leakage.sql   Run after tailors-near-me.sql: hides contact details, delivery details after the deposit, tailor terms
+│   └── worldwide.sql    Run last: currencies, daily exchange rates, yards or metres, inches or centimetres
 ├── tailors/             Pages for Google, built by scripts/build-tailor-pages.mjs (plus seo.css / seo.js)
 ├── tailor/              One page per approved tailor (built by the same script)
 ├── manifest.webmanifest, sw.js, icons/   Installable customer app; each app's icons are in icons/
@@ -224,6 +237,7 @@ wearvia/
     ├── data.js          Settings, the 16 order steps, sample data, saving/loading, helpers
     ├── tailors-data.js  Many tailors: lookups, each dashboard's own data and prices, demo tailors, demo search
     ├── countries.js     The country list for the demo (the live one is in the database)
+    ├── worldwide.js     Currencies and money, exchange rates, yards or metres, inches or cm, phone picker, local dates
     ├── geo.js           Location, distances, miles/km, postcode lookups (postcodes.io, OpenStreetMap)
     ├── tailors.js       Find tailors near me, tailor pages
     ├── tailor-join.js   NebedaHub Business before you're a tailor: welcome page and Create your tailor profile
@@ -268,12 +282,11 @@ Open `js/data.js` and change the settings at the top:
 ```js
 const APP_NAME = "NebedaHub";          // the platform name
 const SHOP_NAME = "Nebeda Threads";  // the first shop using it
-const CURRENCY = "£";
 const DEPOSIT_RATE = 0.6;            // 60% deposit
 const DELIVERY_FEE = 15;
 ```
 
-Tailoring prices (and the typical yards used as a starting point for walk-in orders), embroidery prices and colours are in the lists just below. Fabric is sold by the yard; the low-stock warning level is `LOW_STOCK_YARDS` (10). To change the look, edit the colours at the top of `css/style.css` (for example `--gold` and `--navy`).
+Tailoring prices (and the typical yards used as a starting point for walk-in orders), embroidery prices and colours are in the lists just below — NebedaHub's starting prices, in pounds; a new tailor's list starts in their own currency, converted. Fabric stock is kept in yards; the low-stock warning level is `LOW_STOCK_YARDS` (10). Currencies, which countries use yards and the demo's sample exchange rates are in `js/worldwide.js` (the live ones are in the database). To change the look, edit the colours at the top of `css/style.css` (for example `--gold` and `--navy`).
 
 If you change the sample data in `data.js`, click **Reset to sample data** in the app to load it.
 

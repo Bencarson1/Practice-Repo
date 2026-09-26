@@ -170,19 +170,37 @@ function bizPrices() {
   return pricesOf(bizDesignerId());
 }
 
-// Makes the quote maths (OUTFITS, EMBROIDERY, DELIVERY_FEE) use this tailor's prices
+// Makes the quote maths (OUTFITS, EMBROIDERY, DELIVERY_FEE) use this tailor's
+// prices, in this tailor's currency. A price still in another currency is
+// converted at today's rate, as the database does when it prices a quote.
 function usePricesOf(designerId) {
+  const currency = designerCurrency(designerById(designerId) || mainDesigner());
+  const fromPounds = startingPriceIn(currency);
   DEFAULT_PRICES.forEach(p => {
-    if (p.kind === "outfit") { const o = OUTFITS.find(x => x.name === p.name); if (o) { o.tailoring = p.price; o.yards = p.yards; } }
-    else if (p.kind === "embroidery") { const e = EMBROIDERY.find(x => x.name === p.name); if (e) e.price = p.price; }
-    else DELIVERY_FEE = p.price;
+    const price = fromPounds(p.price);
+    if (p.kind === "outfit") { const o = OUTFITS.find(x => x.name === p.name); if (o) { o.tailoring = price; o.yards = p.yards; } }
+    else if (p.kind === "embroidery") { const e = EMBROIDERY.find(x => x.name === p.name); if (e) e.price = price; }
+    else DELIVERY_FEE = price;
   });
-  applyPriceList(pricesOf(designerId));
+  applyPriceList(pricesOf(designerId).map(p => {
+    if (!p.currency_code || p.currency_code === currency) return p;
+    const converted = convertMoney(p.price, p.currency_code, currency);
+    return Object.assign({}, p, { price: converted == null ? p.price : converted });
+  }));
 }
 
-// A starting price list for a new tailor
-function newPriceListFor(designerId, prefix) {
-  return defaultPriceList().map((p, i) => Object.assign(p, { id: `${prefix || "PL"}-${designerId}-${i + 1}`, designer_id: designerId }));
+// NebedaHub's starting prices (in pounds) in another currency, tidied (like wv_seed_price_list)
+function startingPriceIn(currency) {
+  const rate = fxRate("GBP", currency);
+  return price => currency === "GBP" || rate == null ? price : nicePrice(price * rate, currency);
+}
+
+// A starting price list for a new tailor, in their currency
+function newPriceListFor(designerId, prefix, currency) {
+  const code = currency || "GBP";
+  const convert = fxRate("GBP", code) == null ? (x => x) : startingPriceIn(code);
+  return defaultPriceList().map((p, i) => Object.assign(p, { id: `${prefix || "PL"}-${designerId}-${i + 1}`, designer_id: designerId,
+    price: convert(p.price), currency_code: fxRate("GBP", code) == null ? "GBP" : code }));
 }
 
 // ---- Each tailor's own notes about a customer ----
@@ -336,7 +354,11 @@ const DEMO_TAILORS = [
   { id: "D9", business_name: "Camden Bespoke (demo, waiting for approval)", country_code: "GB", city: "London", postcode: "NW1 8AH", address_line: "Camden Lock",
     latitude: 51.5410, longitude: -0.1460, show_exact_address: false, speciality_tags: ["Custom design", "Women's dresses"], admin_status: "pending",
     delivery_available: true, custom_orders: true, rating: null, review_count: 0, pattern: ["adire", ["#1e3a5f", "#efe6d2", "#1b1b1b"]],
-    description: "A new tailor waiting for the admin to approve them — try approving it in NebedaHub Admin → Tailors." }
+    description: "A new tailor waiting for the admin to approve them — try approving it in NebedaHub Admin → Tailors." },
+  { id: "D10", business_name: "Westlands Tailors Nairobi (demo)", country_code: "KE", city: "Nairobi", postcode: "00800", address_line: "Woodvale Grove",
+    latitude: -1.2635, longitude: 36.8030, show_exact_address: false, speciality_tags: ["Suits", "Kaftan", "Custom design"],
+    delivery_available: true, custom_orders: true, rating: 4.6, review_count: 14, pattern: ["kente", ["#1d7a5a", "#c9a227", "#1b1b1b"]],
+    description: "Suits and kitenge outfits made in Westlands. Fabric is measured in metres and priced in Kenyan shillings." }
 ];
 
 const DEMO_REVIEW_TEXTS = [
@@ -348,6 +370,7 @@ function demoTailor(t) {
   const d = Object.assign({
     location: "", profile_image: `logo:${initialsOf(t.business_name.replace(/\(.*\)/, ""))}:${hexNoHash(t.pattern[1][0])}`,
     delivery_time: "7–14 days", starting_price: null, commission_rate: 0, admin_status: "approved", admin_note: "", demo: true,
+    currency_code: countryCurrency(t.country_code) || "GBP",
     tailor_terms_accepted_at: "2026-09-01T09:00:00Z",
     portfolio: samplePhotos(t.pattern[0], t.pattern[1], 3).map((image, i) => ({ id: `${t.id}-P${i + 1}`, image, title: ["Made to measure", "Detail", "Finished look"][i] })),
     sample_reviews: t.review_count ? DEMO_REVIEW_TEXTS.slice(0, Math.min(3, t.review_count)).map(([text, who], i) => ({ rating: Math.max(3, Math.round(t.rating) - (i === 2 ? 1 : 0)), text, who })) : []
@@ -360,7 +383,7 @@ function demoTailor(t) {
 function addDemoTailors(data) {
   const main = data.designers[0];
   Object.assign(main, {
-    slug: main.slug || "nebeda-threads", country_code: "GB", city: "Gillingham", postcode: main.postcode || "ME7 1AA",
+    slug: main.slug || "nebeda-threads", country_code: "GB", currency_code: main.currency_code || "GBP", city: "Gillingham", postcode: main.postcode || "ME7 1AA",
     address_line: main.address_line || "", latitude: 51.3887, longitude: 0.5485, show_exact_address: false,
     speciality_tags: ["Agbada", "Wedding outfits", "Custom design"], delivery_available: true, custom_orders: true,
     admin_status: "approved", admin_note: "", profile_image: main.profile_image || "logo:NT:1e2a44",
@@ -375,7 +398,7 @@ function addDemoTailors(data) {
     if (data.designers.some(d => d.id === t.id)) return;
     const d = refreshDesignerPublic(demoTailor(t));
     data.designers.push(d);
-    data.prices = data.prices.concat(newPriceListFor(d.id));
+    data.prices = data.prices.concat(newPriceListFor(d.id, null, d.currency_code));
   });
   db = previous;
   data.demo_tailors_added = true;

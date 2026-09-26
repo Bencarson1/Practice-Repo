@@ -7,7 +7,7 @@
 const APP_NAME = "NebedaHub";        // the platform name shown in the app
 const APP_TAGLINE = "Everything Fashion, All in One Place.";  // shown under the name (home, sign-in, tailor pages)
 const SHOP_NAME = "Nebeda Threads";  // the first shop (designer number one) on NebedaHub; every tailor has their own name
-const CURRENCY = "£";
+// Money: every tailor, seller, price and order has its own currency (worldwide.js)
 const STORAGE_KEY = "wearvia-app-v2";
 const DEPOSIT_RATE = 0.6;            // 60% deposit, balance after quality control
 let DELIVERY_FEE = 15;               // starting price; the real one is in the price list (below)
@@ -143,29 +143,31 @@ const MEASUREMENT_FIELDS = [
 
 // ---- Small helper functions used by every section ----
 
+// Today in this device's own time zone (worldwide.js)
 function today() {
-  return new Date().toISOString().slice(0, 10);
+  return localDay(new Date());
 }
 
 function addDays(days, from) {
   const d = from ? new Date(from + "T12:00:00") : new Date();
   d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+  return localDay(d);
 }
 
 function thisYear() {
   return String(new Date().getFullYear());
 }
 
+// A date in the viewer's own format (26 Sept 2026, Sep 26, 2026 …) and time zone
 function formatDate(iso) {
-  if (!iso) return "—";
-  return new Date(iso.slice(0, 10) + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  const date = toLocalDate(iso);
+  if (!date) return "—";
+  return date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
 }
 
-function money(amount) {
-  const value = Math.round(Number(amount || 0) * 100) / 100;
-  const hasPence = Math.abs(value % 1) > 0.001;
-  return CURRENCY + value.toLocaleString("en-GB", { minimumFractionDigits: hasPence ? 2 : 0, maximumFractionDigits: 2 });
+// £1,250 · ₦250,000 · $1,250.00 — in the given currency (the screen's tailor's if none is given)
+function money(amount, currency) {
+  return formatMoney(amount, currency || screenCurrency());
 }
 
 function capitalize(text) {
@@ -196,27 +198,45 @@ function embroideryPrice(name) {
   return found ? found.price : 0;
 }
 
-// Yards × price per yard, rounded to the penny the same way the database does
+// Length × the seller's price, rounded the way the seller's currency is written
 // (worked out in whole pence so 4.5 yd × £41.15 is £185.18, not £185.17)
-function fabricCostFor(yards, pricePerYard) {
-  return Math.round(Math.round(yards * 100) * Math.round(pricePerYard * 100) / 100) / 100;
+function fabricCostFor(length, pricePerUnit, currency) {
+  const f = 10 ** currencyInfo(currency || "GBP").decimals;
+  return Math.round(Math.round(length * 100) / 100 * pricePerUnit * f + 1e-6) / f;
 }
 
-// Itemised quotation: fabric, tailoring, embroidery, delivery → total (screen 8).
-// ownPrices lets the team charge their own price on a walk-in order,
-// e.g. { tailoring: 250 }; anything left out comes from the price list.
-function computeQuote(outfit, embroidery, fabric, yards, ownPrices) {
+// Itemised quotation: fabric, tailoring, embroidery, delivery → total (screen 8),
+// in the tailor's currency — the same sums the database does (wearvia_send_quote).
+// The fabric is priced in the seller's currency and converted at today's rate.
+// length is in yards, or in metres when ctx.unit is "m". ownPrices lets the team
+// charge their own price on a walk-in order, e.g. { tailoring: 250 }; anything
+// left out comes from the price list.
+// ctx: { currency: the tailor's currency, unit: "yd" or "m" } (the screen's tailor by default)
+function computeQuote(outfit, embroidery, fabric, length, ownPrices, ctx) {
   const own = ownPrices || {};
+  const currency = (ctx && ctx.currency) || screenCurrency();
+  const unit = (ctx && ctx.unit) || "yd";
   const pick = (value, fallback) => value == null || value === "" || !(Number(value) >= 0) ? fallback : Number(value);
-  const fabricCost = fabricCostFor(yards, fabric.price_per_yard);
+  const fabricCurrencyCode = fabricCurrency(fabric);
+  const perUnit = pricePerUnit(fabric.price_per_yard, unit);
+  const fabricAmount = fabricCostFor(length, perUnit, fabricCurrencyCode);
+  const rate = fxRate(fabricCurrencyCode, currency);
+  const fabricCost = rate == null ? null : roundMoney(fabricAmount * rate, currency);
+  let label = `Fabric — ${fabric.name} (${Math.round(length * 100) / 100} ${unit} × ${money(perUnit, fabricCurrencyCode)}`;
+  if (fabricCurrencyCode !== currency && rate != null) {
+    label += ` = ${money(fabricAmount, fabricCurrencyCode)} · ${rateText(rate, fabricCurrencyCode, currency)} on ${formatDate(ratesDate())}`;
+  }
   const lines = [
-    { label: `Fabric — ${fabric.name} (${yards} yd × ${money(fabric.price_per_yard)})`, amount: fabricCost },
+    Object.assign({ label: label + ")", amount: fabricCost, kind: "fabric", fabric_currency: fabricCurrencyCode, fabric_amount: fabricAmount },
+      fabricCurrencyCode !== currency ? { exchange_rate: rate, rate_date: ratesDate() } : {}),
     { label: `Tailoring (${outfit})`, amount: pick(own.tailoring, findOutfit(outfit).tailoring) },
     { label: `Embroidery (${embroidery})`, amount: pick(own.embroidery, embroideryPrice(embroidery)) },
     { label: "Delivery", amount: pick(own.delivery, DELIVERY_FEE) }
   ];
-  const total = lines.reduce((sum, line) => sum + line.amount, 0);
-  return { lines, total, fabricCost };
+  const total = fabricCost == null ? null : roundMoney(lines.reduce((sum, line) => sum + line.amount, 0), currency);
+  return { lines, total, fabricCost, fabricAmount, fabricCurrency: fabricCurrencyCode, currency, unit, length,
+           yards: yardsFrom(length, unit), rate: fabricCurrencyCode === currency ? null : rate,
+           rateDate: fabricCurrencyCode === currency ? null : ratesDate(), noRate: rate == null };
 }
 
 // What delivery cost on an order (its quote line; older orders use today's price)
@@ -256,33 +276,33 @@ function buildSampleData() {
       {
         id: "D1", business_name: SHOP_NAME, location: "Gillingham, Kent",
         rating: 4.9, review_count: 128, speciality_tags: ["Agbada", "Wedding", "Bespoke"],
-        commission_rate: 0, delivery_time: "7–14 days"
+        commission_rate: 0, delivery_time: "7–14 days", currency_code: "GBP"
       }
     ],
 
     suppliers: [
-      { id: "S1", name: "ABC Fabrics", location: "Lagos", delivery_estimate: "1–3 days", rating: 4.8 },
-      { id: "S2", name: "Lagos Wax Prints", location: "Lagos", delivery_estimate: "2–4 days", rating: 4.6 },
-      { id: "S3", name: "Oyo Heritage Weavers", location: "Iseyin, Oyo", delivery_estimate: "2–3 days", rating: 4.9 },
-      { id: "S4", name: "Bella Lace Co", location: "Kano", delivery_estimate: "3–5 days", rating: 4.5 },
-      { id: "S5", name: "Manchester Textiles", location: "Manchester", delivery_estimate: "Next day", rating: 4.7 },
-      { id: "S6", name: "Highland Mills", location: "Galashiels", delivery_estimate: "2–3 days", rating: 4.8 },
-      { id: "S7", name: "Riverside Linens", location: "Belfast", delivery_estimate: "2–3 days", rating: 4.4 },
-      { id: "S8", name: "Silk Road Traders", location: "London", delivery_estimate: "Next day", rating: 4.6 }
+      { id: "S1", name: "ABC Fabrics", location: "Lagos", delivery_estimate: "1–3 days", rating: 4.8, currency_code: "GBP" },
+      { id: "S2", name: "Lagos Wax Prints", location: "Lagos", delivery_estimate: "2–4 days", rating: 4.6, currency_code: "GBP" },
+      { id: "S3", name: "Oyo Heritage Weavers", location: "Iseyin, Oyo", delivery_estimate: "2–3 days", rating: 4.9, currency_code: "GBP" },
+      { id: "S4", name: "Bella Lace Co", location: "Kano", delivery_estimate: "3–5 days", rating: 4.5, currency_code: "GBP" },
+      { id: "S5", name: "Manchester Textiles", location: "Manchester", delivery_estimate: "Next day", rating: 4.7, currency_code: "GBP" },
+      { id: "S6", name: "Highland Mills", location: "Galashiels", delivery_estimate: "2–3 days", rating: 4.8, currency_code: "GBP" },
+      { id: "S7", name: "Riverside Linens", location: "Belfast", delivery_estimate: "2–3 days", rating: 4.4, currency_code: "GBP" },
+      { id: "S8", name: "Silk Road Traders", location: "London", delivery_estimate: "Next day", rating: 4.6, currency_code: "GBP" }
     ],
 
     // Price is per yard in pounds (£); stock is in yards
     fabrics: [
-      { id: "F1", name: "Italian Cashmere",   category: "Cashmere", color: "#1e3a5f", price_per_yard: 41, supplier_id: "S1", yards_available: 80,  min_order_yards: 2 },
-      { id: "F2", name: "Ankara Print",       category: "Ankara",   color: "#c9a24a", price_per_yard: 7.5,  supplier_id: "S2", yards_available: 130, min_order_yards: 2 },
-      { id: "F3", name: "Aso Oke",            category: "Aso Oke",  color: "#7c1f2e", price_per_yard: 23, supplier_id: "S3", yards_available: 44,  min_order_yards: 3 },
-      { id: "F4", name: "Gold Lace",          category: "Lace",     color: "#8a6d1f", price_per_yard: 20, supplier_id: "S4", yards_available: 7,   min_order_yards: 2 },
-      { id: "F5", name: "Navy Senator",       category: "Senator",  color: "#20304a", price_per_yard: 8,  supplier_id: "S5", yards_available: 130, min_order_yards: 2 },
-      { id: "F6", name: "Sunburst Ankara",    category: "Ankara",   color: "#e8871e", price_per_yard: 9, supplier_id: "S2", yards_available: 48,  min_order_yards: 2 },
-      { id: "F7", name: "Midnight Navy Wool", category: "Wool",     color: "#1f2a44", price_per_yard: 40, supplier_id: "S6", yards_available: 30,  min_order_yards: 2 },
-      { id: "F8", name: "Royal Gold Aso Oke", category: "Aso Oke",  color: "#c9a227", price_per_yard: 45, supplier_id: "S3", yards_available: 22,  min_order_yards: 3 },
-      { id: "F9", name: "Classic White Linen",category: "Linen",    color: "#f4f1ea", price_per_yard: 16, supplier_id: "S7", yards_available: 60, min_order_yards: 1 },
-      { id: "F10", name: "Emerald Silk",      category: "Silk",     color: "#1d7a5a", price_per_yard: 35, supplier_id: "S8", yards_available: 14,  min_order_yards: 1 }
+      { id: "F1", name: "Italian Cashmere",   category: "Cashmere", color: "#1e3a5f", price_per_yard: 41, supplier_id: "S1", yards_available: 80,  min_order_yards: 2, currency_code: "GBP" },
+      { id: "F2", name: "Ankara Print",       category: "Ankara",   color: "#c9a24a", price_per_yard: 7.5,  supplier_id: "S2", yards_available: 130, min_order_yards: 2, currency_code: "GBP" },
+      { id: "F3", name: "Aso Oke",            category: "Aso Oke",  color: "#7c1f2e", price_per_yard: 23, supplier_id: "S3", yards_available: 44,  min_order_yards: 3, currency_code: "GBP" },
+      { id: "F4", name: "Gold Lace",          category: "Lace",     color: "#8a6d1f", price_per_yard: 20, supplier_id: "S4", yards_available: 7,   min_order_yards: 2, currency_code: "GBP" },
+      { id: "F5", name: "Navy Senator",       category: "Senator",  color: "#20304a", price_per_yard: 8,  supplier_id: "S5", yards_available: 130, min_order_yards: 2, currency_code: "GBP" },
+      { id: "F6", name: "Sunburst Ankara",    category: "Ankara",   color: "#e8871e", price_per_yard: 9, supplier_id: "S2", yards_available: 48,  min_order_yards: 2, currency_code: "GBP" },
+      { id: "F7", name: "Midnight Navy Wool", category: "Wool",     color: "#1f2a44", price_per_yard: 40, supplier_id: "S6", yards_available: 30,  min_order_yards: 2, currency_code: "GBP" },
+      { id: "F8", name: "Royal Gold Aso Oke", category: "Aso Oke",  color: "#c9a227", price_per_yard: 45, supplier_id: "S3", yards_available: 22,  min_order_yards: 3, currency_code: "GBP" },
+      { id: "F9", name: "Classic White Linen",category: "Linen",    color: "#f4f1ea", price_per_yard: 16, supplier_id: "S7", yards_available: 60, min_order_yards: 1, currency_code: "GBP" },
+      { id: "F10", name: "Emerald Silk",      category: "Silk",     color: "#1d7a5a", price_per_yard: 35, supplier_id: "S8", yards_available: 14,  min_order_yards: 1, currency_code: "GBP" }
     ],
 
     staff: [
@@ -380,7 +400,7 @@ function buildSampleData() {
 
   samples.forEach(s => {
     const fabric = data.fabrics.find(f => f.id === s.fabric);
-    const quote = computeQuote(s.outfit, s.embroidery, fabric, s.yards);
+    const quote = computeQuote(s.outfit, s.embroidery, fabric, s.yards, null, { currency: "GBP", unit: "yd" });
     const created = addDays(s.created);
     const deposit = depositFor(quote.total);
     const stageIndex = STAGES.findIndex(st => st.key === s.stage);
@@ -393,6 +413,8 @@ function buildSampleData() {
       measurement_profile_id: measurementProfile.id,
       fabric_id: fabric.id, fabric_supplier_id: fabric.supplier_id, fabric_yards: s.yards, fabric_cost: quote.fabricCost,
       line_items: quote.lines, quote_total: quote.total,
+      currency_code: "GBP", fabric_currency_code: "GBP", fabric_price_per_yard: fabric.price_per_yard, fabric_cost_in_fabric_currency: quote.fabricCost,
+      exchange_rate: null, exchange_rate_date: null, fabric_unit: "yd",
       deposit_amount: deposit, deposit_paid_at: created, balance_paid_at: null,
       stage: s.stage,
       assigned_staff: {
@@ -405,13 +427,13 @@ function buildSampleData() {
     };
     data.orders.push(order);
 
-    data.payments.push({ id: "P" + (++data.counters.payment), order_id: order.id, amount: deposit, method: s.method, kind: "Deposit", date: created, status: "confirmed" });
+    data.payments.push({ id: "P" + (++data.counters.payment), order_id: order.id, amount: deposit, method: s.method, kind: "Deposit", date: created, status: "confirmed", currency_code: "GBP" });
     if (s.paidInFull) {
       const balanceDate = addDays(s.due - 3);
-      data.payments.push({ id: "P" + (++data.counters.payment), order_id: order.id, amount: quote.total - deposit, method: s.method, kind: "Balance", date: balanceDate, status: "confirmed" });
+      data.payments.push({ id: "P" + (++data.counters.payment), order_id: order.id, amount: quote.total - deposit, method: s.method, kind: "Balance", date: balanceDate, status: "confirmed", currency_code: "GBP" });
       order.balance_paid_at = balanceDate;
     }
-    data.invoices.push({ id: "INV-" + order.id.split("-")[1], order_id: order.id, line_items: quote.lines, total: quote.total, created_at: created });
+    data.invoices.push({ id: "INV-" + order.id.split("-")[1], order_id: order.id, line_items: quote.lines, total: quote.total, created_at: created, currency_code: "GBP" });
 
     if (s.delivery) {
       data.deliveries.push({
@@ -444,6 +466,7 @@ function addSampleQuoteRequests(data) {
       id, customer_id: customer, designer_id: "D1", outfit_type: outfit, colour, embroidery, sleeve_style: sleeve, neck_style: neck,
       concept_variation: 1, concept_image_url: "", inspiration: null, measurement_profile_id: profile.id,
       fabric_id: f.id, fabric_supplier_id: f.supplier_id, fabric_yards: 0, fabric_cost: 0, line_items: [], quote_total: 0,
+      currency_code: "GBP", fabric_currency_code: f.currency_code || "GBP", fabric_unit: "yd",
       deposit_amount: 0, deposit_paid_at: null, balance_paid_at: null, stage: "tailor_assigned",
       assigned_staff: { cutting: "", sewing: "", embroidery: "", finishing: "", quality_control: "" },
       review_rating: null, review_text: "", quote_status: "requested", quoted_at: null, accepted_at: null, fabric_problem: null,
@@ -452,11 +475,14 @@ function addSampleQuoteRequests(data) {
   };
   const tunde = request("NT-1009", "C2", "Agbada", "#1e2a44", "Gold", "Wide", "Round", "F8", -1);
   const tosin = request("NT-1010", "C5", "Bubu", "#7c1f2e", "Silver", "Wide", "V-neck", "F6", -3);
-  data.orders.push(tunde, tosin);
+  // A London tailor asked to quote aso oke from a Lagos seller who prices in naira
+  const grace = Object.assign(request("NT-1011", "C3", "Agbada", "#c9a24a", "Gold", "Wide", "Round", "F21", -1), { designer_id: "D2" });
+  data.orders.push(tunde, tosin, grace);
   // Tosin's quote has been sent: 6 yd of Sunburst Ankara
   const f6 = data.fabrics.find(x => x.id === "F6");
-  const quote = computeQuote("Bubu", "Silver", f6, 6);
+  const quote = computeQuote("Bubu", "Silver", f6, 6, null, { currency: "GBP", unit: "yd" });
   Object.assign(tosin, { fabric_yards: 6, fabric_cost: quote.fabricCost, line_items: quote.lines, quote_total: quote.total,
+    fabric_price_per_yard: f6.price_per_yard, fabric_cost_in_fabric_currency: quote.fabricCost,
     deposit_amount: depositFor(quote.total), quote_status: "quoted", quoted_at: addDays(-2) });
 
   const welcome = `Thanks — your request is with ${shop}. We'll look at your design, style photos and measurements, and chat with you here to agree how many yards of fabric you need. Then we'll send your quote. Nothing is bought or charged until you accept it.`;
@@ -466,11 +492,13 @@ function addSampleQuoteRequests(data) {
     msg("NT-1010", "system", APP_NAME, welcome, at(-3, "10:02")),
     msg("NT-1010", "customer", "Tosin Adeyemi", "I'd like the bubu to reach the floor, and wide sleeves that cover my elbows.", at(-3, "10:04")),
     msg("NT-1010", "team", "Mary at " + shop, "Lovely! For a floor-length bubu at your height you'll need 6 yards of the Sunburst Ankara. Sending your quote now.", at(-2, "09:15")),
-    msg("NT-1010", "system", APP_NAME, `Your quote is ready: Sunburst Ankara, 6 yd × ${money(f6.price_per_yard)} = ${money(quote.fabricCost)} · tailoring ${money(quote.lines[1].amount)} · embroidery ${money(quote.lines[2].amount)} · delivery ${money(quote.lines[3].amount)}. Total ${money(quote.total)}, deposit ${money(depositFor(quote.total))} (60%). Tap "Accept quote" to go ahead, or ask us a question here.`, at(-2, "09:16")),
+    msg("NT-1010", "system", APP_NAME, `Your quote is ready: Sunburst Ankara, 6 yd × ${money(f6.price_per_yard, "GBP")} = ${money(quote.fabricCost, "GBP")} · tailoring ${money(quote.lines[1].amount, "GBP")} · embroidery ${money(quote.lines[2].amount, "GBP")} · delivery ${money(quote.lines[3].amount, "GBP")}. Total ${money(quote.total, "GBP")}, deposit ${money(depositFor(quote.total), "GBP")} (60%). Tap "Accept quote" to go ahead, or ask us a question here.`, at(-2, "09:16")),
     msg("NT-1009", "system", APP_NAME, welcome, at(-1, "18:40")),
     msg("NT-1009", "customer", "Tunde Balogun", "It's for my brother's wedding in six weeks. I'm 6ft 3 — is 10 yards enough for a full agbada?", at(-1, "18:42")),
     msg("NT-1008", "team", "Mary at " + shop, "Your fitting is booked for Saturday at 11am. Please bring the shoes you'll wear on the day.", at(-2, "12:30")),
-    msg("NT-1008", "customer", "David Johnson", "Perfect, see you Saturday.", at(-2, "13:05"))
+    msg("NT-1008", "customer", "David Johnson", "Perfect, see you Saturday.", at(-2, "13:05")),
+    msg("NT-1011", "system", APP_NAME, welcome.replace(shop, "Peckham Suit Studio (demo)"), at(-1, "08:10")),
+    msg("NT-1011", "customer", "Grace Mensah", "Can you use this aso oke from Balogun Market? It's priced in naira — I'd like to pay you in pounds.", at(-1, "08:12"))
   ];
   data.chat_reads = [
     { order_id: "NT-1010", side: "team", last_read_at: at(-2, "09:16") },
@@ -624,7 +652,7 @@ function recordOrderPayment(order, amount, method, date, byTeam) {
   db.payments.push({
     id: nextPaymentId(), order_id: order.id, amount, method,
     kind: amount >= before ? "Balance" : "Part payment", date: date || today(),
-    status: byTeam ? "confirmed" : "awaiting_confirmation"
+    status: byTeam ? "confirmed" : "awaiting_confirmation", currency_code: orderCurrency(order)
   });
   refreshOrderPayments(order);
 }
@@ -718,10 +746,10 @@ function depositStarted(order) {
 }
 
 // "Italian Cashmere has sold out" — why a fabric can't be sold in this amount, or "" if it can
-function fabricProblemText(fabric, yards) {
+function fabricProblemText(fabric, yards, unit) {
   if (!fabric || fabric.deleted_at || fabric.status !== "approved") return `${fabric ? fabric.name : "That fabric"} is no longer on sale`;
   if (fabric.sold_out || fabric.yards_available < Math.max(fabric.min_order_yards || 0, 0.01)) return `${fabric.name} has sold out`;
-  if (yards && fabric.yards_available < yards) return `Only ${fabric.yards_available} yd of ${fabric.name} is left`;
+  if (yards && fabric.yards_available < yards) return `Only ${lengthText(fabric.yards_available, unit || "yd")} of ${fabric.name} is left`;
   return "";
 }
 
@@ -744,6 +772,8 @@ function requestQuote(details) {
     measurement_profile_id: details.profileId || null,
     fabric_id: fabric.id, fabric_supplier_id: fabric.supplier_id,
     fabric_yards: 0, fabric_cost: 0, line_items: [], quote_total: 0,
+    // In the tailor's currency; the seller's fabric is converted when the quote is sent
+    currency_code: designerCurrency(tailor), fabric_currency_code: fabricCurrency(fabric), fabric_unit: designerFabricUnit(tailor),
     deposit_amount: 0, deposit_paid_at: null, balance_paid_at: null,
     stage: "tailor_assigned",
     assigned_staff: { cutting: "", sewing: "", embroidery: "", finishing: "", quality_control: "" },
@@ -757,30 +787,43 @@ function requestQuote(details) {
   return order;
 }
 
-// Step 5: the team sends the quote — the yards they agreed with the customer,
-// and another fabric if they agreed one. The price is yards × the seller's
-// price per yard + tailoring + embroidery + delivery from the price list.
-// The database does this in live mode (wearvia_send_quote), so this returns a Promise.
-function sendQuote(order, fabricId, yards, note) {
-  if (Cloud.live) return Cloud.sendQuote(order, fabricId, yards, note);
+// Step 5: the team sends the quote — the length they agreed with the customer
+// (in yards, or metres for tailors in metre countries), and another fabric if
+// they agreed one. The price is the length × the seller's price, converted
+// into the tailor's currency at today's rate, + tailoring + embroidery +
+// delivery from the price list. The database does this in live mode
+// (wearvia_send_quote) and saves the rate on the order, so this returns a Promise there.
+function sendQuote(order, fabricId, length, note, unit) {
+  unit = unit === "m" ? "m" : "yd";
+  if (Cloud.live) return Cloud.sendQuote(order, fabricId, length, note, unit);
   const fabric = findFabric(fabricId || order.fabric_id);
-  yards = Math.round(Number(yards) * 100) / 100;
+  length = Math.round(Number(length) * 100) / 100;
+  const yards = yardsFrom(length, unit);
+  const words = unitWord(unit, true);
   if (isPlaced(order)) throw new Error(`The customer has already accepted the quote for ${order.id}. It can't be changed now.`);
   if (!fabric) throw new Error("Choose a fabric for the quote.");
-  if (!(yards > 0) || yards > 100 || Math.round(yards * 4) !== yards * 4) throw new Error("Enter the yards needed, in quarter yards (for example 4.5 or 5.25).");
+  if (!(length > 0) || length > 100 || Math.round(length * 4) !== length * 4) throw new Error(`Enter the ${words} needed, in quarters (for example 4.5 or 5.25).`);
   if (fabric.deleted_at || fabric.status !== "approved" || fabric.sold_out) throw new Error(`${fabric.name} isn't on sale any more. Choose another fabric.`);
-  if (yards < (fabric.min_order_yards || 0)) throw new Error(`The smallest order for ${fabric.name} is ${fabric.min_order_yards} yd.`);
-  if (yards > fabric.yards_available) throw new Error(`Only ${fabric.yards_available} yd of ${fabric.name} is left in stock.`);
+  if (yards < (fabric.min_order_yards || 0) - 0.005) throw new Error(`The smallest order for ${fabric.name} is ${lengthText(fabric.min_order_yards, unit)}.`);
+  if (yards > fabric.yards_available) throw new Error(`Only ${lengthText(fabric.yards_available, unit)} of ${fabric.name} is left in stock.`);
+  const tailor = designerById(order.designer_id);
+  const currency = designerCurrency(tailor);
   usePricesOf(order.designer_id);   // the order's own tailor's price list
-  const quote = computeQuote(order.outfit_type, order.embroidery, fabric, yards);
+  const quote = computeQuote(order.outfit_type, order.embroidery, fabric, length, null, { currency, unit });
+  if (quote.noRate) throw new Error(`There's no exchange rate for ${quote.fabricCurrency} yet, so ${quote.fabricCurrency} can't be converted to ${currency}.`);
   const deposit = depositFor(quote.total);
   Object.assign(order, {
     fabric_id: fabric.id, fabric_supplier_id: fabric.supplier_id, fabric_yards: yards, fabric_cost: quote.fabricCost,
     line_items: quote.lines, quote_total: quote.total, deposit_amount: deposit,
+    currency_code: currency, fabric_currency_code: quote.fabricCurrency, fabric_price_per_yard: fabric.price_per_yard,
+    fabric_cost_in_fabric_currency: quote.fabricAmount, exchange_rate: quote.rate, exchange_rate_date: quote.rateDate, fabric_unit: unit,
     quote_status: "quoted", quoted_at: today(), fabric_problem: null, updated_at: today()
   });
   if (note && note.trim()) addChatMessage(order, "team", note.trim(), []);
-  addSystemMessage(order, `Your quote is ready: ${fabric.name}, ${yards} yd × ${money(fabric.price_per_yard)} = ${money(quote.fabricCost)} · tailoring ${money(quote.lines[1].amount)} · embroidery ${money(quote.lines[2].amount)} · delivery ${money(quote.lines[3].amount)}. Total ${money(quote.total)}, deposit ${money(deposit)} (60%). Tap "Accept quote" to go ahead, or ask us a question here.`);
+  const fc = quote.fabricCurrency;
+  addSystemMessage(order, `Your quote is ready: ${fabric.name}, ${length} ${unit} × ${money(pricePerUnit(fabric.price_per_yard, unit), fc)} = ${money(quote.fabricAmount, fc)}`
+    + (quote.rate ? ` (${money(quote.fabricCost, currency)} at ${rateText(quote.rate, fc, currency)}, the exchange rate on ${formatDate(quote.rateDate)})` : "")
+    + ` · tailoring ${money(quote.lines[1].amount, currency)} · embroidery ${money(quote.lines[2].amount, currency)} · delivery ${money(quote.lines[3].amount, currency)}. Total ${money(quote.total, currency)}, deposit ${money(deposit, currency)} (60%). Tap "Accept quote" to go ahead, or ask us a question here.`);
   return order;
 }
 
@@ -794,7 +837,7 @@ function acceptQuote(order) {
   const shop = designerName(order.designer_id);
   if (quoteStatus(order) !== "quoted") throw new Error(`There's no quote to accept yet. ${shop} will send it in the chat.`);
   const fabric = findFabric(order.fabric_id);
-  const problem = fabricProblemText(fabric, order.fabric_yards);
+  const problem = fabricProblemText(fabric, order.fabric_yards, orderFabricUnit(order));
   if (problem) {
     order.quote_status = "requested";
     order.fabric_problem = problem;
@@ -807,8 +850,8 @@ function acceptQuote(order) {
   Object.assign(order, { quote_status: "accepted", accepted_at: today(), fabric_problem: null, updated_at: today() });
   if (!order.due_date || order.due_date < addDays(14)) order.due_date = addDays(14);
   recordFabricOrder(order); // the fabric seller sees it in their orders
-  if (!findInvoice(order.id)) db.invoices.push({ id: "INV-" + order.id.split("-")[1], order_id: order.id, line_items: order.line_items, total: order.quote_total, created_at: today() });
-  addSystemMessage(order, `Quote accepted. ${order.fabric_yards} yd of ${fabric.name} is bought for your outfit. Next: pay your deposit of ${money(order.deposit_amount)} and we'll start making it.`);
+  if (!findInvoice(order.id)) db.invoices.push({ id: "INV-" + order.id.split("-")[1], order_id: order.id, line_items: order.line_items, total: order.quote_total, created_at: today(), currency_code: orderCurrency(order) });
+  addSystemMessage(order, `Quote accepted. ${lengthText(order.fabric_yards, orderFabricUnit(order))} of ${fabric.name} is bought for your outfit. Next: pay your deposit of ${money(order.deposit_amount, orderCurrency(order))} and we'll start making it.`);
   return { ok: true };
 }
 
@@ -819,7 +862,7 @@ function noticeFabricProblems() {
   if (!db || !db.orders) return;
   quoteRequests().forEach(order => {
     if (order.fabric_problem) return;
-    const problem = fabricProblemText(findFabric(order.fabric_id), quoteStatus(order) === "quoted" ? order.fabric_yards : 0);
+    const problem = fabricProblemText(findFabric(order.fabric_id), quoteStatus(order) === "quoted" ? order.fabric_yards : 0, orderFabricUnit(order));
     if (!problem) return;
     const wasQuoted = quoteStatus(order) === "quoted";
     order.fabric_problem = problem;
@@ -877,8 +920,11 @@ function createPaidOrder(details) {
     inspiration: details.inspiration || null,   // customer's style photos, link and note (inspiration.js)
     measurement_profile_id: details.profileId || null,
     fabric_id: details.fabric.id, fabric_supplier_id: details.fabric.supplier_id,
-    fabric_yards: details.yards, fabric_cost: details.quote.fabricCost,
+    fabric_yards: details.quote.yards, fabric_cost: details.quote.fabricCost,
     line_items: details.quote.lines, quote_total: details.quote.total,
+    currency_code: details.quote.currency, fabric_currency_code: details.quote.fabricCurrency, fabric_price_per_yard: details.fabric.price_per_yard,
+    fabric_cost_in_fabric_currency: details.quote.fabricAmount, exchange_rate: details.quote.rate, exchange_rate_date: details.quote.rateDate,
+    fabric_unit: details.quote.unit,
     deposit_amount: details.deposit, deposit_paid_at: null, balance_paid_at: null,
     stage: "tailor_assigned",
     assigned_staff: autoAssignStaff(bizDesignerId()),
@@ -889,9 +935,9 @@ function createPaidOrder(details) {
   db.orders.push(order);
   db.payments.push({
     id: nextPaymentId(), order_id: id, amount: details.deposit, method: details.method, kind: "Deposit", date: today(),
-    status: details.confirmed ? "confirmed" : "awaiting_confirmation"
+    status: details.confirmed ? "confirmed" : "awaiting_confirmation", currency_code: order.currency_code
   });
-  db.invoices.push({ id: "INV-" + id.split("-")[1], order_id: id, line_items: order.line_items, total: order.quote_total, created_at: today() });
+  db.invoices.push({ id: "INV-" + id.split("-")[1], order_id: id, line_items: order.line_items, total: order.quote_total, created_at: today(), currency_code: order.currency_code });
   recordFabricOrder(order); // the fabric seller sees it in their orders
   refreshOrderPayments(order);
   return order;
@@ -904,7 +950,7 @@ function advanceOrder(order) {
   if (!next) return "This order has been delivered.";
   if (depositAwaiting(order)) return `The deposit for ${order.id} hasn't been confirmed yet. Confirm it under Payments first.`;
   if (next.key === "balance_paid") {
-    if (balanceOwed(order) > 0) return `Waiting for the balance of ${money(balanceOwed(order))} before this can move on.`;
+    if (balanceOwed(order) > 0) return `Waiting for the balance of ${money(balanceOwed(order), orderCurrency(order))} before this can move on.`;
     order.balance_paid_at = order.balance_paid_at || today();
   }
   if (next.key === "delivered") {
@@ -986,10 +1032,23 @@ function recentReviews(count, designerId) {
     .concat(d && d.sample_reviews ? d.sample_reviews : []).slice(0, count);
 }
 
+// What a customer has spent, per currency (never added across currencies)
 function customerSpend(customerId) {
-  const orderPayments = customerOrders(customerId).reduce((total, o) => total + amountPaid(o.id), 0);
-  const shopSales = (inBusiness() ? bizRtwSales() : db.rtw_sales).filter(s => s.customer_id === customerId && isConfirmed(s)).reduce((total, s) => total + s.price, 0);
-  return orderPayments + shopSales;
+  const totals = moneyTotals();
+  customerOrders(customerId).forEach(o => addMoney(totals, orderCurrency(o), amountPaid(o.id)));
+  (inBusiness() ? bizRtwSales() : db.rtw_sales).filter(s => s.customer_id === customerId && isConfirmed(s))
+    .forEach(s => addMoney(totals, rtwSaleCurrency(s), s.price));
+  return totals;
+}
+
+function rtwSaleCurrency(sale) {
+  if (sale.currency_code) return sale.currency_code;
+  const item = db.ready_to_wear.find(i => i.id === sale.item_id);
+  return rtwCurrency(item);
+}
+
+function rtwCurrency(item) {
+  return (item && item.currency_code) || designerCurrency(designerById(item && item.designer_id) || mainDesigner());
 }
 
 function favouriteColour(customerId) {

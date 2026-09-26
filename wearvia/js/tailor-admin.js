@@ -77,8 +77,16 @@ function renderMyProfile() {
         <label>City or town<input name="city" required maxlength="60" value="${escapeHtml(d.city || "")}"></label>
         <label>Postcode<input name="postcode" maxlength="12" value="${escapeHtml(d.postcode || "")}" autocomplete="postal-code"></label>
         <label class="wide">Full address <small class="muted">(optional)</small><input name="address" maxlength="120" value="${escapeHtml(d.address_line || "")}" autocomplete="street-address"></label>
+        <label>Phone <small class="muted">(only the ${APP_NAME} team sees it)</small>${phoneFieldHtml("phone", d.phone || "", d.country_code)}</label>
       </div>
       <div id="profile-location" class="location-row">${profileLocationRow()}</div>
+
+      <h2>Currency and fabric</h2>
+      <p class="hint">Your quotes, orders, invoices and prices are in your currency. Fabric from a seller in another currency is converted into yours at the day's exchange rate when you send a quote (the rate is saved on the order). You measure fabric in <b>${unitWord(designerFabricUnit(d), true)}</b>, as ${escapeHtml((countryByCode(d.country_code) || { name: "your country" }).name)} does.</p>
+      <div class="form-grid">
+        <label>Your currency<select name="currency">${currencyOptions(designerCurrency(d))}</select></label>
+        <p class="hint">Changing it converts your price list and ready-to-wear prices at today's rate${ratesDate() ? ` (${formatDate(ratesDate())})` : ""}. Orders already placed keep their currency.</p>
+      </div>
       </fieldset>
       <p id="profile-error" class="form-error" role="alert"></p>
       ${canEdit ? `<div class="form-actions"><button type="submit" class="gold" id="save-profile">Save profile</button></div>` : ""}
@@ -169,6 +177,14 @@ function saveMyProfile(event) {
   };
   if (v.business_name.length < 2) return formError("profile-error", "Enter your business name.");
   if (!v.country_code) return formError("profile-error", "Choose your country.");
+  v.currency_code = form.currency.value || designerCurrency(d);
+  v.phone = readPhone(form, "phone");
+  if (v.phone && !phoneLooksRight(v.phone)) return formError("profile-error", "That phone number doesn't look right.");
+  if (v.currency_code !== designerCurrency(d)) {
+    const rate = fxRate(designerCurrency(d), v.currency_code);
+    if (rate == null) return formError("profile-error", `There's no exchange rate for ${v.currency_code} yet. Try again tomorrow.`);
+    if (!confirm(`Change your currency from ${designerCurrency(d)} to ${v.currency_code}? Your prices are converted at today's rate (${rateText(rate, designerCurrency(d), v.currency_code)}) and rounded. Check them in Business → Prices afterwards.`)) return false;
+  }
   if (!v.city) return formError("profile-error", "Enter your city or town.");
   if (hideContactDetails(v.business_name).hidden) return formError("profile-error", "Your business name can't include a phone number, email, website or social handle.");
   const hidDetails = hideContactDetails(v.description).hidden;
@@ -201,9 +217,12 @@ function saveMyProfile(event) {
           business_name: v.business_name, slug: v.slug, description: v.description, speciality_tags: v.speciality_tags,
           delivery_available: v.delivery_available, custom_orders: v.custom_orders, delivery_estimate: v.delivery_time,
           country_code: v.country_code, city: v.city, postcode: v.postcode || null, address_line: v.address_line || null,
-          show_exact_address: v.show_exact_address, latitude: v.latitude, longitude: v.longitude, profile_image_url: v.profile_image
+          show_exact_address: v.show_exact_address, latitude: v.latitude, longitude: v.longitude, profile_image_url: v.profile_image,
+          currency_code: v.currency_code, phone: v.phone || null
         });
       }
+      // Demo: a new currency converts the price list and ready-to-wear (the database does this in live mode)
+      if (v.currency_code !== designerCurrency(d)) convertDemoDesignerPrices(d, designerCurrency(d), v.currency_code);
       const oldLogo = d.profile_image;
       Object.assign(d, v, { location: "" });
       refreshDesignerPublic(d);
@@ -224,6 +243,19 @@ function saveMyProfile(event) {
       if (again) { again.disabled = false; again.textContent = "Save profile"; }
     });
   return false;
+}
+
+function convertDemoDesignerPrices(d, from, to) {
+  pricesOf(d.id).forEach(p => {
+    const converted = convertMoney(p.price, p.currency_code || from, to);
+    if (converted != null) { p.price = nicePrice(converted, to); p.currency_code = to; }
+  });
+  db.ready_to_wear.filter(i => (i.designer_id || (mainDesigner() || {}).id) === d.id).forEach(i => {
+    const price = convertMoney(i.price, i.currency_code || from, to);
+    const cost = convertMoney(i.cost, i.currency_code || from, to);
+    if (price != null) Object.assign(i, { price: nicePrice(price, to), cost, currency_code: to });
+  });
+  if (d.starting_price) d.starting_price = nicePrice(convertMoney(d.starting_price, from, to) || d.starting_price, to);
 }
 
 function addPortfolioPhotos(input) {

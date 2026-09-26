@@ -33,10 +33,10 @@ function renderQuotes(orderId) {
       <td><a href="#/quotes/${o.id}">${o.id}</a></td>
       <td>${escapeHtml(customerName(o.customer_id))}</td>
       <td>${escapeHtml(o.outfit_type)}${hasInspiration(o.inspiration) ? ` <span title="Customer uploaded style photos" aria-label="has style photos">📷</span>` : ""}</td>
-      <td>${escapeHtml(fabric ? fabric.name : "—")}${fabric ? ` <span class="muted">${money(fabric.price_per_yard)}/yd</span>` : ""}
+      <td>${escapeHtml(fabric ? fabric.name : "—")}${fabric ? ` <span class="muted">${escapeHtml(fabricPriceText(fabric, designerFabricUnit(bizDesigner())))}</span>` : ""}
         ${o.fabric_problem ? `<div class="owed small-text">⚠ ${escapeHtml(o.fabric_problem)}</div>` : ""}</td>
       <td>${formatDate(o.created_at)}</td>
-      <td>${quoteStatusBadge(o)}${quoteStatus(o) === "quoted" ? `<div class="small-text">${money(o.quote_total)} · ${o.fabric_yards} yd</div>` : ""}</td>
+      <td>${quoteStatusBadge(o)}${quoteStatus(o) === "quoted" ? `<div class="small-text">${money(o.quote_total, orderCurrency(o))} · ${lengthText(o.fabric_yards, orderFabricUnit(o))}</div>` : ""}</td>
       <td>${unread ? unreadBadge(unread) + " new" : `<span class="muted">${orderMessages(o.id).length} msg</span>`}</td>
       <td><a class="button small" href="#/quotes/${o.id}">Open</a></td>
     </tr>`;
@@ -45,7 +45,7 @@ function renderQuotes(orderId) {
     .sort((a, b) => b.accepted_at.localeCompare(a.accepted_at)).slice(0, 5);
 
   return `
-    ${bizHeader("Quote requests", "Customers who sent their order to you. Chat with them to agree the yards, then send the quote. The price is the fabric seller's price per yard × the yards, plus tailoring, embroidery and delivery from your price list.")}
+    ${bizHeader("Quote requests", `Customers who sent their order to you. Chat with them to agree the ${unitWord(designerFabricUnit(bizDesigner()), true)}, then send the quote. The price is the fabric seller's price × the length, plus tailoring, embroidery and delivery from your price list — all in ${escapeHtml(currencyInfo(bizCurrency()).name)}. Fabric from a seller in another currency is converted at the day's exchange rate when you send the quote.`)}
     <div class="card">
       <h2>Waiting for you or the customer <span class="total">${requests.length}</span></h2>
       <div class="table-wrap"><table>
@@ -56,7 +56,7 @@ function renderQuotes(orderId) {
     ${accepted.length ? `<div class="card">
       <h2>Recently accepted</h2>
       <p class="hint">These are now orders: confirm the deposit under Payments, then make them.</p>
-      <ul class="plain-list">${accepted.map(o => `<li><a href="#/orders/${o.id}">${o.id}</a> · ${escapeHtml(customerName(o.customer_id))} · ${escapeHtml(o.outfit_type)} · ${money(o.quote_total)} · accepted ${formatDate(o.accepted_at)}</li>`).join("")}</ul>
+      <ul class="plain-list">${accepted.map(o => `<li><a href="#/orders/${o.id}">${o.id}</a> · ${escapeHtml(customerName(o.customer_id))} · ${escapeHtml(o.outfit_type)} · ${money(o.quote_total, orderCurrency(o))} · accepted ${formatDate(o.accepted_at)}</li>`).join("")}</ul>
     </div>` : ""}`;
 }
 
@@ -66,11 +66,13 @@ function quotableFabrics(order) {
     .sort((a, b) => (b.id === order.fabric_id) - (a.id === order.fabric_id) || a.name.localeCompare(b.name));
 }
 
+// In the customer's own unit first, and the other one too
 function measurementsCard(order) {
   const profile = findProfile(order.measurement_profile_id);
+  const unit = customerBodyUnit(findCustomer(order.customer_id));
   return `<div class="card">
-    <h2>Measurements ${profile ? `<small class="muted">${escapeHtml(profile.label)} profile</small>` : ""}</h2>
-    ${profile ? `<div class="measure-list">${MEASUREMENT_FIELDS.map(f => `<div><span>${f.label}</span><strong>${profile[f.key] != null ? profile[f.key] + '"' : "—"}</strong></div>`).join("")}</div>`
+    <h2>Measurements ${profile ? `<small class="muted">${escapeHtml(profile.label)} profile · the customer measures in ${unit === "cm" ? "centimetres" : "inches"}</small>` : ""}</h2>
+    ${profile ? `<div class="measure-list">${MEASUREMENT_FIELDS.map(f => `<div><span>${f.label}</span><strong>${bodyBoth(profile[f.key], unit)}</strong></div>`).join("")}</div>`
       : `<p class="empty">No measurements yet. <a href="#/measurements">Add them</a>.</p>`}
   </div>`;
 }
@@ -107,12 +109,15 @@ function renderQuoteDetail(orderId) {
   const quoted = quoteStatus(order) === "quoted";
   const fabrics = quotableFabrics(order);
   const typed = quoteForms[order.id] || {};
-  const startYards = typed.yards != null ? typed.yards : quoted ? order.fabric_yards : "";
+  // The tailor's unit (yards or metres) and currency
+  const unit = designerFabricUnit(designerById(order.designer_id));
+  const currency = designerCurrency(designerById(order.designer_id));
+  const startYards = typed.yards != null ? typed.yards : quoted ? lengthIn(order.fabric_yards, unit) : "";
   const startFabric = typed.fabric || (fabric && isBuyable(fabric) ? fabric.id : "");
   const options = fabrics.map(f => {
     const seller = findSupplier(f.supplier_id);
     const out = !isBuyable(f);
-    return `<option value="${f.id}" ${f.id === startFabric && !out ? "selected" : ""} ${out ? "disabled" : ""}>${escapeHtml(f.name)} — ${money(f.price_per_yard)}/yd · ${out ? "sold out" : `${f.yards_available} yd left`}${seller ? " · " + escapeHtml(seller.name) : ""}${f.id === order.fabric_id ? " (customer's choice)" : ""}</option>`;
+    return `<option value="${f.id}" ${f.id === startFabric && !out ? "selected" : ""} ${out ? "disabled" : ""}>${escapeHtml(f.name)} — ${escapeHtml(fabricPriceText(f, unit))} · ${out ? "sold out" : `${lengthText(f.yards_available, unit)} left`}${seller ? " · " + escapeHtml(seller.name) : ""}${f.id === order.fabric_id ? " (customer's choice)" : ""}</option>`;
   }).join("");
 
   return `
@@ -129,10 +134,10 @@ function renderQuoteDetail(orderId) {
       <div class="stack">
         <div class="card quote-form-card">
           <h2>${quoted ? "Quote sent" : "Send the quote"}</h2>
-          ${quoted ? `<p class="hint">Sent ${formatDate(order.quoted_at)}: <b>${order.fabric_yards} yd</b> · total <b>${money(order.quote_total)}</b> — waiting for the customer to accept. You can send a new one until they do.</p>` : ""}
+          ${quoted ? `<p class="hint">Sent ${formatDate(order.quoted_at)}: <b>${lengthText(order.fabric_yards, orderFabricUnit(order))}</b> · total <b>${money(order.quote_total, orderCurrency(order))}</b> — waiting for the customer to accept. You can send a new one until they do.</p>` : ""}
           <form id="quote-form" class="stack" onsubmit="return sendQuoteFromForm(event, '${order.id}')" oninput="updateQuotePreview(this, '${order.id}')">
             <label>Fabric<select name="fabric">${options || "<option value=''>No fabrics in stock</option>"}</select></label>
-            <label>Yards needed<input name="yards" type="number" inputmode="decimal" min="0.25" max="100" step="0.25" value="${startYards}" required placeholder="e.g. 5.5"></label>
+            <label>${capitalize(unitWord(unit, true))} needed<input name="yards" type="number" inputmode="decimal" min="0.25" max="100" step="0.25" value="${startYards}" required placeholder="e.g. 5.5"></label>
             <div id="quote-preview" class="quote-preview">${quotePreviewHtml(order, startFabric, startYards)}</div>
             <label>Message with the quote <small class="muted">(optional)</small><textarea name="note" rows="2" maxlength="${CHAT_TEXT_MAX}" placeholder="e.g. As we agreed: 5.5 yd so the robe reaches your ankles.">${escapeHtml(typed.note || "")}</textarea></label>
             <div class="form-actions"><button type="submit" id="send-quote">${quoted ? "Send new quote" : "Send quote"}</button></div>
@@ -158,20 +163,29 @@ function styleBriefCompact(order) {
   </div>`;
 }
 
-// What the quote comes to, worked out the same way as the database does it
+// What the quote comes to, worked out the same way as the database does it — in the
+// tailor's currency, with a seller's fabric converted at today's rate. (The database
+// uses the rate at the moment you press Send quote, and saves it on the order.)
 function quotePreviewHtml(order, fabricId, yardsText) {
   const fabric = findFabric(fabricId);
-  const yards = Number(yardsText);
+  const tailor = designerById(order.designer_id);
+  const unit = designerFabricUnit(tailor);
+  const currency = designerCurrency(tailor);
+  const length = Number(yardsText);
+  const yards = yardsFrom(length, unit);
   if (!fabric) return `<p class="muted">Choose a fabric.</p>`;
-  if (!yardsText || !(yards > 0)) return `<p class="muted">Enter the yards to see the quote. ${escapeHtml(fabric.name)} is ${money(fabric.price_per_yard)}/yd${fabric.min_order_yards > 0 ? `, smallest order ${fabric.min_order_yards} yd` : ""}.</p>`;
+  if (!yardsText || !(length > 0)) return `<p class="muted">Enter the ${unitWord(unit, true)} to see the quote. ${escapeHtml(fabric.name)} is ${escapeHtml(fabricPriceText(fabric, unit))}${fabric.min_order_yards > 0 ? `, smallest order ${lengthText(fabric.min_order_yards, unit)}` : ""}.</p>`;
   let problem = "";
-  if (Math.round(yards * 4) !== yards * 4) problem = "Use quarter yards (for example 4.5 or 5.25).";
-  else if (yards < fabric.min_order_yards) problem = `The smallest order for ${fabric.name} is ${fabric.min_order_yards} yd.`;
-  else if (yards > fabric.yards_available) problem = `Only ${fabric.yards_available} yd of ${fabric.name} is left.`;
-  const quote = computeQuote(order.outfit_type, order.embroidery, fabric, yards);
-  return `${quote.lines.map(l => `<div class="qline"><span>${escapeHtml(l.label)}</span><span>${money(l.amount)}</span></div>`).join("")}
-    <div class="qtotal"><span>Total</span><span>${money(quote.total)}</span></div>
-    <div class="muted small-text">Deposit ${money(depositFor(quote.total))} (${Math.round(DEPOSIT_RATE * 100)}%)</div>
+  if (Math.round(length * 4) !== length * 4) problem = `Use quarter ${unitWord(unit, true)} (for example 4.5 or 5.25).`;
+  else if (yards < fabric.min_order_yards - 0.005) problem = `The smallest order for ${fabric.name} is ${lengthText(fabric.min_order_yards, unit)}.`;
+  else if (yards > fabric.yards_available) problem = `Only ${lengthText(fabric.yards_available, unit)} of ${fabric.name} is left.`;
+  usePricesOf(order.designer_id);
+  const quote = computeQuote(order.outfit_type, order.embroidery, fabric, length, null, { currency, unit });
+  if (quote.noRate) return `<p class="owed">There's no exchange rate for ${escapeHtml(quote.fabricCurrency)} yet, so this fabric can't be priced in ${escapeHtml(currency)}. Try again later, or choose a fabric priced in ${escapeHtml(currency)}.</p>`;
+  return `${quote.lines.map(l => `<div class="qline"><span>${escapeHtml(l.label)}</span><span>${money(l.amount, currency)}</span></div>`).join("")}
+    <div class="qtotal"><span>Total</span><span>${money(quote.total, currency)}</span></div>
+    <div class="muted small-text">Deposit ${money(depositFor(quote.total), currency)} (${Math.round(DEPOSIT_RATE * 100)}%)</div>
+    ${quote.rate ? `<p class="hint">💱 The seller charges ${money(quote.fabricAmount, quote.fabricCurrency)}. Today ${escapeHtml(rateText(quote.rate, quote.fabricCurrency, currency))}; the rate when you press Send quote is saved on the order and shown to the customer.</p>` : ""}
     ${problem ? `<p class="owed">${escapeHtml(problem)}</p>` : ""}`;
 }
 
@@ -188,16 +202,21 @@ function sendQuoteFromForm(event, orderId) {
   const form = event.target;
   const order = findOrder(orderId);
   const fabric = findFabric(form.fabric.value);
-  const yards = Number(form.yards.value);
-  if (!fabric || !(yards > 0)) { alert("Choose a fabric and enter the yards needed."); return false; }
-  const quote = computeQuote(order.outfit_type, order.embroidery, fabric, yards);
-  if (!confirm(`Send ${customerName(order.customer_id).split(" ")[0]} a quote of ${money(quote.total)} for ${yards} yd of ${fabric.name}?`)) return false;
+  const tailor = designerById(order.designer_id);
+  const unit = designerFabricUnit(tailor);
+  const currency = designerCurrency(tailor);
+  const length = Number(form.yards.value);
+  if (!fabric || !(length > 0)) { alert(`Choose a fabric and enter the ${unitWord(unit, true)} needed.`); return false; }
+  usePricesOf(order.designer_id);
+  const quote = computeQuote(order.outfit_type, order.embroidery, fabric, length, null, { currency, unit });
+  if (quote.noRate) { alert(`There's no exchange rate for ${quote.fabricCurrency} yet. Try again later.`); return false; }
+  if (!confirm(`Send ${customerName(order.customer_id).split(" ")[0]} a quote of about ${money(quote.total, currency)} for ${length} ${unit} of ${fabric.name}?${quote.rate ? ` (The fabric is converted from ${quote.fabricCurrency} at the exchange rate when you send.)` : ""}`)) return false;
   sendingQuote = true;
   const button = document.getElementById("send-quote");
   if (button) { button.disabled = true; button.textContent = "Sending…"; }
   let sent;
   try {
-    sent = sendQuote(order, fabric.id, yards, form.note.value);
+    sent = sendQuote(order, fabric.id, length, form.note.value, unit);
   } catch (error) {
     sent = Promise.reject(error);
   }

@@ -23,18 +23,21 @@ function renderOrdersTab(orderId) {
       <td><a href="#/orders/${o.id}">${o.id}</a>${unread ? ` <span title="New messages from the customer">💬${unreadBadge(unread)}</span>` : ""}</td>
       <td>${escapeHtml(customerName(o.customer_id))}</td>
       <td>${escapeHtml(o.outfit_type)}${hasInspiration(o.inspiration) ? ` <span title="Customer uploaded style photos" aria-label="has style photos">📷</span>` : ""}</td>
-      <td>${escapeHtml(fabric ? fabric.name : "—")} (${o.fabric_yards} yd)</td>
+      <td>${escapeHtml(fabric ? fabric.name : "—")} (${lengthText(o.fabric_yards, orderFabricUnit(o))})</td>
       <td class="${isLate(o) ? "owed" : ""}">${formatDate(o.due_date)}</td>
       <td>${stageBadge(o)}</td>
-      <td>${money(o.quote_total)}</td>
-      <td class="${balance > 0 ? "owed" : "paid"}">${balance > 0 ? money(balance) : "Paid"}</td>
+      <td>${money(o.quote_total, orderCurrency(o))}</td>
+      <td class="${balance > 0 ? "owed" : "paid"}">${balance > 0 ? money(balance, orderCurrency(o)) : "Paid"}</td>
       <td class="nowrap"><a class="button small" href="#/orders/${o.id}">Open</a>
         <button class="small danger" onclick="deleteOrder('${o.id}')">Delete</button></td>
     </tr>`;
   }).join("");
 
+  // The tailor's own currency, and yards or metres as their country measures fabric
+  const currency = bizCurrency();
+  const unit = designerFabricUnit(bizDesigner());
   const fabricOptions = activeFabrics().filter(f => !isSoldOut(f) || f.id === pendingFabricId).map(f =>
-    `<option value="${f.id}" ${f.id === pendingFabricId ? "selected" : ""}>${escapeHtml(f.name)} — ${money(f.price_per_yard)}/yd (${f.yards_available} yd left)</option>`).join("");
+    `<option value="${f.id}" ${f.id === pendingFabricId ? "selected" : ""}>${escapeHtml(f.name)} — ${escapeHtml(fabricPriceText(f, unit))}${fabricCurrency(f) !== currency && convertMoney(pricePerUnit(f.price_per_yard, unit), fabricCurrency(f), currency) != null ? ` (≈ ${escapeHtml(money(convertMoney(pricePerUnit(f.price_per_yard, unit), fabricCurrency(f), currency), currency))})` : ""} (${lengthText(f.yards_available, unit)} left)</option>`).join("");
   const select = (name, items) => `<select name="${name}">${items.map(i => `<option value="${escapeHtml(i.value)}">${escapeHtml(i.label)}</option>`).join("")}</select>`;
 
   return `
@@ -43,27 +46,27 @@ function renderOrdersTab(orderId) {
 
     <div class="card">
       <h2>New walk-in order</h2>
-      <p class="hint">For orders taken in the shop or by phone: you enter the yards directly. (Online customers send their order to you as a <a href="#/quotes">quote request</a> instead, and you agree the yards with them in the chat.) The price is worked out the same way (fabric + tailoring + embroidery + delivery) and the order starts once a deposit is paid. Leave the tailoring, embroidery and delivery prices blank to use the <a href="#/prices">price list</a>, or type your own price for this order.</p>
+      <p class="hint">For orders taken in the shop or by phone: you enter the ${unitWord(unit, true)} directly. Prices are in ${escapeHtml(currencyInfo(currency).name)}; fabric from a seller in another currency is converted at today's rate, which is saved on the order. (Online customers send their order to you as a <a href="#/quotes">quote request</a> instead, and you agree the length with them in the chat.) The price is worked out the same way (fabric + tailoring + embroidery + delivery) and the order starts once a deposit is paid. Leave the tailoring, embroidery and delivery prices blank to use the <a href="#/prices">price list</a>, or type your own price for this order.</p>
       <form id="order-form" class="form-grid" onsubmit="return createWalkInOrder(event)">
         <label>Customer name
           <input name="customer" list="customer-list" required placeholder="Type a name">
           <datalist id="customer-list">${bizCustomers().map(c => `<option value="${escapeHtml(c.name)}"></option>`).join("")}</datalist>
         </label>
-        <label>Phone (for new customers)<input name="phone" placeholder="Optional"></label>
-        <label>Outfit<select name="outfit" onchange="this.form.yards.value = findOutfit(this.value).yards; showListPrices(this.form)">${OUTFITS.map(o =>
+        <label>Phone (for new customers)${phoneFieldHtml("phone", "", bizDesigner().country_code, 'placeholder="Optional"')}</label>
+        <label>Outfit<select name="outfit" onchange="this.form.yards.value = lengthIn(findOutfit(this.value).yards, '${unit}'); showListPrices(this.form)">${OUTFITS.map(o =>
           `<option value="${escapeHtml(o.name)}">${escapeHtml(o.name)}</option>`).join("")}</select></label>
         <label>Colour${select("colour", COLOURS.map(c => ({ value: c.hex, label: c.name })))}</label>
         <label>Embroidery<select name="embroidery" onchange="showListPrices(this.form)">${EMBROIDERY.map(e =>
-          `<option value="${escapeHtml(e.name)}">${escapeHtml(`${e.name} (${money(e.price)})`)}</option>`).join("")}</select></label>
+          `<option value="${escapeHtml(e.name)}">${escapeHtml(`${e.name} (${money(e.price, currency)})`)}</option>`).join("")}</select></label>
         <label>Sleeve${select("sleeve", SLEEVES.map(s => ({ value: s, label: s })))}</label>
         <label>Neck${select("neck", NECKS.map(s => ({ value: s, label: s })))}</label>
         <label>Fabric<select name="fabric" id="order-fabric" required>${fabricOptions}</select></label>
-        <label>Yards needed<input name="yards" type="number" min="0.5" step="0.5" value="${OUTFITS[0].yards}" required></label>
-        <label>Tailoring price (${CURRENCY})<input name="ownTailoring" type="number" min="0" step="0.01" placeholder="Price list: ${money(OUTFITS[0].tailoring)}"></label>
-        <label>Embroidery price (${CURRENCY})<input name="ownEmbroidery" type="number" min="0" step="0.01" placeholder="Price list: ${money(EMBROIDERY[0].price)}"></label>
-        <label>Delivery price (${CURRENCY})<input name="ownDelivery" type="number" min="0" step="0.01" placeholder="Price list: ${money(DELIVERY_FEE)}"></label>
+        <label>${capitalize(unitWord(unit, true))} needed<input name="yards" type="number" min="0.5" step="0.25" value="${lengthIn(OUTFITS[0].yards, unit)}" required></label>
+        <label>Tailoring price (${escapeHtml(currency)})<input name="ownTailoring" type="number" min="0" step="0.01" placeholder="Price list: ${money(OUTFITS[0].tailoring, currency)}"></label>
+        <label>Embroidery price (${escapeHtml(currency)})<input name="ownEmbroidery" type="number" min="0" step="0.01" placeholder="Price list: ${money(EMBROIDERY[0].price, currency)}"></label>
+        <label>Delivery price (${escapeHtml(currency)})<input name="ownDelivery" type="number" min="0" step="0.01" placeholder="Price list: ${money(DELIVERY_FEE, currency)}"></label>
         <label>Due date<input name="dueDate" type="date" value="${addDays(14)}" required></label>
-        <label>Deposit paid now (${CURRENCY})<input name="deposit" type="number" min="0.01" step="0.01" placeholder="Blank = ${Math.round(DEPOSIT_RATE * 100)}% of quote"></label>
+        <label>Deposit paid now (${escapeHtml(currency)})<input name="deposit" type="number" min="0.01" step="0.01" placeholder="Blank = ${Math.round(DEPOSIT_RATE * 100)}% of quote"></label>
         <label>Paid by${select("method", PAYMENT_METHODS.map(m => ({ value: m, label: m })))}</label>
         <div class="form-actions"><button type="submit">Create order</button></div>
       </form>
@@ -84,30 +87,36 @@ function createWalkInOrder(event) {
   event.preventDefault();
   const form = event.target;
   const fabric = findFabric(form.fabric.value);
-  const yards = Number(form.yards.value);
+  const currency = bizCurrency();
+  const unit = designerFabricUnit(bizDesigner());
+  const length = Number(form.yards.value);          // in the tailor's unit
+  const yards = yardsFrom(length, unit);
 
   if (isSoldOut(fabric)) {
     alert(`${fabric.name} is sold out.`);
     return false;
   }
   if (yards > fabric.yards_available) {
-    alert(`Only ${fabric.yards_available} yd of ${fabric.name} left in stock.`);
+    alert(`Only ${lengthText(fabric.yards_available, unit)} of ${fabric.name} left in stock.`);
     return false;
   }
 
-  const quote = computeQuote(form.outfit.value, form.embroidery.value, fabric, yards, {
-    tailoring: form.ownTailoring.value, embroidery: form.ownEmbroidery.value, delivery: form.ownDelivery.value
-  });
+  const ownPrices = { tailoring: form.ownTailoring.value, embroidery: form.ownEmbroidery.value, delivery: form.ownDelivery.value };
+  const quote = computeQuote(form.outfit.value, form.embroidery.value, fabric, length, ownPrices, { currency, unit });
+  if (quote.noRate) {
+    alert(`There's no exchange rate for ${quote.fabricCurrency} yet, so this fabric can't be priced in ${currency}. Try again later.`);
+    return false;
+  }
   const deposit = form.deposit.value ? Number(form.deposit.value) : depositFor(quote.total);
   if (deposit > quote.total) {
-    alert(`The deposit can't be more than the quote of ${money(quote.total)}.`);
+    alert(`The deposit can't be more than the quote of ${money(quote.total, currency)}.`);
     return false;
   }
 
-  const customer = findOrCreateCustomer(form.customer.value.trim(), form.phone.value.trim());
+  const customer = findOrCreateCustomer(form.customer.value.trim(), readPhone(form, "phone"));
   const profile = latestProfile(customer);
   // Fabric purchased: stock goes down (in live mode the database does this)
-  if (!Cloud.live) fabric.yards_available = Math.round((fabric.yards_available - yards) * 10) / 10;
+  if (!Cloud.live) fabric.yards_available = Math.round((fabric.yards_available - yards) * 100) / 100;
 
   const button = form.querySelector("button[type=submit]");
   if (button) { button.disabled = true; button.textContent = "Creating…"; }
@@ -115,12 +124,12 @@ function createWalkInOrder(event) {
   Promise.resolve(createPaidOrder({
     customerId: customer.id, outfit: form.outfit.value, colour: form.colour.value, embroidery: form.embroidery.value,
     sleeve: form.sleeve.value, neck: form.neck.value, profileId: profile ? profile.id : null,
-    fabric, yards, quote, deposit, method: form.method.value, dueDate: form.dueDate.value, confirmed: true
+    fabric, yards, quote, deposit, depositTyped: !!form.deposit.value, ownPrices, method: form.method.value, dueDate: form.dueDate.value, confirmed: true
   }))
     .then(order => {
       pendingFabricId = null;
       saveData();
-      toast(`Order ${order.id} created — quote ${money(quote.total)}, deposit ${money(deposit)}.${profile ? "" : " Add measurements for this customer."}`);
+      toast(`Order ${order.id} created — quote ${money(order.quote_total, orderCurrency(order))}, deposit ${money(order.deposit_amount, orderCurrency(order))}.${profile ? "" : " Add measurements for this customer."}`);
       go("orders/" + order.id);
     })
     .catch(error => {
@@ -132,8 +141,8 @@ function createWalkInOrder(event) {
 
 // The walk-in form shows the price-list prices for the outfit and embroidery chosen
 function showListPrices(form) {
-  form.ownTailoring.placeholder = "Price list: " + money(findOutfit(form.outfit.value).tailoring);
-  form.ownEmbroidery.placeholder = "Price list: " + money(embroideryPrice(form.embroidery.value));
+  form.ownTailoring.placeholder = "Price list: " + money(findOutfit(form.outfit.value).tailoring, bizCurrency());
+  form.ownEmbroidery.placeholder = "Price list: " + money(embroideryPrice(form.embroidery.value), bizCurrency());
 }
 
 function deleteOrder(orderId) {
@@ -176,17 +185,18 @@ function renderOrderDetail(orderId) {
   const balance = balanceOwed(order);
   const index = stageIndex(order);
   const next = STAGES[index + 1];
+  const cur = orderCurrency(order);
 
   // What the "next" button does depends on the step
   let nextAction = "";
   if (depositAwaiting(order) && !depositStarted(order)) {
-    nextAction = `<span class="owed">Waiting for the customer to pay the deposit of ${money(order.deposit_amount)}.</span> You can record it below if they paid in the shop.`;
+    nextAction = `<span class="owed">Waiting for the customer to pay the deposit of ${money(order.deposit_amount, cur)}.</span> You can record it below if they paid in the shop.`;
   } else if (depositAwaiting(order)) {
     nextAction = `<span class="owed">Deposit awaiting confirmation.</span> Confirm it under Payments below to start production.`;
   } else if (!next) {
     nextAction = `<span class="paid">✓ Delivered${order.review_rating ? " and reviewed" : " — waiting for the customer's review"}</span>`;
   } else if (next.key === "balance_paid" && balance > 0) {
-    nextAction = `<span class="owed">Waiting for the balance of ${money(balance)}.</span> Record it under Payments below.`;
+    nextAction = `<span class="owed">Waiting for the balance of ${money(balance, cur)}.</span> Record it under Payments below.`;
   } else if (next.key === "delivered" && !delivery) {
     nextAction = `<form class="inline-form" onsubmit="return dispatchFromDetail(event, '${order.id}')">
       <select name="courier"><option>DHL</option><option>Royal Mail</option></select>
@@ -206,7 +216,7 @@ function renderOrderDetail(orderId) {
     </label>`).join("");
 
   const payments = db.payments.filter(p => p.order_id === order.id).map(p =>
-    `<tr><td>${formatDate(p.date)}</td><td>${escapeHtml(p.kind)}</td><td>${escapeHtml(p.method)}</td><td>${money(p.amount)}</td>
+    `<tr><td>${formatDate(p.date)}</td><td>${escapeHtml(p.kind)}</td><td>${escapeHtml(p.method)}</td><td>${money(p.amount, p.currency_code || cur)}</td>
       <td>${paymentStatusCell(p)}</td></tr>`).join("");
 
   return `
@@ -221,8 +231,11 @@ function renderOrderDetail(orderId) {
       </div>
       <div class="stack">
         ${designCard(order, `
-          <div class="kv"><span>Fabric</span><b>${escapeHtml(fabric ? fabric.name : "—")}, ${order.fabric_yards} yd</b></div>
+          <div class="kv"><span>Fabric</span><b>${escapeHtml(fabric ? fabric.name : "—")}, ${lengthText(order.fabric_yards, orderFabricUnit(order))}</b></div>
           <div class="kv"><span>Supplier</span><b>${escapeHtml(supplier ? supplier.name : "—")}</b></div>
+          <div class="kv"><span>Currency</span><b>${escapeHtml(currencyInfo(cur).name)} (${escapeHtml(cur)})</b></div>
+          ${order.exchange_rate ? `<div class="kv"><span>Exchange rate</span><b>${escapeHtml(rateText(order.exchange_rate, order.fabric_currency_code, cur))}${order.exchange_rate_date ? ` · ${formatDate(order.exchange_rate_date)}` : ""}</b></div>
+          <div class="kv"><span>Seller is paid</span><b>${money(order.fabric_cost_in_fabric_currency, order.fabric_currency_code)}</b></div>` : ""}
           ${fabricOrderRow ? `<div class="kv"><span>Fabric from seller</span><b>${fabricOrderRow.status === "sent" ? "Sent " + formatDate(fabricOrderRow.sent_at) : fabricOrderRow.status === "new" ? "Not sent yet" : "Cancelled"}</b></div>` : ""}
           ${order.quoted_at ? `<div class="kv"><span>Quote</span><b>Accepted ${formatDate(order.accepted_at)}</b></div>` : ""}`)}
         ${measurementsCard(order)}
@@ -241,13 +254,13 @@ function renderOrderDetail(orderId) {
       </div>
       <div class="stack">
         <div class="card">
-          <h2>Payments <span class="total">${balance > 0 ? `Balance ${money(balance)}` : "Paid in full"}</span></h2>
+          <h2>Payments <span class="total">${balance > 0 ? `Balance ${money(balance, cur)}` : "Paid in full"}</span></h2>
           <div class="table-wrap"><table>
             <thead><tr><th>Date</th><th>Type</th><th>Method</th><th>Amount</th><th>Status</th></tr></thead>
             <tbody>${payments || "<tr><td colspan='5' class='empty'>No payments yet — the customer pays the deposit in the app.</td></tr>"}</tbody>
           </table></div>
           ${balance > 0 ? `<form class="inline-form" onsubmit="return payFromDetail(event, '${order.id}')">
-            <input name="amount" type="number" min="0.01" max="${balance}" step="0.01" value="${balance}" aria-label="Amount">
+            <input name="amount" type="number" min="0.01" max="${balance}" step="0.01" value="${balance}" aria-label="Amount in ${escapeHtml(cur)}"> <span class="muted">${escapeHtml(cur)}</span>
             <select name="method">${PAYMENT_METHODS.map(m => `<option>${m}</option>`).join("")}</select>
             <button type="submit">Record payment</button>
           </form>` : ""}
@@ -290,7 +303,7 @@ function payFromDetail(event, orderId) {
   const order = findOrder(orderId);
   const amount = Number(event.target.amount.value);
   if (amount > balanceOwed(order)) {
-    alert(`That is more than the ${money(balanceOwed(order))} still owed.`);
+    alert(`That is more than the ${money(balanceOwed(order), orderCurrency(order))} still owed.`);
     return false;
   }
   recordOrderPayment(order, amount, event.target.method.value, today(), true);

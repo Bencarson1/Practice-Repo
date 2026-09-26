@@ -141,7 +141,7 @@ const Cloud = (() => {
       email: details.email,
       password: details.password,
       options: {
-        data: { full_name: details.name, phone: details.phone || "", account_type: details.accountType,
+        data: { full_name: details.name, phone: details.phone || "", account_type: details.accountType, measurement_unit: details.unit || "",
                 business_name: details.businessName || "", country_code: details.country || "", city: details.city || "",
                 tailor_terms: details.accountType === "designer" && details.acceptTerms ? TAILOR_TERMS_VERSION : "" },
         emailRedirectTo: location.origin + location.pathname
@@ -200,6 +200,8 @@ const Cloud = (() => {
      "order_messages", "order_chat_reads", "designers", "my_designers", "designer_portfolio_items", "designer_customer_notes"].forEach(t => { empty[t] = []; });
     empty.countries = lists.countries;
     empty.specialities = lists.specialities;
+    empty.currencies = lists.currencies;
+    empty.exchange_rates = lists.exchange_rates;
     db = buildDb(empty, null);
     return db;
   }
@@ -207,7 +209,8 @@ const Cloud = (() => {
   // ---- Loading ----
 
   const iso = value => value ? String(value) : null;
-  const day = value => value ? String(value).slice(0, 10) : null;
+  // A date column stays as it is; a timestamp becomes the date in this device's time zone
+  const day = value => !value ? null : /^\d{4}-\d{2}-\d{2}$/.test(String(value)) ? String(value) : localDay(value);
   const num = value => value == null || value === "" ? null : Number(value);
 
   const STYLE = "style-photos", FABRIC_PHOTOS = "fabric-photos", LOGOS = "seller-logos", CHAT = "chat-photos", DESIGNER_PHOTOS = "designer-photos";
@@ -217,10 +220,10 @@ const Cloud = (() => {
   // customer once their deposit is confirmed — wearvia_delivery_details.)
   const DESIGNER_PUBLIC = "id, business_name, slug, location, rating, review_count, speciality_tags, owner_user_id, admin_status, "
     + "profile_image_url, description, starting_price, delivery_estimate, country_code, city, postcode_area, public_address, "
-    + "public_latitude, public_longitude, show_exact_address, delivery_available, custom_orders, created_at, updated_at";
+    + "public_latitude, public_longitude, show_exact_address, delivery_available, custom_orders, created_at, updated_at, currency_code";
   // Phone and email aren't readable from the table (supabase/no-leakage.sql):
   // wearvia_customer_contacts() gives your own, and your walk-in customers'
-  const CUSTOMER_COLUMNS = "id, auth_user_id, name, created_at, added_by_designer_id";
+  const CUSTOMER_COLUMNS = "id, auth_user_id, name, created_at, added_by_designer_id, country_code, currency_code, measurement_unit";
   const PRIVATE_BUCKETS = [STYLE, CHAT];
 
   async function fetchAll(table, order, columns, filter) {
@@ -250,8 +253,10 @@ const Cloud = (() => {
   async function load() {
     const tables = ["suppliers", "fabrics", "measurement_profiles", "orders", "payments",
       "invoices", "deliveries", "fabric_order_lines", "tailors", "wedding_orders", "wedding_order_members",
-      "ready_to_wear_sales", "order_messages", "order_chat_reads", "countries", "specialities", "designer_customer_notes"];
-    const sortBy = { order_chat_reads: "last_read_at", countries: "sort_order", specialities: "sort_order", designer_customer_notes: "updated_at" };
+      "ready_to_wear_sales", "order_messages", "order_chat_reads", "countries", "specialities", "designer_customer_notes",
+      "currencies", "exchange_rates"];
+    const sortBy = { order_chat_reads: "last_read_at", countries: "sort_order", specialities: "sort_order", designer_customer_notes: "updated_at",
+      currencies: "sort_order", exchange_rates: "currency_code" };
     const rows = {};
     const results = await Promise.all(tables.map(t => fetchAll(t, sortBy[t] || "created_at"))
       .concat([fetchAll("customers", "created_at", CUSTOMER_COLUMNS),
@@ -306,6 +311,7 @@ const Cloud = (() => {
       show_exact_address: !!d.show_exact_address, delivery_available: !!d.delivery_available, custom_orders: d.custom_orders !== false,
       admin_status: d.admin_status || (d.approved ? "approved" : "pending"), admin_note: d.admin_note || "",
       owner_user_id: d.owner_user_id || null, created_at: iso(d.created_at), updated_at: iso(d.updated_at),
+      currency_code: d.currency_code || undefined, from_price: num(d.from_price),
       // Private: only filled in for the owner, their team and the admin
       postcode: full ? full.postcode || "" : undefined, address_line: full ? full.address_line || "" : undefined,
       latitude: full ? num(full.latitude) : undefined, longitude: full ? num(full.longitude) : undefined,
@@ -324,20 +330,25 @@ const Cloud = (() => {
     const data = {
       designers: Array.from(publicRows.values()).map(d => designerFrom(d, full.get(d.id), r.designer_portfolio_items)),
       main_designer_id: (state.me && state.me.main_designer_id) || null,
-      countries: r.countries.map(c => ({ code: c.code, name: c.name, slug: c.slug, flag: c.flag, uses_miles: !!c.uses_miles, sort_order: c.sort_order })),
+      countries: r.countries.map(c => ({ code: c.code, name: c.name, slug: c.slug, flag: c.flag, uses_miles: !!c.uses_miles, sort_order: c.sort_order,
+        currency_code: c.currency_code || null, phone_code: c.phone_code || "", fabric_unit: c.fabric_unit || null })),
+      // Empty until supabase/worldwide.sql has run (worldwide.js then uses its own list)
+      currencies: (r.currencies || []).map(c => ({ code: c.code, name: c.name, symbol: c.symbol, decimals: Number(c.decimals), trim_zeros: !!c.trim_zeros, sort_order: c.sort_order })),
+      exchange_rates: (r.exchange_rates || []).map(x => ({ currency_code: x.currency_code, units_per_usd: num(x.units_per_usd), rate_date: x.rate_date, source: x.source || "" })),
       specialities: r.specialities.map(x => ({ id: x.id, name: x.name, sort_order: x.sort_order, active: x.active !== false })),
       customer_notes: r.designer_customer_notes.map(n => ({ designer_id: n.designer_id, customer_id: n.customer_id, notes: n.notes || "" })),
 
       suppliers: r.suppliers.map(s => ({
         id: s.id, name: s.name || "Seller", location: s.location || "", phone: s.phone || "",
         delivery_estimate: s.delivery_estimate || "1–3 days", rating: num(s.rating), logo: s.logo_url || null,
-        owner_user_id: s.owner_user_id || null, created_at: iso(s.created_at)
+        owner_user_id: s.owner_user_id || null, created_at: iso(s.created_at),
+        country_code: s.country_code || null, currency_code: s.currency_code || "GBP"
       })),
 
       fabrics: r.fabrics.map(f => ({
         id: f.id, supplier_id: f.supplier_id, name: f.name || "Fabric", category: f.category || "Other",
         colour_name: f.colour_name || nearestColourName(f.colour_hex || "#1e2a44"), color: f.colour_hex || colourFamilyHex(f.colour_name),
-        price_per_yard: num(f.price_per_yard) || 0, yards_available: num(f.yards_available) || 0,
+        price_per_yard: num(f.price_per_yard) || 0, yards_available: num(f.yards_available) || 0, currency_code: f.currency_code || "GBP",
         min_order_yards: num(f.min_order_yards) || 1, description: f.description || "",
         photos: (f.photos || []).map(p => `sb:${FABRIC_PHOTOS}/${p}`),
         status: f.status || "approved", review_note: f.review_note || "", reviewed_at: day(f.reviewed_at),
@@ -349,6 +360,7 @@ const Cloud = (() => {
       customers: r.customers.map(c => ({
         id: c.id, name: c.name || "Customer", email: c.email || "", phone: c.phone || "",
         auth_user_id: c.auth_user_id || null, added_by_designer_id: c.added_by_designer_id || null, created_at: day(c.created_at) || today(),
+        country_code: c.country_code || null, currency_code: c.currency_code || null, measurement_unit: c.measurement_unit || "in",
         measurement_profiles: r.measurement_profiles.filter(p => p.customer_id === c.id).map(p => ({
           id: p.id, label: p.label || thisYear(), chest: num(p.chest), waist: num(p.waist), shoulder: num(p.shoulder),
           sleeve: num(p.sleeve), trouser_length: num(p.trouser_length), neck: num(p.neck), hips: num(p.hip),
@@ -371,6 +383,11 @@ const Cloud = (() => {
             { label: "Fabric", amount: num(o.fabric_cost) || 0 }, { label: "Tailoring", amount: num(o.tailoring_cost) || 0 },
             { label: "Embroidery", amount: num(o.embroidery_cost) || 0 }, { label: "Delivery", amount: num(o.delivery_cost) || 0 }],
           quote_total: num(o.quote_total) || 0, deposit_amount: num(o.deposit_amount) || 0,
+          // In the tailor's currency; the seller's side and the exchange rate used (supabase/worldwide.sql)
+          currency_code: o.currency_code || "GBP", fabric_currency_code: o.fabric_currency_code || null,
+          fabric_price_per_yard: num(o.fabric_price_per_yard), fabric_cost_in_fabric_currency: num(o.fabric_cost_in_fabric_currency),
+          exchange_rate: num(o.exchange_rate), exchange_rate_date: o.exchange_rate_date || null, exchange_rate_source: o.exchange_rate_source || "",
+          fabric_unit: o.fabric_unit || "yd",
           deposit_paid_at: day(o.deposit_paid_at), balance_paid_at: day(o.balance_paid_at),
           stage: STAGES.some(s => s.key === o.stage) ? o.stage : "tailor_assigned",
           assigned_staff: {
@@ -388,12 +405,12 @@ const Cloud = (() => {
 
       payments: r.payments.map(p => ({
         id: p.id, order_id: numberOf.get(p.order_id), amount: num(p.amount), method: p.method, kind: p.kind,
-        status: p.status, date: day(p.paid_on || p.created_at), confirmed_at: day(p.confirmed_at)
+        status: p.status, date: day(p.paid_on || p.created_at), confirmed_at: day(p.confirmed_at), currency_code: p.currency_code || "GBP"
       })).filter(p => p.order_id),
 
       invoices: r.invoices.filter(i => numberOf.has(i.order_id)).map(i => ({
         id: i.invoice_number || "INV-" + String(numberOf.get(i.order_id)).replace(/^\D+/, ""), order_id: numberOf.get(i.order_id),
-        line_items: i.line_items || [], total: num(i.total), created_at: day(i.created_at)
+        line_items: i.line_items || [], total: num(i.total), created_at: day(i.created_at), currency_code: i.currency_code || "GBP"
       })),
 
       deliveries: r.deliveries.filter(d => numberOf.has(d.order_id)).map(d => ({
@@ -405,7 +422,7 @@ const Cloud = (() => {
         id: l.id, ref: "FO-" + String(l.order_number || "").replace(/^\D+/, ""), order_id: numberOf.get(l.order_id) || l.order_number,
         seller_id: l.supplier_id, fabric_id: l.fabric_id, fabric_name: l.fabric_name, yards: num(l.yards),
         price_per_yard: num(l.price_per_yard), total: num(l.total), customer_first_name: l.customer_first_name || "",
-        deliver_to: l.deliver_to || "", status: l.status, created_at: day(l.created_at), sent_at: day(l.sent_at)
+        deliver_to: l.deliver_to || "", status: l.status, created_at: day(l.created_at), sent_at: day(l.sent_at), currency_code: l.currency_code || "GBP"
       })),
 
       wedding_orders: r.wedding_orders.map(w => ({
@@ -416,15 +433,17 @@ const Cloud = (() => {
       })),
 
       ready_to_wear: r.ready_to_wear_items.filter(i => i.active !== false).map(i => ({
-        id: i.id, designer_id: i.designer_id, name: i.name, price: num(i.price), cost: num(i.cost) || 0, stock: i.stock || 0, color: i.colour_hex || "#1e2a44"
+        id: i.id, designer_id: i.designer_id, name: i.name, price: num(i.price), cost: num(i.cost) || 0, stock: i.stock || 0, color: i.colour_hex || "#1e2a44",
+        currency_code: i.currency_code || "GBP"
       })),
       rtw_sales: r.ready_to_wear_sales.map(s => ({
         id: s.id, item_id: s.item_id, customer_id: s.customer_id, price: num(s.price), cost: num(s.cost) || 0,
-        date: day(s.sold_on || s.created_at), status: s.status
+        date: day(s.sold_on || s.created_at), status: s.status, currency_code: s.currency_code || "GBP"
       })),
 
       // Empty until supabase/prices.sql has been run; the starting prices are used until then
-      prices: r.price_list.map(p => ({ id: p.id, designer_id: p.designer_id, kind: p.kind, name: p.name, price: num(p.price), yards: num(p.yards) })),
+      prices: r.price_list.map(p => ({ id: p.id, designer_id: p.designer_id, kind: p.kind, name: p.name, price: num(p.price), yards: num(p.yards),
+        currency_code: p.currency_code || "GBP" })),
 
       messages: messagesFrom(r.order_messages, numberOf, r.hidden_originals),
       delivery_details: (r.delivery_details || []).filter(x => numberOf.has(x.order_id)).map(x => ({
@@ -565,11 +584,12 @@ const Cloud = (() => {
     });
   }
 
-  function sendQuote(order, fabricId, yards, note) {
+  // length is in yards, or metres when unit is "m"; the database converts and prices it
+  function sendQuote(order, fabricId, length, note, unit) {
     return run(async () => {
       await push();
       const { error } = await state.client.rpc("wearvia_send_quote", {
-        p_order_id: order._uuid, p_yards: yards, p_fabric_id: fabricId || null, p_note: note || null
+        p_order_id: order._uuid, p_yards: length, p_fabric_id: fabricId || null, p_note: note || null, p_unit: unit || "yd"
       });
       if (error) {
         await load().catch(() => {});
@@ -616,7 +636,7 @@ const Cloud = (() => {
   const TABLES = [
     { table: "suppliers", rows: d => d.suppliers.map(s => ({
         id: s.id, name: s.name, location: s.location, phone: s.phone, delivery_estimate: s.delivery_estimate,
-        logo_url: s.logo || null, owner_user_id: s.owner_user_id || null })) },
+        logo_url: s.logo || null, owner_user_id: s.owner_user_id || null, country_code: s.country_code || null, currency_code: s.currency_code || null })) },
     { table: "fabrics", rows: d => d.fabrics.map(f => ({
         id: f.id, supplier_id: f.supplier_id, name: f.name, category: f.category, colour_name: f.colour_name || null,
         colour_hex: f.color || null, price_per_yard: f.price_per_yard, yards_available: f.yards_available,
@@ -625,7 +645,8 @@ const Cloud = (() => {
         status: f.status, review_note: f.review_note || "", sold_out: !!f.sold_out,
         deleted_at: f.deleted_at ? new Date(f.deleted_at + "T12:00:00Z").toISOString() : null })) },
     { table: "customers", rows: d => d.customers.map(c => ({ id: c.id, name: c.name, email: c.email || null, phone: c.phone || null,
-        added_by_designer_id: c.added_by_designer_id || null })) },
+        added_by_designer_id: c.added_by_designer_id || null, country_code: c.country_code || null, currency_code: c.currency_code || null,
+        measurement_unit: c.measurement_unit || null })) },
     { table: "measurement_profiles", rows: d => d.customers.flatMap(c => c.measurement_profiles.map(p => ({
         id: p.id, customer_id: c.id, label: p.label, chest: p.chest, waist: p.waist, shoulder: p.shoulder, sleeve: p.sleeve,
         trouser_length: p.trouser_length, neck: p.neck, hip: p.hips, garment_length: p.length }))) },
@@ -812,7 +833,8 @@ const Cloud = (() => {
   function placeOrder(details) {
     return run(async () => {
       await push();                     // a new walk-in customer or measurements must exist first
-      const lines = details.quote.lines;
+      const own = details.ownPrices || {};
+      const typed = value => value === "" || value == null ? null : Number(value);
       const id = newId();
       const insp = details.inspiration;
       const row = {
@@ -820,24 +842,26 @@ const Cloud = (() => {
         outfit_type: details.outfit, colour: details.colour, embroidery: details.embroidery,
         sleeve_style: details.sleeve, neck_style: details.neck, concept_variation: details.variation || 1,
         measurement_profile_id: details.profileId || null,
-        fabric_id: details.fabric.id, fabric_yards: details.yards, fabric_cost: details.quote.fabricCost,
-        // The database works out a customer's prices itself and only checks this total matches;
-        // the team's own prices on a walk-in order are kept
-        tailoring_cost: lines[1].amount, embroidery_cost: lines[2].amount, delivery_cost: lines[3].amount,
-        quote_total: details.quote.total, deposit_amount: details.deposit, line_items: lines,
+        // Stock is in yards; the database prices the fabric in the seller's currency and converts it
+        fabric_id: details.fabric.id, fabric_yards: details.quote.yards, fabric_unit: details.quote.unit,
+        // The team's own prices on a walk-in order are kept (in the tailor's currency);
+        // anything left blank comes from the price list, and the database writes the itemised quote
+        tailoring_cost: typed(own.tailoring), embroidery_cost: typed(own.embroidery), delivery_cost: typed(own.delivery),
+        deposit_amount: details.depositTyped ? details.deposit : null,
         inspiration_photos: insp ? insp.photos.map(ref => photoPath(ref, STYLE)).filter(Boolean) : [],
         inspiration_link: insp ? insp.link || null : null, inspiration_note: insp ? insp.note || null : null,
         due_date: details.dueDate || addDays(14)
       };
-      const created = await state.client.from("orders").insert(row).select("id, order_number").single();
+      const created = await state.client.from("orders").insert(row).select("id, order_number, deposit_amount").single();
       if (created.error) {
         // Usually a price changed since the quote was shown: load the new prices so the quote shows them
         await load().catch(() => {});
         throw new Error(friendly(created.error));
       }
-      if (details.deposit > 0) {
+      const deposit = num(created.data.deposit_amount);
+      if (deposit > 0) {
         const paid = await state.client.from("payments").insert({
-          id: newId(), order_id: id, amount: details.deposit, method: details.method, kind: "Deposit",
+          id: newId(), order_id: id, amount: deposit, method: details.method, kind: "Deposit",
           status: details.confirmed ? "confirmed" : "awaiting_confirmation", paid_on: today()
         });
         if (paid.error) toast("The order was placed, but the deposit couldn't be recorded: " + friendly(paid.error));
@@ -1092,15 +1116,26 @@ const Cloud = (() => {
     if (!state.live || !designerId || !db || pricesOf(designerId).length) return;
     const { data, error } = await publicClient().from("price_list").select("*").eq("designer_id", designerId).order("sort_order");
     if (error) { console.warn(error.message); return; }
-    (data || []).forEach(p => { if (!db.prices.some(x => x.id === p.id)) db.prices.push({ id: p.id, designer_id: p.designer_id, kind: p.kind, name: p.name, price: num(p.price), yards: num(p.yards) }); });
+    (data || []).forEach(p => { if (!db.prices.some(x => x.id === p.id)) db.prices.push({ id: p.id, designer_id: p.designer_id, kind: p.kind, name: p.name, price: num(p.price), yards: num(p.yards), currency_code: p.currency_code || "GBP" }); });
   }
 
-  // Countries and specialities before anyone signs in (for "Join as a tailor")
+  // Countries, specialities, currencies and exchange rates before anyone signs in
+  // (for "Join as a tailor", the phone picker and approximate prices)
   async function loadPublicLists() {
     const client = publicClient();
-    const [countries, specialities] = await Promise.all([
-      client.from("countries").select("*").order("sort_order"), client.from("specialities").select("*").order("sort_order")]);
-    return { countries: countries.data || [], specialities: specialities.data || [] };
+    const [countries, specialities, currencies, rates] = await Promise.all([
+      client.from("countries").select("*").order("sort_order"), client.from("specialities").select("*").order("sort_order"),
+      client.from("currencies").select("*").order("sort_order"), client.from("exchange_rates").select("*")]);
+    return { countries: countries.data || [], specialities: specialities.data || [], currencies: currencies.data || [], exchange_rates: rates.data || [] };
+  }
+
+  // Any prices still in another currency are put into the tailor's own (supabase/worldwide.sql)
+  async function convertPriceList(designerId) {
+    await flush();
+    const { data, error } = await state.client.rpc("wearvia_convert_price_list", { p_designer_id: designerId });
+    if (error) throw new Error(friendly(error));
+    await load();
+    return data;
   }
 
   return {
@@ -1115,6 +1150,6 @@ const Cloud = (() => {
     uploadPhoto, removePhoto, photoUrl,
     loadTeamLogins, addTeamLogin, removeTeamLogin,
     registerDesigner, acceptTailorTerms, setDeliveryAddress, saveDesignerProfile, addPortfolioItem, removePortfolioItem, setDesignerStatus, addSpeciality,
-    saveCustomerNotes, searchTailors, tailorPage, ensurePrices, loadPublicLists
+    saveCustomerNotes, searchTailors, tailorPage, ensurePrices, loadPublicLists, convertPriceList
   };
 })();
