@@ -5,6 +5,10 @@
 
 let aiQuestion = "Which orders are late?";
 
+function businessPaymentsOpen() {
+  return !(Cloud.live && typeof ONLINE_PAYMENTS_ENABLED !== "undefined" && !ONLINE_PAYMENTS_ENABLED);
+}
+
 // Totals are kept per currency and never added across currencies: a tailor who
 // changed currency, or sells ready-to-wear in another, sees "£1,250 · ₦250,000"
 function businessTotals() {
@@ -121,6 +125,7 @@ function answerQuestion(question) {
     return low.length ? `Running low: ${low.map(f => `${escapeHtml(f.name)} (${lengthText(f.yards_available, screenFabricUnit())})`).join(", ")}. The ${APP_NAME} admin looks after stock in NebedaHub Admin → Fabric inventory.` : `Every fabric has at least ${lengthText(LOW_STOCK_YARDS, screenFabricUnit())} in stock.`;
   }
   if (q.includes("owe") || q.includes("balance") || q.includes("pending") || q.includes("payment") || q.includes("unpaid")) {
+    if (!businessPaymentsOpen()) return "Protected in-app payments are not open yet, so payment balances are not being used for live trading.";
     const owing = placedOrders().filter(o => balanceOwed(o) > 0);
     if (!owing.length) return "Every order is paid in full.";
     return `${escapeHtml(totalsText(businessTotals().pending, bizCurrency()))} is owed across ${owing.length} orders: ${owing.map(o => `#${o.id} ${escapeHtml(customerName(o.customer_id))} ${money(balanceOwed(o), orderCurrency(o))}`).join(", ")}.`;
@@ -136,6 +141,7 @@ function answerQuestion(question) {
     return soon.length ? `Due in the next 7 days: ${list(soon)}.` : "Nothing is due in the next 7 days.";
   }
   if (q.includes("revenue") || q.includes("profit") || q.includes("money") || q.includes("sales")) {
+    if (!businessPaymentsOpen()) return "Revenue and profit tracking will become live when protected in-app payments are enabled.";
     const t = businessTotals();
     return `Revenue so far ${escapeHtml(totalsText(t.revenue, bizCurrency()))}, estimated profit ${escapeHtml(totalsText(t.profit, bizCurrency()))}, and ${escapeHtml(totalsText(t.pending, bizCurrency()))} still to collect.`;
   }
