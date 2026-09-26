@@ -1,0 +1,59 @@
+{
+  "name": "NebedaHub Business",
+  "short_name": "NH Business",
+  "description": "For tailors, designers and their staff: quote requests, chats, orders, production and payments.",
+  "id": "/business/",
+  "start_url": "./index.html#/dashboard",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#1b1024",
+  "theme_color": "#1b1024",
+  "lang": "en-GB",
+  "categories": [
+    "business",
+    "productivity"
+  ],
+  "icons": [
+    {
+      "src": "../icons/business-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "../icons/business-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "../icons/business-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Quote requests",
+      "url": "./index.html#/quotes",
+      "icons": [
+        {
+          "src": "../icons/business-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Orders",
+      "url": "./index.html#/orders",
+      "icons": [
+        {
+          "src": "../icons/business-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ]
+}

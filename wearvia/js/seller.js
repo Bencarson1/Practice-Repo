@@ -4,8 +4,8 @@
 // (up to 5 photos each), edit them, mark them sold out or delete them,
 // and see the orders that used their fabric.
 //
-// Addresses: #/seller (sign in or join), #/seller/fabrics, #/seller/new,
-// #/seller/edit/F12, #/seller/orders, #/seller/profile
+// Addresses (NebedaHub Seller, /sell/): #/welcome (sign in or join), #/fabrics, #/new,
+// #/edit/F12, #/orders, #/profile
 // ============================================================
 
 const SELLER_TABS = [
@@ -26,14 +26,14 @@ function renderSellerArea(screen, id) {
   let html, title;
 
   if (!seller) {
-    tabs.innerHTML = `<a class="tab ${screen !== "profile" ? "active" : ""}" href="#/seller">Sell on ${APP_NAME}</a>
-      <a class="tab ${screen === "profile" ? "active" : ""}" href="#/seller/profile">Create your shop</a>`;
+    tabs.innerHTML = `<a class="tab ${screen !== "profile" ? "active" : ""}" href="#/welcome">Sell on ${APP_NAME}</a>
+      ${Cloud.isGuest() ? "" : `<a class="tab ${screen === "profile" ? "active" : ""}" href="#/profile">Create your shop</a>`}`;
     html = screen === "profile" ? sellerProfileScreen(null) : sellerWelcome();
     title = "Sell fabric";
   } else {
     const activeTab = screen === "edit" ? "new" : screen;
     tabs.innerHTML = SELLER_TABS.map(t =>
-      `<a class="tab ${t.key === activeTab ? "active" : ""}" href="#/seller/${t.key}">${t.key === "new" && screen === "edit" ? "Edit fabric" : t.label}</a>`).join("");
+      `<a class="tab ${t.key === activeTab ? "active" : ""}" href="#/${t.key}">${t.key === "new" && screen === "edit" ? "Edit fabric" : t.label}</a>`).join("");
     const screens = {
       fabrics: () => sellerStall(seller),
       new: () => sellerFabricForm(seller, null),
@@ -45,7 +45,7 @@ function renderSellerArea(screen, id) {
     title = seller.name;
   }
   content.innerHTML = html;
-  document.title = `${title} · Fabric sellers · ${APP_NAME}`;
+  document.title = `${title} · ${APP.name}`;
 }
 
 function sellerStatusBadge(fabric) {
@@ -58,21 +58,23 @@ function sellerStatusBadge(fabric) {
 function sellerWelcome() {
   const shops = db.suppliers.slice().sort((a, b) => a.name.localeCompare(b.name));
   return `
-    ${bizHeader(`Sell your fabric on ${APP_NAME}`, `Put your fabrics in front of ${escapeHtml(SHOP_NAME)}'s customers, like a stall at the market.`)}
+    ${bizHeader(`Sell your fabric on ${APP_NAME}`, `Put your fabrics in front of customers and tailors on ${APP_NAME}, like a stall at the market.`)}
+    ${Cloud.live && Cloud.me ? `<div class="notice no-shop">This account (${escapeHtml(Cloud.me.email)}) isn't a fabric seller yet. <b>Create your shop</b> below to start selling — or <a href="${escapeHtml(appUrl("customer", ""))}">open the customer app</a>.</div>` : ""}
     <ol class="how-steps">
       <li><b>Create your shop</b><span>Shop name, where you are, your phone number, delivery time and logo.</span></li>
       <li><b>Add your fabrics</b><span>Up to 5 photos each, with the type, colour, price per yard and how many yards you have.</span></li>
-      <li><b>Get approved and sell</b><span>${escapeHtml(SHOP_NAME)} checks each fabric, then customers can choose it for their outfit. Orders appear in your Orders tab.</span></li>
+      <li><b>Get approved and sell</b><span>The ${APP_NAME} team checks each fabric, then customers can choose it for their outfit. Orders appear in your Orders tab.</span></li>
     </ol>
     <div class="two-col">
       <div class="card">
         <h2>New seller</h2>
         <p class="hint">It takes about two minutes.</p>
-        <a class="button" href="#/seller/profile">Create your seller profile</a>
+        ${Cloud.isGuest() ? `<button class="gold" onclick="Auth.startSignUp()">Create your seller account</button>` : `<a class="button" href="#/profile">Create your seller profile</a>`}
       </div>
       <div class="card">
         <h2>Already selling?</h2>
-        ${Cloud.live ? `<p class="hint">Your shop opens here once you've created it. Signed in with a different email? Sign out and sign in with the one your shop uses.</p>` : `
+        ${Cloud.isGuest() ? `<p class="hint">Sign in to ${APP.name} to see your fabrics and orders.</p><button class="ghost" onclick="Auth.show('signIn')">Sign in</button>`
+          : Cloud.live ? `<p class="hint">Your shop opens here once you've created it. Signed in with a different email? <button class="linkish strong" onclick="Auth.signOut()">Sign out</button> and sign in with the one your shop uses.</p>` : `
         <p class="hint">Choose your shop to sign in. (Demo: there are no passwords yet.)</p>
         <div class="shop-list">${shops.map(s => `
           <button class="shop-pick" onclick="sellerSignIn('${s.id}')">
@@ -88,7 +90,7 @@ function sellerSignIn(sellerId) {
   db.session.sellerId = sellerId || null;
   sellerForm = null;
   saveData();
-  go(sellerId ? "seller/fabrics" : "seller");
+  go(sellerId ? "fabrics" : "welcome");
 }
 
 function sellerShopStrip(seller) {
@@ -143,7 +145,7 @@ function sellerStall(seller) {
           ${f.status === "hidden" ? `<p class="review-note">Hidden by ${escapeHtml(SHOP_NAME)}${f.review_note ? `: “${escapeHtml(f.review_note)}”` : ""}. Edit it and it goes back for checking.</p>` : ""}
           ${f.status === "pending" ? `<p class="muted small-text">${escapeHtml(SHOP_NAME)} will check it soon.</p>` : ""}
           <div class="job-buttons">
-            <a class="button small" href="#/seller/edit/${f.id}">Edit</a>
+            <a class="button small" href="#/edit/${f.id}">Edit</a>
             ${f.sold_out
               ? `<button class="small ghost" onclick="stallBackInStock('${f.id}')">Back in stock</button>`
               : `<button class="small ghost" onclick="stallSoldOut('${f.id}')">Mark sold out</button>`}
@@ -156,14 +158,14 @@ function sellerStall(seller) {
   return `
     <div class="biz-head row-between wrap">
       <div><h1>My fabrics</h1><p class="muted">Your market stall. Customers see fabrics once ${escapeHtml(SHOP_NAME)} approves them.</p></div>
-      <a class="button gold" href="#/seller/new">+ Add a fabric</a>
+      <a class="button gold" href="#/new">+ Add a fabric</a>
     </div>
-    ${newOrders ? `<div class="alerts"><a class="alert" href="#/seller/orders">📦 ${newOrders} new order${newOrders > 1 ? "s" : ""} to send</a></div>` : ""}
+    ${newOrders ? `<div class="alerts"><a class="alert" href="#/orders">📦 ${newOrders} new order${newOrders > 1 ? "s" : ""} to send</a></div>` : ""}
     <div class="chips">${["All", "Live", "Waiting", "Hidden", "Sold out"].map(k =>
       `<button class="chip ${k === stallFilter ? "active" : ""}" onclick="stallFilter='${k}';renderAll()">${k}${k === "All" ? ` (${fabrics.length})` : ` (${counts[k]})`}</button>`).join("")}</div>
     ${shown.length ? `<div class="stall-grid">${cards}</div>`
       : `<div class="card empty-card"><p class="empty">${fabrics.length ? "Nothing here." : "Your stall is empty."}</p>
-        ${fabrics.length ? "" : `<a class="button gold" href="#/seller/new">Add your first fabric</a>`}</div>`}`;
+        ${fabrics.length ? "" : `<a class="button gold" href="#/new">Add your first fabric</a>`}</div>`}`;
 }
 
 function stallSoldOut(fabricId) {
@@ -177,7 +179,7 @@ function stallBackInStock(fabricId) {
   const fabric = findFabric(fabricId);
   if (fabric.yards_available < fabric.min_order_yards) {
     toast("Add how many yards you have first.");
-    go("seller/edit/" + fabricId);
+    go("edit/" + fabricId);
     return;
   }
   setFabricSoldOut(fabricId, false);
@@ -200,7 +202,7 @@ function stallDelete(fabricId) {
 function sellerFabricForm(seller, fabricId) {
   const fabric = fabricId ? findFabric(fabricId) : null;
   if (fabricId && (!fabric || fabric.deleted_at || fabric.supplier_id !== seller.id)) {
-    return `<div class="card"><p class="empty">We couldn't find that fabric on your stall.</p><a class="button" href="#/seller/fabrics">Back to my fabrics</a></div>`;
+    return `<div class="card"><p class="empty">We couldn't find that fabric on your stall.</p><a class="button" href="#/fabrics">Back to my fabrics</a></div>`;
   }
   const key = "fabric:" + (fabricId || "new");
   if (!sellerForm || sellerForm.key !== key) {
@@ -231,7 +233,7 @@ function sellerFabricForm(seller, fabricId) {
       <p id="fabric-form-error" class="form-error" role="alert"></p>
       <div class="job-buttons">
         <button type="submit" class="gold">${fabric ? "Save changes" : "Send for approval"}</button>
-        <a class="button ghost" href="#/seller/fabrics" onclick="sellerForm=null">Cancel</a>
+        <a class="button ghost" href="#/fabrics" onclick="sellerForm=null">Cancel</a>
       </div>
     </form>`;
 }
@@ -329,7 +331,7 @@ function saveStallFabric(event, fabricId) {
       toast(result.isNew ? `${values.name} sent to ${SHOP_NAME} for approval.`
         : result.needsReview ? `Saved. ${SHOP_NAME} will check your changes before customers see them.` : `${values.name} saved.`);
       stallFilter = "All";
-      go("seller/fabrics");
+      go("fabrics");
     })
     .catch(error => {
       console.warn(error);
@@ -406,7 +408,7 @@ function sellerProfileScreen(seller) {
       <p id="profile-form-error" class="form-error" role="alert"></p>
       <div class="job-buttons">
         <button type="submit" class="gold">${seller ? "Save profile" : "Create my shop"}</button>
-        ${seller ? "" : `<a class="button ghost" href="#/seller">Cancel</a>`}
+        ${seller ? "" : `<a class="button ghost" href="#/welcome">Cancel</a>`}
       </div>
     </form>`;
 }
@@ -485,7 +487,7 @@ function saveSellerProfileForm(event) {
         renderAll();
       } else {
         toast(`Welcome to ${APP_NAME}, ${saved.name}! Now add your first fabric.`);
-        go("seller/new");
+        go("new");
       }
     })
     .catch(error => {

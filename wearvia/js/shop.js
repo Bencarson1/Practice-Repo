@@ -49,7 +49,7 @@ function renderShop() {
           <thead><tr><th>Date</th><th>Item</th><th>Customer</th><th>Price</th><th>Payment</th></tr></thead>
           <tbody>${sales || "<tr><td colspan='5' class='empty'>No sales yet.</td></tr>"}</tbody>
         </table></div>
-        <p><a href="#/rtw">Open the customer shop →</a></p>
+        <p><a href="${escapeHtml(appUrl("customer", "rtw"))}" target="_blank" rel="noopener">Open the customer shop →</a></p>
       </div>
     </div>
   `;

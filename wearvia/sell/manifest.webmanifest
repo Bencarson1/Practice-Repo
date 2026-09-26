@@ -1,0 +1,59 @@
+{
+  "name": "NebedaHub Seller",
+  "short_name": "NH Seller",
+  "description": "For fabric sellers: your fabrics, stock and the orders that use them.",
+  "id": "/sell/",
+  "start_url": "./index.html#/fabrics",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0f1d17",
+  "theme_color": "#0f1d17",
+  "lang": "en-GB",
+  "categories": [
+    "business",
+    "shopping"
+  ],
+  "icons": [
+    {
+      "src": "../icons/seller-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "../icons/seller-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "../icons/seller-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Add a fabric",
+      "url": "./index.html#/new",
+      "icons": [
+        {
+          "src": "../icons/seller-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Orders",
+      "url": "./index.html#/orders",
+      "icons": [
+        {
+          "src": "../icons/seller-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ]
+}

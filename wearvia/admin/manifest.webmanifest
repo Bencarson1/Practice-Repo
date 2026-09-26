@@ -1,0 +1,58 @@
+{
+  "name": "NebedaHub Admin",
+  "short_name": "NH Admin",
+  "description": "For the NebedaHub team: approvals, tailors, sellers, customers and orders.",
+  "id": "/admin/",
+  "start_url": "./index.html#/overview",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#16181c",
+  "theme_color": "#16181c",
+  "lang": "en-GB",
+  "categories": [
+    "business"
+  ],
+  "icons": [
+    {
+      "src": "../icons/admin-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "../icons/admin-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "../icons/admin-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Tailors",
+      "url": "./index.html#/tailors",
+      "icons": [
+        {
+          "src": "../icons/admin-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Fabric sellers",
+      "url": "./index.html#/sellers",
+      "icons": [
+        {
+          "src": "../icons/admin-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ]
+}

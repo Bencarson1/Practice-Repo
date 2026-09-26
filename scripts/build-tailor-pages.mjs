@@ -143,7 +143,7 @@ function page({ rel, title, description, heading, intro, body, jsonLd, image, li
     ${intro ? `<p class="intro">${intro}</p>` : ""}
     ${body}
   </main>
-  <footer>NebedaHub — Everything Fashion, All in One Place. <a href="${up}index.html#/joinTailor">Are you a tailor? Join NebedaHub</a> ·
+  <footer>NebedaHub — Everything Fashion, All in One Place. <a href="${up}business/index.html#/welcome">Are you a tailor? Join NebedaHub</a> ·
     <a href="${up}tailors/">All countries</a></footer>
   ${live ? `<script src="${up}js/config.js"></script>
   <script>window.WEARVIA_PAGE = ${json(Object.assign({ app: up + "index.html", root: up }, live))};</script>
@@ -277,7 +277,7 @@ for (const code of countryCodes) {
     const body = `
       <p class="actions"><a class="cta" href="../../../index.html#/tailors">📍 Tailors near my location</a></p>
       <h2 data-live="count">${list.length ? `${list.length} tailor${list.length === 1 ? "" : "s"} in ${esc(p.name)}` : `Tailors in ${esc(p.name)}`}</h2>
-      <ul class="cards" id="live-list">${list.map(t => tailorCard(t, "../../../")).join("") || `<li class="empty">No tailors in ${esc(p.name)} have joined NebedaHub yet. <a href="../../../index.html#/joinTailor">Are you a tailor here? Join free.</a></li>`}</ul>
+      <ul class="cards" id="live-list">${list.map(t => tailorCard(t, "../../../")).join("") || `<li class="empty">No tailors in ${esc(p.name)} have joined NebedaHub yet. <a href="../../../business/index.html#/welcome">Are you a tailor here? Join NebedaHub.</a></li>`}</ul>
       <p><a href="../">All cities in ${esc(country.name)}</a></p>`;
     write(rel, page({
       rel,
@@ -322,6 +322,9 @@ write("tailors/index.html", page({
   jsonLd: itemList("Tailors by country", `${APP_URL}/tailors/`, countryCodes.map(code => ({ url: `${APP_URL}/tailors/${byCode.get(code).slug}/`, name: `Tailors in ${byCode.get(code).name}` })))
 }));
 urls.unshift({ loc: `${APP_URL}/tailors/` });
+// The apps for tailors and fabric sellers (NebedaHub Admin is kept out of search)
+urls.unshift({ loc: `${APP_URL}/sell/` });
+urls.unshift({ loc: `${APP_URL}/business/` });
 urls.unshift({ loc: `${APP_URL}/` });
 
 // Sitemap and robots.txt
@@ -334,6 +337,7 @@ ${urls.map(u => `  <url><loc>${esc(u.loc)}</loc><lastmod>${u.lastmod || today}</
 write("robots.txt", `# NebedaHub
 User-agent: *
 Allow: /
+Disallow: /admin/
 Sitemap: ${APP_URL}/sitemap.xml
 `);
 console.log(`Built ${tailors.length} tailor pages, ${countryCodes.length} country pages and ${Array.from(places.values()).reduce((n, m) => n + m.size, 0)} city pages for ${APP_URL}${OFFLINE ? " (offline: standard pages only)" : ""}.`);

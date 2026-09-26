@@ -9,8 +9,8 @@ function renderCustomers(customerId) {
   const rows = bizCustomers().map(c => {
     const orders = customerOrders(c.id);
     const last = orders.slice().sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
-    return `<tr class="clickable" onclick="go('biz/customers/${c.id}')">
-      <td><a href="#/biz/customers/${c.id}">${escapeHtml(c.name)}</a></td>
+    return `<tr class="clickable" onclick="go('customers/${c.id}')">
+      <td><a href="#/customers/${c.id}">${escapeHtml(c.name)}</a></td>
       <td>${escapeHtml(c.phone)}</td>
       <td>${orders.length}</td>
       <td>${money(customerSpend(c.id))}</td>
@@ -30,12 +30,12 @@ function renderCustomers(customerId) {
 
 function renderCustomerDetail(customerId) {
   const c = findCustomer(customerId);
-  if (!c) return `${bizHeader("Customer not found")}<p><a href="#/biz/customers">← Customers</a></p>`;
+  if (!c) return `${bizHeader("Customer not found")}<p><a href="#/customers">← Customers</a></p>`;
   const orders = customerOrders(c.id).slice().reverse();
   const profiles = c.measurement_profiles.slice().sort((a, b) => b.label.localeCompare(a.label));
 
   return `
-    <p><a href="#/biz/customers">← Customers</a></p>
+    <p><a href="#/customers">← Customers</a></p>
     ${bizHeader(escapeHtml(c.name), `${escapeHtml(c.phone || "No phone")} · ${escapeHtml(c.email || "No email")} · customer since ${formatDate(c.created_at)}`)}
 
     <div class="statgrid">
@@ -67,8 +67,8 @@ function renderCustomerDetail(customerId) {
       <h2>Order history</h2>
       <div class="table-wrap"><table>
         <thead><tr><th>Order</th><th>Outfit</th><th>Placed</th><th>Now</th><th>Total</th><th>Balance</th><th>Review</th></tr></thead>
-        <tbody>${orders.map(o => `<tr class="clickable" onclick="go('biz/orders/${o.id}')">
-          <td><a href="#/biz/orders/${o.id}">${o.id}</a></td><td>${escapeHtml(o.outfit_type)}</td><td>${formatDate(o.created_at)}</td>
+        <tbody>${orders.map(o => `<tr class="clickable" onclick="go('orders/${o.id}')">
+          <td><a href="#/orders/${o.id}">${o.id}</a></td><td>${escapeHtml(o.outfit_type)}</td><td>${formatDate(o.created_at)}</td>
           <td>${stageBadge(o)}</td><td>${money(o.quote_total)}</td>
           <td class="${balanceOwed(o) > 0 ? "owed" : "paid"}">${balanceOwed(o) > 0 ? money(balanceOwed(o)) : "Paid"}</td>
           <td>${o.review_rating ? `<span class="gold">${"★".repeat(o.review_rating)}</span>` : "—"}</td></tr>`).join("") || "<tr><td colspan='7' class='empty'>No orders yet.</td></tr>"}</tbody>
@@ -87,6 +87,6 @@ function saveCustomerNotes(event, customerId) {
 }
 
 function openMeasurementsFor(customerId) {
-  go("biz/measurements");
+  go("measurements");
   setTimeout(() => editMeasurements(customerId), 50);
 }

@@ -66,7 +66,7 @@ function bizDesigner() {
 function switchBizDesigner(id) {
   db.session.designerId = id;
   if (!Cloud.live) saveData();
-  go("biz/dashboard");
+  go("dashboard");
 }
 
 function inBusiness() {
@@ -336,7 +336,7 @@ const DEMO_TAILORS = [
   { id: "D9", business_name: "Camden Bespoke (demo, waiting for approval)", country_code: "GB", city: "London", postcode: "NW1 8AH", address_line: "Camden Lock",
     latitude: 51.5410, longitude: -0.1460, show_exact_address: false, speciality_tags: ["Custom design", "Women's dresses"], admin_status: "pending",
     delivery_available: true, custom_orders: true, rating: null, review_count: 0, pattern: ["adire", ["#1e3a5f", "#efe6d2", "#1b1b1b"]],
-    description: "A new tailor waiting for the admin to approve them — try approving it in Business → Tailors." }
+    description: "A new tailor waiting for the admin to approve them — try approving it in NebedaHub Admin → Tailors." }
 ];
 
 const DEMO_REVIEW_TEXTS = [
