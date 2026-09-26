@@ -4,6 +4,7 @@
 // ============================================================
 
 function renderTeam() {
+  const canManage = canManageBusinessSettings();
   const open = placedOrders().filter(isOpen);
 
   const groups = STAFF_ROLES.map(role => {
@@ -15,7 +16,7 @@ function renderTeam() {
         <div class="person">
           <div class="row-between">
             <div><b>${escapeHtml(person.name)}</b><div class="muted small-text">${escapeHtml(role.label)}${person.phone ? ` · <a href="tel:${escapeHtml(person.phone.replace(/\s/g, ""))}">📞 ${escapeHtml(person.phone)}</a>` : ""}</div></div>
-            <button class="small danger" onclick="removeStaff('${person.id}')" ${assigned.length ? `disabled title="Reassign their ${assigned.length} order(s) first"` : ""}>Remove</button>
+            <button class="small danger" onclick="removeStaff('${person.id}')" ${!canManage ? `disabled title="Only the owner or a manager can remove production staff"` : assigned.length ? `disabled title="Reassign their ${assigned.length} order(s) first"` : ""}>Remove</button>
           </div>
           ${jobs.length ? `<ul class="jobs">${jobs.map(o => `<li>
             <a href="#/orders/${o.id}">${o.id}</a> ${escapeHtml(o.outfit_type)} — ${escapeHtml(currentStepLabel(o).toLowerCase())} now
@@ -33,12 +34,12 @@ function renderTeam() {
     <div class="team-grid">${groups}</div>
     <div class="card">
       <h2>Add a team member</h2>
-      <form class="form-grid" onsubmit="return addStaff(event)">
+      ${canManage ? `<form class="form-grid" onsubmit="return addStaff(event)">
         <label>Name<input name="name" required></label>
         <label>Role<select name="role">${STAFF_ROLES.map(r => `<option value="${r.key}">${r.label}</option>`).join("")}</select></label>
         <label>Phone${phoneFieldHtml("phone", "", bizDesigner().country_code)}</label>
         <div class="form-actions"><button type="submit">Add</button></div>
-      </form>
+      </form>` : `<p class="hint">Only the business owner or a manager can add or remove production staff.</p>`}
     </div>
     ${teamLoginsCard()}
   `;
@@ -101,6 +102,7 @@ function removeTeamLogin(kind, id) {
 
 function addStaff(event) {
   event.preventDefault();
+  if (!canManageBusinessSettings()) { alert("Only the business owner or a manager can add production staff."); return false; }
   const form = event.target;
   db.staff.push({ id: newId("T", db.staff), designer_id: bizDesignerId(), name: form.name.value.trim(), role: form.role.value, phone: readPhone(form, "phone") });
   saveData();
@@ -109,6 +111,7 @@ function addStaff(event) {
 }
 
 function removeStaff(staffId) {
+  if (!canManageBusinessSettings()) { alert("Only the business owner or a manager can remove production staff."); return; }
   const person = findStaff(staffId);
   if (!confirm(`Remove ${person.name} from the team?`)) return;
   db.staff = db.staff.filter(s => s.id !== staffId);
