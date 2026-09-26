@@ -351,6 +351,10 @@ function screenTailorPage(slug) {
   const rtw = !Cloud.live ? rtwOf(d.id) : [];
   const country = countryByCode(d.country_code);
   const link = new URL(`tailor/${d.slug}/`, location.href.split("#")[0]).href;
+  const currency = designerCurrency(d);
+  // "Tailoring from": the lowest outfit price in their price list (in their currency)
+  const listed = pricesOf(d.id).filter(p => p.kind === "outfit" && (p.currency_code || currency) === currency).map(p => p.price);
+  const fromPrice = listed.length ? Math.min(...listed) : d.from_price != null ? d.from_price : null;
   const canOrder = d.admin_status === "approved" && d.custom_orders !== false;
 
   return `
@@ -377,7 +381,10 @@ function screenTailorPage(slug) {
       ${(d.portfolio || []).length ? `<div><b>Portfolio</b><div class="portfolio-grid">${d.portfolio.map((p, i) => `
         <button type="button" class="portfolio-item" onclick="openPortfolio('${d.id}', ${i})" aria-label="Open photo ${i + 1}${p.title ? ": " + escapeHtml(p.title) : ""}">
           <img src="${escapeHtml(photoUrl(p.image))}" alt="${escapeHtml(p.title || "Portfolio photo")}" loading="lazy">${p.title ? `<span>${escapeHtml(p.title)}</span>` : ""}</button>`).join("")}</div></div>` : ""}
-      ${(d.services || []).length ? `<div><b>Services</b>${d.services.map(sv => `<div class="qline"><span>${escapeHtml(sv.name)}</span><span>${sv.price != null ? money(sv.price) : ""}</span></div>`).join("")}</div>` : ""}
+      ${fromPrice != null ? `<div class="mrow"><span>Tailoring from</span><span><b>${money(fromPrice, currency)}</b>${approxMoney(fromPrice, currency)}</span></div>` : ""}
+      ${(d.services || []).length ? `<div><b>Services</b>${d.services.map(sv => `<div class="qline"><span>${escapeHtml(sv.name)}</span><span>${sv.price != null ? money(sv.price, currency) + approxMoney(sv.price, currency) : ""}</span></div>`).join("")}</div>` : ""}
+      <div class="mrow"><span>Prices in</span><span>${escapeHtml(currencyInfo(currency).name)} (${escapeHtml(currency)}) · fabric in ${unitWord(designerFabricUnit(d), true)}</span></div>
+      ${approxNote(currency)}
       <div class="mrow"><span>Usual making time</span><span>${escapeHtml(d.delivery_time || "7–14 days")}</span></div>
       <div><b>Reviews</b>${reviews.length ? reviews.map(r => `<div class="review"><span class="gold">${"★".repeat(r.rating)}</span> ${escapeHtml(r.text || r.outfit || "")}<div class="fl">${escapeHtml(r.who || "A customer")}${r.outfit ? " · " + escapeHtml(r.outfit) : ""}</div></div>`).join("")
         : `<p class="meta">No reviews yet — reviews appear after a customer's outfit is delivered.</p>`}</div>
@@ -459,9 +466,9 @@ function screenJoinTailor() {
       <ol class="join-steps"><li>Tell us your business name and where you are.</li><li>Add your photo, specialities and portfolio in <b>My profile</b>.</li><li>The ${APP_NAME} team checks and approves you — then customers can find you.</li></ol>
       <form class="stack" onsubmit="return joinAsTailor(event)">
         <label class="field">Business name<input name="business" required minlength="2" maxlength="80" placeholder="e.g. Ade's Tailoring"></label>
-        <label class="field">Country<select name="country" required>${countryOptions("", "Choose your country")}</select></label>
+        <label class="field">Country <small>(your prices are in its currency — you can change that later)</small><select name="country" required onchange="if (this.form.phone_cc) this.form.phone_cc.value = this.value">${countryOptions(browserCountry(), "Choose your country")}</select></label>
         <label class="field">City or town<input name="city" required maxlength="60" placeholder="e.g. Manchester"></label>
-        <label class="field">Phone <small>(only the ${APP_NAME} team sees it)</small><input name="phone" type="tel" maxlength="20"></label>
+        <label class="field">Phone <small>(only the ${APP_NAME} team sees it)</small>${phoneFieldHtml("phone", "", browserCountry())}</label>
         ${tailorTermsHtml(false)}
         ${tailorTermsCheckbox()}
         <p id="join-error" class="form-error" role="alert"></p>
@@ -473,7 +480,7 @@ function screenJoinTailor() {
 function joinAsTailor(event) {
   event.preventDefault();
   const form = event.target;
-  const details = { businessName: form.business.value.trim(), country: form.country.value, city: form.city.value.trim(), phone: form.phone.value.trim(),
+  const details = { businessName: form.business.value.trim(), country: form.country.value, city: form.city.value.trim(), phone: readPhone(form, "phone"),
                     acceptTerms: form.acceptTerms.checked };
   if (details.businessName.length < 2) return formError("join-error", "Enter your business name.");
   if (hideContactDetails(details.businessName).hidden) return formError("join-error", "Your business name can't include a phone number, email, website or social handle.");
@@ -496,8 +503,9 @@ function joinAsTailor(event) {
     rating: null, review_count: 0, profile_image: null, description: "", delivery_time: "7–14 days", admin_status: "pending",
     admin_note: "", portfolio: [], phone: details.phone, location: "", demo: true, tailor_terms_accepted_at: new Date().toISOString()
   });
+  d.currency_code = countryCurrency(details.country) || "GBP";   // their country's currency; they can change it in My profile
   db.designers.push(d);
-  db.prices = db.prices.concat(newPriceListFor(id));
+  db.prices = db.prices.concat(newPriceListFor(id, null, d.currency_code));
   db.session.designerId = id;
   saveData();
   toast(`${d.business_name} created. It waits for approval in Business → Tailors.`);

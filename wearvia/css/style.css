@@ -1032,3 +1032,23 @@ details.card-lite > summary { list-style-position: inside; }
 .terms-check { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; line-height: 1.35; }
 .terms-check input { margin-top: 2px; flex: none; }
 .handover .inline-form input { padding: 9px 11px; border: 1px solid var(--line); border-radius: 10px; font: inherit; background: #fff; }
+
+/* ---- Worldwide: currencies, approximate prices, phone numbers ---- */
+/* "≈ £125" after a price in another currency: clearly an estimate */
+.approx { display: inline-block; margin-left: 4px; font-size: 0.85em; font-weight: 500; color: var(--muted); font-style: italic; white-space: nowrap; }
+.approx-note { font-size: 11px; color: var(--muted); font-style: italic; margin: 6px 0; line-height: 1.4; }
+.chip-sub .approx { display: block; margin: 0; }
+.mprice .approx { display: block; margin: 1px 0 0; font-size: 11px; }
+/* Totals in more than one currency sit side by side, never added up */
+.multi-currency { display: inline-flex; flex-wrap: wrap; gap: 2px 10px; }
+.stat .multi-currency { font-size: 0.8em; }
+.fx-line { background: var(--soft); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; margin: 6px 0; }
+/* A price with its currency symbol in front of the box */
+.price-in { display: inline-flex; align-items: center; gap: 4px; }
+.price-in .cur { color: var(--muted); font-weight: 600; min-width: 1.2em; text-align: right; }
+/* Phone: country code picker + number, on one line even on a phone */
+.phone-field { display: flex; gap: 6px; width: 100%; min-width: 0; }
+.phone-field select { flex: 0 0 auto; width: 9em; max-width: 46%; text-overflow: ellipsis; }
+.phone-field input { flex: 1 1 auto; min-width: 0; width: 100%; }
+.unit-toggle .optbtns { flex-wrap: nowrap; }
+.settings-form { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 6px; }

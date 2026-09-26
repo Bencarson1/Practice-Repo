@@ -34,6 +34,16 @@
       if (!t) return;
       const r = document.querySelector("[data-live=rating]");
       if (r) r.textContent = rating(t);
+      // "Tailoring from ₦95,000", in the tailor's own currency
+      const price = document.querySelector("[data-live=price]");
+      const c = P.currency && P.currency.code === t.currency_code ? P.currency : null;
+      if (price && c && t.from_price != null) {
+        const places = Number(c.decimals ?? 2);
+        const value = Number(t.from_price);
+        const whole = places === 0 || (c.trim_zeros && value % 1 === 0);
+        const sym = c.symbol || c.code;
+        price.innerHTML = `Tailoring from ${esc(sym + (sym.length > 1 && /[A-Za-z.]$/.test(sym) ? " " : "") + value.toLocaleString("en-GB", { minimumFractionDigits: whole ? 0 : places, maximumFractionDigits: whole ? 0 : places }))} <small>(${esc(c.code)})</small>`;
+      }
       const portfolio = document.getElementById("live-portfolio");
       if (portfolio && (t.portfolio || []).length) {
         portfolio.innerHTML = `<h2>Portfolio</h2><div class="portfolio">${t.portfolio.map(p => `<img src="${esc(p.image_url)}" alt="${esc(p.title || "Outfit by " + t.business_name)}" loading="lazy">`).join("")}</div>`;

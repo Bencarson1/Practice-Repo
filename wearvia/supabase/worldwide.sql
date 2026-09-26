@@ -1473,9 +1473,10 @@ begin
       ('USD', 1, current_date, 'report test'), ('GBP', 0.75, current_date, 'report test'), ('NGN', 1500, current_date, 'report test')
     on conflict (currency_code) do update set rate_date = greatest(public.exchange_rates.rate_date, current_date);
 
+    -- (no owner: the admin looks after them, so no real account gets a second business, even for a moment)
     insert into public.designers (id, business_name, owner_user_id, country_code, city, admin_status, approved, custom_orders, speciality_tags)
-    values (v_london, 'Report Test London Tailor', v_admin, 'GB', 'London', 'approved', true, true, '{}'),
-           (v_lagos, 'Report Test Lagos Tailor', v_admin, 'NG', 'Lagos', 'approved', true, true, '{}');
+    values (v_london, 'Report Test London Tailor', null, 'GB', 'London', 'approved', true, true, '{}'),
+           (v_lagos, 'Report Test Lagos Tailor', null, 'NG', 'Lagos', 'approved', true, true, '{}');
     perform public.wv_seed_price_list(v_london);
     perform public.wv_seed_price_list(v_lagos);
     v_seed_ok := (select currency_code from public.designers where id = v_london) = 'GBP'
@@ -1484,7 +1485,7 @@ begin
              and (select price from public.price_list where designer_id = v_london and kind = 'outfit' and name = 'Agbada') = 280;
 
     insert into public.suppliers (id, name, location, delivery_estimate, country_code, owner_user_id)
-    values (v_seller, 'Report Test Lagos Fabrics', 'Balogun Market, Lagos', '2–4 days', 'NG', v_admin);
+    values (v_seller, 'Report Test Lagos Fabrics', 'Balogun Market, Lagos', '2–4 days', 'NG', null);
     insert into public.fabrics (id, supplier_id, name, category, price_per_yard, yards_available, min_order_yards, status)
     values (v_fabric, v_seller, 'Report Test Aso Oke', 'Aso Oke', 15000, 40, 1, 'approved');
     insert into public.customers (id, name) values (v_customer, 'Report Test Customer');

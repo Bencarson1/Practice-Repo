@@ -81,11 +81,11 @@ const Auth = (() => {
             ? `Get found by customers near you and run quotes, chats, orders and payments from your own dashboard. New tailors are checked by the ${APP_NAME} team before customers can see them.`
             : `Find tailors near you, then design, order and track your outfits.`}</p>
         <form class="stack" onsubmit="return Auth.submit(event)">
-          ${tailor ? `${field("Business name", "businessName", "text", 'required maxlength="80" autocomplete="organization"')}
-          <label class="field">Country<select name="country" required>${countryOptions("", "Choose your country")}</select></label>
-          ${field("City or town", "city", "text", 'required maxlength="60" autocomplete="address-level2"')}` : ""}
+          ${tailor ? field("Business name", "businessName", "text", 'required maxlength="80" autocomplete="organization"') : ""}
+          <label class="field">Country <small>${tailor ? "(your prices are in its currency — you can change that later)" : seller ? "" : "(for prices in your currency)"}</small><select name="country" ${tailor || seller ? "required" : ""} onchange="if (this.form.phone_cc) this.form.phone_cc.value = this.value">${countryOptions(browserCountry(), "Choose your country")}</select></label>
+          ${tailor ? field("City or town", "city", "text", 'required maxlength="60" autocomplete="address-level2"') : ""}
           ${field("Your name", "name", "text", 'required autocomplete="name" maxlength="80"')}
-          ${field("Phone <small>(optional)</small>", "phone", "tel", 'autocomplete="tel" maxlength="20"')}
+          <label class="field">Phone <small>(optional)</small>${phoneFieldHtml("phone", "", browserCountry())}</label>
           ${field("Email", "email", "email", 'required autocomplete="email"')}
           ${field("Password <small>(at least 8 characters)</small>", "password", "password", 'required minlength="8" autocomplete="new-password"')}
           ${tailor ? tailorTermsHtml(false) + tailorTermsCheckbox() : ""}
@@ -125,7 +125,7 @@ const Auth = (() => {
 
   function setType(type) {
     const form = document.querySelector("#auth-view form");
-    const kept = form ? { name: form.name.value, phone: form.phone.value, email: form.email.value } : null;
+    const kept = form ? { name: form.name.value, phone: form.phone.value, phone_cc: form.phone_cc.value, email: form.email.value, country: form.country.value } : null;
     accountType = type;
     draw();
     if (kept) {
@@ -159,6 +159,7 @@ const Auth = (() => {
     const values = {};
     Array.from(form.elements).forEach(input => { if (input.name) values[input.name] = input.value.trim(); });
     if (values.password !== undefined) values.password = form.password.value; // passwords may start or end with spaces
+    if (form.phone_cc) values.phone = readPhone(form, "phone");            // "+234 803 555 0142"
     if (form.acceptTerms) values.acceptTerms = form.acceptTerms.checked;
     if ((screen === "signUp" || screen === "newPassword") && values.password.length < 8) {
       setError("Use at least 8 characters for your password.");
@@ -188,7 +189,8 @@ const Auth = (() => {
         return false;
       }
       work = Cloud.signUp({ email: values.email, password: values.password, name: values.name, phone: values.phone, accountType,
-                            businessName: values.businessName, country: values.country, city: values.city, acceptTerms: !!values.acceptTerms })
+                            businessName: values.businessName, country: values.country, city: values.city, acceptTerms: !!values.acceptTerms,
+                            unit: customerBodyUnit({ country_code: values.country }) })
         .then(result => {
           if (result.needsConfirmation) {
             message = `Nearly done! We've sent a link to ${values.email}. Open it to confirm your email, then sign in here.`;

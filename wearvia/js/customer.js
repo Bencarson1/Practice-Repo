@@ -155,8 +155,9 @@ function screenOutfit() {
       ${flowBar("design")}
       <div class="chip-grid">
         ${OUTFITS.map(o => `<button class="chip ${d.outfit === o.name ? "sel" : ""}" onclick="setDesign('outfit','${o.name}')">
-          ${o.name}<span class="chip-sub">from ${money(o.tailoring)}</span></button>`).join("")}
+          ${o.name}<span class="chip-sub">from ${money(o.tailoring)}${approxMoney(o.tailoring, screenCurrency())}</span></button>`).join("")}
       </div>
+      ${approxNote(screenCurrency())}
       <button class="style-cta" onclick="go('inspiration')">
         <span class="style-cta-icon" aria-hidden="true">📷</span>
         <span>${photos ? `<b>Your style photos (${photos})</b><small>Tap to add, change or remove</small>`
@@ -255,11 +256,43 @@ function approveConcept() {
 
 // ---- Screen 5: Measurements (step 3) ----
 
-function measurementRows(values) {
+// Measurements are saved in inches; the customer types and sees them in inches or centimetres
+function measurementRows(values, unit) {
+  const cm = unit === "cm";
   return MEASUREMENT_FIELDS.map(f => `
     <label class="mrow"><span>${f.label}${f.required ? "" : ' <small class="fl">(optional)</small>'}</span>
-      <span><input name="${f.key}" type="number" inputmode="decimal" min="1" max="120" step="0.25" value="${values && values[f.key] != null ? values[f.key] : ""}" ${f.required ? "required" : ""}> in</span>
+      <span><input name="${f.key}" type="number" inputmode="decimal" min="${cm ? 2 : 1}" max="${cm ? 300 : 120}" step="${cm ? 0.5 : 0.25}" value="${values && values[f.key] != null ? bodyValue(values[f.key], unit) : ""}" ${f.required ? "required" : ""}> <span class="unit-word">${cm ? "cm" : "in"}</span></span>
     </label>`).join("");
+}
+
+// The unit the customer measures in: their profile's, or (before they have one) this device's
+let draftBodyUnit = null;
+function currentBodyUnit() {
+  const customer = currentCustomer();
+  if (customer && customer.measurement_unit) return customer.measurement_unit;
+  return draftBodyUnit || customerBodyUnit(null);
+}
+
+function bodyUnitToggle(formId) {
+  const unit = currentBodyUnit();
+  return `<div class="selopt unit-toggle"><span class="fl">Measure in</span><span class="optbtns" role="group" aria-label="Measurement unit">
+    <button type="button" class="optbtn ${unit === "in" ? "sel" : ""}" aria-pressed="${unit === "in"}" onclick="switchBodyUnit('in', '${formId}')">Inches</button>
+    <button type="button" class="optbtn ${unit === "cm" ? "sel" : ""}" aria-pressed="${unit === "cm"}" onclick="switchBodyUnit('cm', '${formId}')">Centimetres</button></span></div>`;
+}
+
+// Changes the unit without losing what's been typed: the numbers on the form are converted
+function switchBodyUnit(unit, formId) {
+  const form = document.getElementById(formId);
+  const before = form ? form.dataset.unit : currentBodyUnit();
+  if (before === unit) return;
+  const typed = {};
+  if (form) MEASUREMENT_FIELDS.forEach(f => { typed[f.key] = inchesFrom(form[f.key].value, before); });
+  const customer = currentCustomer();
+  if (customer) customer.measurement_unit = unit; else draftBodyUnit = unit;
+  saveData();
+  renderAll();
+  const again = document.getElementById(formId);
+  if (again) MEASUREMENT_FIELDS.forEach(f => { again[f.key].value = typed[f.key] == null ? "" : bodyValue(typed[f.key], unit); });
 }
 
 function screenMeasurements() {
@@ -270,14 +303,15 @@ function screenMeasurements() {
     ${cTop("My Measurements", "concept")}
     <div class="content">
       ${flowBar("measurements")}
-      <form id="flow-measure-form" class="stack" onsubmit="return saveFlowMeasurements(event)">
+      <form id="flow-measure-form" class="stack" data-unit="${currentBodyUnit()}" onsubmit="return saveFlowMeasurements(event)">
         ${customer ? `<div class="meta">Saving to <b>${escapeHtml(customer.name)}</b>'s ${thisYear()} measurement profile.</div>` : `
           <div class="meta">Your measurements are saved to your profile so you only enter them once a year.</div>
           <label class="field">Your name<input name="name" required autocomplete="name"></label>
           <label class="field">Email<input name="email" type="email" autocomplete="email"></label>
-          <label class="field">Phone<input name="phone" type="tel" autocomplete="tel"></label>`}
+          <label class="field">Phone${phoneFieldHtml("phone", "", browserCountry())}</label>`}
+        ${bodyUnitToggle("flow-measure-form")}
         ${older.length ? `<div class="optbtns">${older.map(p => `<button type="button" class="optbtn" onclick="copyProfile('${p.id}')">Copy from ${p.label}</button>`).join("")}</div>` : ""}
-        <div>${measurementRows(latest && latest.label === thisYear() ? latest : null)}</div>
+        <div>${measurementRows(latest && latest.label === thisYear() ? latest : null, currentBodyUnit())}</div>
         <button class="cta" type="submit">Save &amp; Choose Fabric →</button>
       </form>
     </div>`;
@@ -286,12 +320,13 @@ function screenMeasurements() {
 function copyProfile(profileId) {
   const profile = findProfile(profileId);
   const form = document.querySelector("form[id$=measure-form]");
-  MEASUREMENT_FIELDS.forEach(f => { if (profile[f.key] != null) form[f.key].value = profile[f.key]; });
+  MEASUREMENT_FIELDS.forEach(f => { if (profile[f.key] != null) form[f.key].value = bodyValue(profile[f.key], form.dataset.unit); });
 }
 
+// What was typed, in inches (how measurements are saved)
 function readMeasurements(form) {
   const values = {};
-  MEASUREMENT_FIELDS.forEach(f => { values[f.key] = form[f.key].value; });
+  MEASUREMENT_FIELDS.forEach(f => { values[f.key] = inchesFrom(form[f.key].value, form.dataset.unit || "in"); });
   return values;
 }
 
@@ -300,7 +335,8 @@ function saveFlowMeasurements(event) {
   const form = event.target;
   let customer = currentCustomer();
   if (!customer) {
-    customer = findOrCreateCustomer(form.name.value.trim(), form.phone.value.trim(), form.email.value.trim());
+    customer = findOrCreateCustomer(form.name.value.trim(), readPhone(form, "phone"), form.email.value.trim());
+    customer.measurement_unit = form.dataset.unit || currentBodyUnit();
     db.session.customerId = customer.id;
   }
   const profile = saveMeasurementProfile(customer, readMeasurements(form));
@@ -326,6 +362,7 @@ function screenFabric() {
     selected = null;
   }
   const seller = selected ? findSupplier(selected.supplier_id) : null;
+  const unit = screenFabricUnit();
 
   return `
     ${cTop("Fabric Marketplace", "measurements")}
@@ -339,9 +376,9 @@ function screenFabric() {
           <div class="pick-head">
             <img src="${fabricCoverUrl(selected)}" alt="">
             <div><div class="name">${escapeHtml(selected.name)}</div>
-              <div class="meta">${escapeHtml(seller ? seller.name : "")} · ${money(selected.price_per_yard)} / yd · ${selected.yards_available} yd left</div></div>
+              <div class="meta">${escapeHtml(seller ? seller.name : "")} · ${fabricPriceText(selected, unit)}${approxMoney(pricePerUnit(selected.price_per_yard, unit), fabricCurrency(selected))} · ${lengthText(selected.yards_available, unit)} left</div></div>
           </div>
-          <div class="meta">Your tailor works out how many yards you need with you. Nothing is bought yet.</div>
+          <div class="meta">Your tailor works out how many ${unitWord(unit, true)} you need with you. Nothing is bought yet.</div>
           <button class="cta" onclick="go('send')">Continue with this fabric →</button>
         </div>` : `<div class="pick-bar"><button class="cta" disabled>Tap a fabric to choose it</button></div>`}
     </div>`;
@@ -361,6 +398,11 @@ function screenSend() {
   const photos = hasInspiration(d.inspiration) ? d.inspiration.photos.length : 0;
   const tailoring = findOutfit(d.outfit).tailoring;
   const embroidery = embroideryPrice(d.embroidery);
+  const tailor = draftDesigner();
+  const currency = designerCurrency(tailor);
+  const unit = designerFabricUnit(tailor);
+  const fc = fabricCurrency(fabric);
+  const perUnit = pricePerUnit(fabric.price_per_yard, unit);
   return `
     ${cTop("Send to Tailor", "fabric")}
     <div class="content">
@@ -377,18 +419,20 @@ function screenSend() {
       <div class="pick-head">
         <img src="${fabricCoverUrl(fabric)}" alt="">
         <div><div class="name">${escapeHtml(fabric.name)}</div>
-          <div class="meta">${money(fabric.price_per_yard)} / yd · ${escapeHtml(seller ? seller.name : "")}</div></div>
+          <div class="meta">${fabricPriceText(fabric, unit)}${approxMoney(perUnit, fc)} · ${escapeHtml(seller ? seller.name : "")}</div></div>
         <button class="linkish" onclick="go('fabric')">Change</button>
       </div>
       <div class="send-next">
         <b>What happens next</b>
         <ol>
           <li>${escapeHtml(draftDesigner().business_name)} looks at your design, photos and measurements.</li>
-          <li>You chat here in the app to agree how many yards of fabric you need.</li>
-          <li>They send your quote: fabric (yards × ${money(fabric.price_per_yard)}) + tailoring ${money(tailoring)} + embroidery ${money(embroidery)} + delivery ${money(DELIVERY_FEE)}.</li>
+          <li>You chat here in the app to agree how many ${unitWord(unit, true)} of fabric you need.</li>
+          <li>They send your quote in ${escapeHtml(currencyInfo(currency).name)}: fabric (${unitWord(unit, true)} × ${money(perUnit, fc)}) + tailoring ${money(tailoring, currency)}${approxMoney(tailoring, currency)} + embroidery ${money(embroidery, currency)} + delivery ${money(DELIVERY_FEE, currency)}.</li>
+          ${fc !== currency ? `<li>The seller prices this fabric in ${escapeHtml(currencyInfo(fc).name)}. ${escapeHtml(tailor.business_name)}'s quote converts it into ${escapeHtml(currencyInfo(currency).name)} at the day's exchange rate${fxRate(fc, currency) ? ` (today ${escapeHtml(rateText(fxRate(fc, currency), fc, currency))})` : ""}, and shows the rate used.</li>` : ""}
           <li>Accept it and pay a ${Math.round(DEPOSIT_RATE * 100)}% deposit. The fabric is only bought then.</li>
         </ol>
       </div>
+      ${approxNote(currency) || approxNote(fc)}
       <label class="field"><span>Anything to tell the tailor? <small>(optional)</small></span>
         <textarea id="tailor-note" rows="3" maxlength="${CHAT_TEXT_MAX}" placeholder="e.g. It's for a wedding on 12 June. I'm 6ft 2 and like a loose fit."
           oninput="draft().tailorNote=this.value;saveData()">${escapeHtml(d.tailorNote || "")}</textarea></label>
@@ -507,11 +551,24 @@ function saveDeliveryAddress(event, orderId) {
 
 // ---- Screen 8: the tailor's quote (steps 5 and 6) ----
 
+// The itemised quote, in the tailor's currency. When the seller's fabric was
+// converted, the exchange rate the database used is shown too.
 function quoteLinesHtml(order) {
   const deposit = order.deposit_amount;
-  return `${order.line_items.map(l => `<div class="qline"><span>${escapeHtml(l.label)}</span><span>${money(l.amount)}</span></div>`).join("")}
-    <div class="qtotal"><span>Total</span><span>${money(order.quote_total)}</span></div>
-    <div class="meta">Deposit ${money(deposit)} (${Math.round(DEPOSIT_RATE * 100)}%) · balance ${money(order.quote_total - deposit)} after quality control.</div>`;
+  const cur = orderCurrency(order);
+  return `${order.line_items.map(l => `<div class="qline"><span>${escapeHtml(l.label)}</span><span>${money(l.amount, cur)}</span></div>`).join("")}
+    <div class="qtotal"><span>Total</span><span>${money(order.quote_total, cur)}${approxMoney(order.quote_total, cur)}</span></div>
+    ${exchangeRateHtml(order)}
+    <div class="meta">Deposit ${money(deposit, cur)} (${Math.round(DEPOSIT_RATE * 100)}%) · balance ${money(order.quote_total - deposit, cur)} after quality control.</div>
+    ${approxNote(cur)}`;
+}
+
+// "Fabric converted from ₦67,500 at £1 = ₦1,752.98 (26 Sep 2026)"
+function exchangeRateHtml(order) {
+  if (!order.exchange_rate || !order.fabric_currency_code || order.fabric_currency_code === orderCurrency(order)) return "";
+  const fc = order.fabric_currency_code;
+  return `<div class="meta fx-line">💱 The seller charges ${money(order.fabric_cost_in_fabric_currency, fc)}. Converted into ${escapeHtml(currencyInfo(orderCurrency(order)).name)} at
+    <b>${escapeHtml(rateText(order.exchange_rate, fc, orderCurrency(order)))}</b>${order.exchange_rate_date ? `, the exchange rate on ${formatDate(order.exchange_rate_date)}` : ""} — fixed for this order.</div>`;
 }
 
 function chatButton(order, primary) {
@@ -547,7 +604,7 @@ let acceptingQuote = false;
 function acceptQuoteFromApp(orderId) {
   const order = findOrder(orderId);
   if (!order || acceptingQuote) return;
-  if (!confirm(`Accept the quote of ${money(order.quote_total)}? The fabric is bought for your outfit and you'll pay a deposit of ${money(order.deposit_amount)}.`)) return;
+  if (!confirm(`Accept the quote of ${money(order.quote_total, orderCurrency(order))}? The fabric is bought for your outfit and you'll pay a deposit of ${money(order.deposit_amount, orderCurrency(order))}.`)) return;
   acceptingQuote = true;
   const button = document.getElementById("accept-quote");
   if (button) { button.disabled = true; button.textContent = "Accepting…"; }
@@ -582,13 +639,16 @@ function screenPay(orderId) {
   if (!order) return screenNotFound();
   if (!isPlaced(order) || depositStarted(order)) return screenTracking(orderId);
   const deposit = order.deposit_amount;
+  const cur = orderCurrency(order);
   return `
     ${cTop("Pay Deposit", "tracking/" + order.id)}
     <div class="content">
       ${flash()}
-      <div class="qline"><span>Order Total</span><span>${money(order.quote_total)}</span></div>
-      <div class="qline"><span>Deposit Required (${Math.round(DEPOSIT_RATE * 100)}%)</span><span>${money(deposit)}</span></div>
-      <div class="qline"><span>Balance (after quality control)</span><span>${money(order.quote_total - deposit)}</span></div>
+      <div class="qline"><span>Order Total</span><span>${money(order.quote_total, cur)}</span></div>
+      <div class="qline"><span>Deposit Required (${Math.round(DEPOSIT_RATE * 100)}%)</span><span>${money(deposit, cur)}${approxMoney(deposit, cur)}</span></div>
+      <div class="qline"><span>Balance (after quality control)</span><span>${money(order.quote_total - deposit, cur)}</span></div>
+      <div class="meta">You pay in ${escapeHtml(currencyInfo(cur).name)} (${escapeHtml(cur)}), ${escapeHtml(designerName(order.designer_id))}'s currency.</div>
+      ${approxNote(cur)}
       <div class="selopt"><span class="fl">Method</span>
         <span class="optbtns">${["Card", "Apple Pay", "Bank transfer"].map(m =>
           `<button class="optbtn ${depositMethod === m ? "sel" : ""}" onclick="depositMethod='${m}';renderAll()">${m}</button>`).join("")}</span>
@@ -597,7 +657,7 @@ function screenPay(orderId) {
         <input id="pay-address" maxlength="300" value="${escapeHtml(deliveryDetails(order).delivery_address)}" placeholder="House number, street, town, postcode" autocomplete="street-address"></label>
       ${payProtectionLine()}
       <div class="meta">Demo checkout — no real money is taken. Your deposit shows as <b>awaiting confirmation</b> until ${escapeHtml(designerName(order.designer_id))} confirms it. Stripe connects here in the full version.</div>
-      <button id="pay-deposit" class="cta" onclick="payDeposit('${order.id}')">Pay ${money(deposit)} Deposit</button>
+      <button id="pay-deposit" class="cta" onclick="payDeposit('${order.id}')">Pay ${money(deposit, cur)} Deposit</button>
     </div>`;
 }
 
@@ -611,11 +671,11 @@ function payDeposit(orderId) {
   else if (address) order.delivery_address = hideContactDetails(address).text;
   db.payments.push({
     id: nextPaymentId(), order_id: order.id, amount: order.deposit_amount, method: depositMethod, kind: "Deposit",
-    date: today(), status: "awaiting_confirmation"
+    date: today(), status: "awaiting_confirmation", currency_code: orderCurrency(order)
   });
   refreshOrderPayments(order);
   saveData();
-  flashMessage = `Thank you! Your deposit of ${money(order.deposit_amount)} is awaiting confirmation — we'll start as soon as it's confirmed.`;
+  flashMessage = `Thank you! Your deposit of ${money(order.deposit_amount, orderCurrency(order))} is awaiting confirmation — we'll start as soon as it's confirmed.`;
   go("tracking/" + order.id);
 }
 
@@ -627,6 +687,9 @@ function screenChat(orderId) {
   const profile = findProfile(order.measurement_profile_id);
   const fabric = findFabric(order.fabric_id);
   const status = quoteStatus(order);
+  const unit = orderFabricUnit(order);
+  const cur = orderCurrency(order);
+  const customer = findCustomer(order.customer_id);
   return `
     ${cTop("Chat · " + order.id, "tracking/" + order.id)}
     <div class="content chat-content" data-chat-scroll="${order.id}" onscroll="chatScrolled(this)">
@@ -634,10 +697,10 @@ function screenChat(orderId) {
         <summary>Your order: ${escapeHtml(order.outfit_type)}${hasInspiration(order.inspiration) ? " · style photos" : ""} · measurements</summary>
         ${inspirationBlock(order.id, order.inspiration)}
         <div class="meta">${escapeHtml(colourName(order.colour))} · ${escapeHtml(order.embroidery)} embroidery · ${escapeHtml(order.sleeve_style)} sleeve · ${escapeHtml(order.neck_style)} neck</div>
-        ${fabric ? `<div class="meta">Fabric: <b>${escapeHtml(fabric.name)}</b> · ${money(fabric.price_per_yard)} / yd${isPlaced(order) || status === "quoted" ? ` · ${order.fabric_yards} yd` : ""}</div>` : ""}
-        ${profile ? `<div class="chat-measure">${MEASUREMENT_FIELDS.filter(f => profile[f.key] != null).map(f => `<span>${f.label} <b>${profile[f.key]}"</b></span>`).join("")}</div>` : ""}
+        ${fabric ? `<div class="meta">Fabric: <b>${escapeHtml(fabric.name)}</b> · ${fabricPriceText(fabric, unit)}${isPlaced(order) || status === "quoted" ? ` · ${lengthText(order.fabric_yards, unit)}` : ""}</div>` : ""}
+        ${profile ? `<div class="chat-measure">${MEASUREMENT_FIELDS.filter(f => profile[f.key] != null).map(f => `<span>${f.label} <b>${bodyText(profile[f.key], customerBodyUnit(customer))}</b></span>`).join("")}</div>` : ""}
       </details>
-      ${status === "quoted" ? `<div class="chat-quote-bar"><span>Quote: <b>${money(order.quote_total)}</b> · deposit ${money(order.deposit_amount)}</span>
+      ${status === "quoted" ? `<div class="chat-quote-bar"><span>Quote: <b>${money(order.quote_total, cur)}</b> · deposit ${money(order.deposit_amount, cur)}</span>
         <button class="optbtn sel" onclick="go('tracking/${order.id}')">View &amp; accept</button></div>` : ""}
       ${chatLogHtml(order, "customer", false)}
     </div>
@@ -689,18 +752,19 @@ function screenTracking(orderId) {
   const delivery = findDelivery(order.id);
   const qcPassed = stageIndex(order) >= STAGES.findIndex(s => s.key === "quality_control") && !depositAwaiting(order);
   const placed = isPlaced(order);
+  const cur = orderCurrency(order);
   let action = "";
   if (!placed) {
     action = quoteBlock(order);
   } else if (!depositStarted(order)) {
-    action = `<button class="cta" onclick="go('pay/${order.id}')">Pay ${money(order.deposit_amount)} Deposit →</button>`;
+    action = `<button class="cta" onclick="go('pay/${order.id}')">Pay ${money(order.deposit_amount, cur)} Deposit →</button>`;
   } else if (order.stage === "delivered" && !order.review_rating) {
     action = `<button class="cta" onclick="go('review/${order.id}')">Leave a Review →</button>`;
   } else if (due > 0 && qcPassed) {
     action = `
       <div class="selopt"><span class="fl">Pay by</span><span class="optbtns">${["Card", "Apple Pay", "Bank transfer"].map(m =>
         `<button class="optbtn ${balanceMethod === m ? "sel" : ""}" onclick="balanceMethod='${m}';renderAll()">${m}</button>`).join("")}</span></div>
-      <button class="cta" onclick="payBalance('${order.id}')">Pay ${money(due)} Balance</button>
+      <button class="cta" onclick="payBalance('${order.id}')">Pay ${money(due, cur)} Balance</button>
       ${payProtectionLine()}`;
   }
   return `
@@ -712,9 +776,9 @@ function screenTracking(orderId) {
         <div>
           <div class="name">${escapeHtml(order.outfit_type)} by ${escapeHtml(designerName(order.designer_id))}</div>
           ${placed ? `
-          <div class="meta">Total ${money(order.quote_total)} · Paid ${money(amountPaid(order.id))}</div>
-          ${awaiting > 0 ? `<div class="meta awaiting">${money(awaiting)} awaiting confirmation by ${escapeHtml(designerName(order.designer_id))}</div>` : ""}
-          <div class="meta">${due > 0 ? `Balance ${money(due)}${qcPassed ? " — due now" : " after quality control"}` : balance > 0 ? "Nothing more to pay right now" : "Paid in full"}</div>
+          <div class="meta">Total ${money(order.quote_total, cur)}${approxMoney(order.quote_total, cur)} · Paid ${money(amountPaid(order.id), cur)}</div>
+          ${awaiting > 0 ? `<div class="meta awaiting">${money(awaiting, cur)} awaiting confirmation by ${escapeHtml(designerName(order.designer_id))}</div>` : ""}
+          <div class="meta">${due > 0 ? `Balance ${money(due, cur)}${qcPassed ? " — due now" : " after quality control"}` : balance > 0 ? "Nothing more to pay right now" : "Paid in full"}</div>
           <div class="meta">Due ${formatDate(order.due_date)}</div>` : `
           <div class="meta">Sent to the tailor ${formatDate(order.created_at)}</div>
           <div class="meta">Now: ${escapeHtml(currentStepLabel(order))}</div>`}
@@ -743,7 +807,7 @@ function payBalance(orderId) {
   if (due <= 0) return;
   recordOrderPayment(order, due, balanceMethod, today(), false);
   saveData();
-  flashMessage = `Thank you! Your balance of ${money(due)} is awaiting confirmation. Your outfit goes out for delivery once it's confirmed.`;
+  flashMessage = `Thank you! Your balance of ${money(due, orderCurrency(order))} is awaiting confirmation. Your outfit goes out for delivery once it's confirmed.`;
   renderAll();
 }
 
@@ -824,15 +888,18 @@ function invoiceBody(order) {
   const invoice = findInvoice(order.id);
   const customer = findCustomer(order.customer_id);
   const paid = amountPaid(order.id);
+  const cur = (invoice && invoice.currency_code) || orderCurrency(order);
   return `
     <div class="invoice">
       <div class="row-between"><b class="serif">${escapeHtml(designerName(order.designer_id))}</b><span class="fl">via ${APP_NAME}</span></div>
       <div class="meta">Invoice ${escapeHtml(invoice ? invoice.id : "—")} · ${formatDate(invoice ? invoice.created_at : order.created_at)}</div>
       <div class="meta">Billed to ${escapeHtml(customer ? customer.name : "Customer")}${customer && customer.email ? " · " + escapeHtml(customer.email) : ""}</div>
-      ${order.line_items.map(l => `<div class="qline"><span>${escapeHtml(l.label)}</span><span>${money(l.amount)}</span></div>`).join("")}
-      <div class="qtotal"><span>Total</span><span>${money(order.quote_total)}</span></div>
-      <div class="qline"><span>Paid</span><span>${money(paid)}</span></div>
-      <div class="qline"><b>Balance</b><b>${money(Math.max(order.quote_total - paid, 0))}</b></div>
+      ${order.line_items.map(l => `<div class="qline"><span>${escapeHtml(l.label)}</span><span>${money(l.amount, cur)}</span></div>`).join("")}
+      <div class="qtotal"><span>Total</span><span>${money(order.quote_total, cur)}</span></div>
+      <div class="qline"><span>Paid</span><span>${money(paid, cur)}</span></div>
+      <div class="qline"><b>Balance</b><b>${money(Math.max(order.quote_total - paid, 0), cur)}</b></div>
+      ${exchangeRateHtml(order)}
+      <div class="meta">All amounts in ${escapeHtml(currencyInfo(cur).name)} (${escapeHtml(cur)}).</div>
     </div>`;
 }
 
@@ -853,7 +920,8 @@ function screenInvoice(orderId) {
 
 function shareInvoice(orderId) {
   const order = findOrder(orderId);
-  const text = `${designerName(order.designer_id)} invoice for order ${order.id}: ${order.outfit_type}, total ${money(order.quote_total)}, balance ${money(Math.max(balanceOwed(order), 0))}.`;
+  const cur = orderCurrency(order);
+  const text = `${designerName(order.designer_id)} invoice for order ${order.id}: ${order.outfit_type}, total ${money(order.quote_total, cur)}, balance ${money(Math.max(balanceOwed(order), 0), cur)}.`;
   if (navigator.share) {
     navigator.share({ title: `Invoice ${order.id}`, text }).catch(() => {});
   } else if (navigator.clipboard) {
@@ -890,7 +958,7 @@ function screenRtw(designerId) {
       <div class="chip-grid">
         ${items.map(item => `<div class="chip rtw">
           <div class="rtw-swatch" style="background:${item.color}"></div>
-          ${escapeHtml(item.name)}<span class="chip-sub gold">${money(item.price)}</span>
+          ${escapeHtml(item.name)}<span class="chip-sub gold">${money(item.price, rtwCurrency(item))}${approxMoney(item.price, rtwCurrency(item))}</span>
           <span class="chip-sub">${item.stock > 0 ? item.stock + " in stock" : "Sold out"}</span>
           <button class="optbtn sel" onclick="buyRtw('${item.id}')" ${item.stock > 0 ? "" : "disabled"}>Buy</button>
         </div>`).join("")}
@@ -902,10 +970,10 @@ function screenRtw(designerId) {
 function buyRtw(itemId) {
   const item = db.ready_to_wear.find(i => i.id === itemId);
   if (!item || item.stock <= 0) return;
-  if (!confirm(`Buy ${item.name} for ${money(item.price)}? (Demo checkout — no real money is taken.)`)) return;
+  if (!confirm(`Buy ${item.name} for ${money(item.price, rtwCurrency(item))}? (Demo checkout — no real money is taken.)`)) return;
   if (!Cloud.live) item.stock -= 1; // live mode: the database takes it out of stock
   db.rtw_sales.push({ id: newId("RS", db.rtw_sales), item_id: item.id, customer_id: db.session.customerId, price: item.price, cost: item.cost,
-    date: today(), status: "awaiting_confirmation" });
+    date: today(), status: "awaiting_confirmation", currency_code: rtwCurrency(item) });
   saveData();
   flashMessage = `${item.name} ordered — your payment is awaiting confirmation. ${designerName(item.designer_id || (mainDesigner() || {}).id)} will post it to you once it's confirmed.`;
   renderAll();
@@ -939,14 +1007,55 @@ function screenProfile() {
     <div class="content">
       <div class="stat"><div class="l">Customer since ${escapeHtml(customer.created_at.slice(0, 4))}</div><div class="n">${escapeHtml(customer.name)}</div></div>
       <div class="mrow"><span>Orders</span><span>${customerOrders(customer.id).length}</span></div>
-      <div class="mrow"><span>Total spent</span><span>${money(customerSpend(customer.id))}</span></div>
+      <div class="mrow"><span>Total spent</span><span>${totalsHtml(customerSpend(customer.id), viewerCurrency())}</span></div>
       <div class="mrow"><span>Favourite colour</span><span>${escapeHtml(favouriteColour(customer.id))}</span></div>
       <div class="mrow"><span>Measurement profiles</span><span>${customer.measurement_profiles.map(p => p.label).sort().join(", ") || "None yet"}</span></div>
       <button class="cta" onclick="go('myMeasurements')">Edit Measurements</button>
+      ${customerSettingsForm(customer)}
       ${signIn}
       ${Cloud.live ? "" : `<button class="linkish" onclick="signInAs('')">Sign out</button>`}
     </div>
     ${cNav("profile")}`;
+}
+
+// Where the customer is, the currency they see approximate prices in, inches or
+// centimetres, and their phone number (with its country code)
+function customerSettingsForm(customer) {
+  const country = customer.country_code || browserCountry();
+  const currency = customer.currency_code || countryCurrency(country) || "GBP";
+  return `<form class="stack settings-form" onsubmit="return saveCustomerSettings(event)">
+    <b>Your country, currency and measurements</b>
+    <label class="field">Country<select name="country" onchange="suggestCurrency(this.form, this.value)">${countryOptions(country, "Choose your country")}</select></label>
+    <label class="field">Show approximate prices in<select name="currency">${currencyOptions(currency)}</select></label>
+    <label class="field">Body measurements in<select name="unit">
+      <option value="in" ${customerBodyUnit(customer) === "in" ? "selected" : ""}>Inches</option>
+      <option value="cm" ${customerBodyUnit(customer) === "cm" ? "selected" : ""}>Centimetres</option></select></label>
+    <label class="field">Phone${phoneFieldHtml("phone", customer.phone || "", country)}</label>
+    <p class="meta">Tailors charge in their own currency; we show "≈" prices in yours. Dates and times show in your time zone${timeZoneName() ? ` (${escapeHtml(timeZoneName())})` : ""}.</p>
+    <button type="submit" class="btn-outline">Save</button>
+  </form>`;
+}
+
+// Choosing a country picks its currency (it can still be changed)
+function suggestCurrency(form, country) {
+  const currency = countryCurrency(country);
+  if (currency && form.currency) form.currency.value = currency;
+  if (form.phone_cc && country) form.phone_cc.value = country;
+}
+
+function saveCustomerSettings(event) {
+  event.preventDefault();
+  const form = event.target;
+  const customer = currentCustomer();
+  if (!customer) return false;
+  const phone = readPhone(form, "phone");
+  if (phone && !phoneLooksRight(phone)) { toast("That phone number doesn't look right."); return false; }
+  Object.assign(customer, { country_code: form.country.value || null, currency_code: form.currency.value || null,
+    measurement_unit: form.unit.value === "cm" ? "cm" : "in", phone });
+  saveData();
+  toast("Saved.");
+  renderAll();
+  return false;
 }
 
 function signInAs(customerId) {
@@ -963,10 +1072,11 @@ function screenMyMeasurements() {
   return `
     ${cTop("My Measurements", "profile")}
     <div class="content">
-      <form id="my-measure-form" class="stack" onsubmit="return saveMyMeasurements(event)">
+      <form id="my-measure-form" class="stack" data-unit="${currentBodyUnit()}" onsubmit="return saveMyMeasurements(event)">
         <div class="meta">Saving to your ${thisYear()} profile. Earlier years are kept.</div>
+        ${bodyUnitToggle("my-measure-form")}
         ${older.length ? `<div class="optbtns">${older.map(p => `<button type="button" class="optbtn" onclick="copyProfile('${p.id}')">Copy from ${p.label}</button>`).join("")}</div>` : ""}
-        <div>${measurementRows(latest)}</div>
+        <div>${measurementRows(latest, currentBodyUnit())}</div>
         <button class="cta" type="submit">Save Measurements</button>
       </form>
     </div>

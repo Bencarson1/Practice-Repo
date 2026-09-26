@@ -27,8 +27,8 @@ function renderInvoices(orderId) {
       <td>${formatDate(inv.created_at)}</td>
       <td>${order.id}</td>
       <td>${escapeHtml(customerName(order.customer_id))}</td>
-      <td>${money(inv.total)}</td>
-      <td class="${balance > 0 ? "owed" : "paid"}">${balance > 0 ? money(balance) : "Paid"}</td>
+      <td>${money(inv.total, inv.currency_code || orderCurrency(order))}</td>
+      <td class="${balance > 0 ? "owed" : "paid"}">${balance > 0 ? money(balance, orderCurrency(order)) : "Paid"}</td>
     </tr>`;
   }).join("");
 

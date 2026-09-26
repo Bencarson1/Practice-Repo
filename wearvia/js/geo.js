@@ -39,8 +39,9 @@ const Geo = (() => {
     try { zone = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) { /* old browser */ }
     if (/^Europe\/(London|Belfast)$/.test(zone)) return "GB";
     if (/^America\/(New_York|Chicago|Denver|Los_Angeles|Phoenix|Anchorage|Detroit|Boise|Indiana|Kentucky|North_Dakota)|^Pacific\/Honolulu$/.test(zone)) return "US";
-    if (zone === "Africa/Lagos") return "NG";
-    return "";
+    const zones = { "Africa/Lagos": "NG", "Africa/Accra": "GH", "Africa/Nairobi": "KE", "Africa/Johannesburg": "ZA", "Europe/Dublin": "IE",
+                    "America/Toronto": "CA", "America/Vancouver": "CA", "America/Edmonton": "CA", "America/Halifax": "CA", "America/Winnipeg": "CA" };
+    return zones[zone] || "";
   }
 
   // "miles" in the UK and US, "km" elsewhere — until the customer picks one

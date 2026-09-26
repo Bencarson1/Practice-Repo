@@ -124,6 +124,7 @@ function sellerStall(seller) {
   if (!tests[stallFilter]) stallFilter = "All";
   const shown = fabrics.filter(tests[stallFilter]);
   const newOrders = sellerOrders(seller.id).filter(o => o.status === "new").length;
+  const unit = sellerFabricUnit(seller);
 
   const cards = shown.map(f => {
     const photos = fabricPhotoRefs(f);
@@ -138,8 +139,8 @@ function sellerStall(seller) {
         <div class="stall-info">
           <h3>${escapeHtml(f.name)}</h3>
           <p class="muted">${escapeHtml(f.category)} · ${escapeHtml(f.colour_name)}</p>
-          <p><strong class="gold">${money(f.price_per_yard)}</strong> per yard</p>
-          <p class="${soldOut ? "owed" : f.yards_available < LOW_STOCK_YARDS ? "owed" : ""}">${f.yards_available} yd in stock${f.sold_out ? " · marked sold out" : ""}</p>
+          <p><strong class="gold">${money(pricePerUnit(f.price_per_yard, unit), fabricCurrency(f))}</strong> per ${unitWord(unit)}</p>
+          <p class="${soldOut ? "owed" : f.yards_available < LOW_STOCK_YARDS ? "owed" : ""}">${lengthText(f.yards_available, unit)} in stock${f.sold_out ? " · marked sold out" : ""}</p>
           ${f.status === "hidden" ? `<p class="review-note">Hidden by ${escapeHtml(SHOP_NAME)}${f.review_note ? `: “${escapeHtml(f.review_note)}”` : ""}. Edit it and it goes back for checking.</p>` : ""}
           ${f.status === "pending" ? `<p class="muted small-text">${escapeHtml(SHOP_NAME)} will check it soon.</p>` : ""}
           <div class="job-buttons">
@@ -176,7 +177,7 @@ function stallSoldOut(fabricId) {
 function stallBackInStock(fabricId) {
   const fabric = findFabric(fabricId);
   if (fabric.yards_available < fabric.min_order_yards) {
-    toast("Add how many yards you have first.");
+    toast(`Add how many ${unitWord(sellerFabricUnit(currentSeller()), true)} you have first.`);
     go("seller/edit/" + fabricId);
     return;
   }
@@ -208,6 +209,13 @@ function sellerFabricForm(seller, fabricId) {
   }
   const v = fabric || { name: "", category: "Ankara", colour_name: "Blue", price_per_yard: "", yards_available: "", min_order_yards: 1, description: "" };
   const option = (value, current) => `<option value="${escapeHtml(value)}" ${value === current ? "selected" : ""}>${escapeHtml(value)}</option>`;
+  // The seller's own currency, and yards or metres as their country sells fabric (stock is kept in yards)
+  const unit = sellerFabricUnit(seller);
+  const currency = sellerCurrency(seller);
+  const places = currencyInfo(currency).decimals;
+  const shownPrice = v.price_per_yard === "" ? "" : roundMoney(pricePerUnit(v.price_per_yard, unit), currency);
+  const shownStock = v.yards_available === "" ? "" : lengthIn(v.yards_available, unit);
+  const shownMin = lengthIn(v.min_order_yards, unit);
   return `
     <div class="biz-head"><h1>${fabric ? "Edit " + escapeHtml(fabric.name) : "Add a fabric"}</h1>
       <p class="muted">${fabric ? `${sellerStatusBadge(fabric)} ` : ""}${fabric && fabric.status === "approved"
@@ -223,9 +231,10 @@ function sellerFabricForm(seller, fabricId) {
         <label class="wide">Fabric name<input name="name" required maxlength="60" value="${escapeHtml(v.name)}" placeholder="e.g. Blue Harvest Ankara"></label>
         <label>Type<select name="category">${FABRIC_TYPES.map(t => option(t, v.category)).join("")}</select></label>
         <label>Main colour<select name="colour">${FABRIC_COLOURS.map(c => option(c.name, v.colour_name)).join("")}</select></label>
-        <label>Price per yard (${CURRENCY})<input name="price" type="number" inputmode="decimal" min="0.5" max="1000" step="0.01" required value="${v.price_per_yard}" placeholder="e.g. 12.50"></label>
-        <label>Yards in stock<input name="stock" type="number" inputmode="decimal" min="0" max="10000" step="0.1" required value="${v.yards_available}" placeholder="e.g. 40"></label>
-        <label>Smallest order (yards)<input name="min" type="number" inputmode="decimal" min="0.5" max="50" step="0.5" required value="${v.min_order_yards}"></label>
+        <label>Price per ${unitWord(unit)} (${escapeHtml(currencyInfo(currency).symbol)} ${escapeHtml(currency)})<input name="price" type="number" inputmode="decimal" min="0" max="100000000" step="${places ? "0.01" : "1"}" required value="${shownPrice}" placeholder="e.g. ${escapeHtml(formatMoney(nicePrice((convertMoney(12.5, "GBP", currency) ?? 12.5), currency), currency).replace(/[^\d.,]/g, ""))}" data-original="${shownPrice}"></label>
+        <label>${capitalize(unitWord(unit, true))} in stock<input name="stock" type="number" inputmode="decimal" min="0" max="10000" step="0.1" required value="${shownStock}" placeholder="e.g. 40" data-original="${shownStock}"></label>
+        <label>Smallest order (${unitWord(unit, true)})<input name="min" type="number" inputmode="decimal" min="0.5" max="50" step="0.5" required value="${shownMin}" data-original="${shownMin}"></label>
+        <p class="hint wide">Prices in ${escapeHtml(currencyInfo(currency).name)}, lengths in ${unitWord(unit, true)} — as set in your <a href="#/seller/profile">shop profile</a>. Customers see an approximate price in their own currency, and each tailor's quote converts yours at the day's exchange rate. You're always paid in ${escapeHtml(currency)}.</p>
         <label class="wide">Description<textarea name="description" rows="4" maxlength="600" placeholder="What is it made of? How wide is it? What is it good for?">${escapeHtml(v.description || "")}</textarea></label>
       </div>
       <p id="fabric-form-error" class="form-error" role="alert"></p>
@@ -298,20 +307,25 @@ function saveStallFabric(event, fabricId) {
   if (sellerSaving) return false;
   const form = event.target;
   const seller = currentSeller();
+  const unit = sellerFabricUnit(seller);
+  const currency = sellerCurrency(seller);
+  const existing = fabricId ? findFabric(fabricId) : null;
+  // Typed in the seller's unit; kept in yards. A number that wasn't changed keeps its exact stored value.
+  const kept = (input, stored, convert) => existing && input.value === input.dataset.original ? stored : convert(Number(input.value));
   const values = {
     name: form.name.value.trim(),
     category: form.category.value,
     colour_name: form.colour.value,
-    price_per_yard: Math.round(Number(form.price.value) * 100) / 100,
-    yards_available: Math.round(Number(form.stock.value) * 10) / 10,
-    min_order_yards: Number(form.min.value),
+    price_per_yard: kept(form.price, existing && existing.price_per_yard, x => pricePerYardFrom(roundMoney(x, currency), unit)),
+    yards_available: kept(form.stock, existing && existing.yards_available, x => Math.round(yardsFrom(x, unit) * 100) / 100),
+    min_order_yards: kept(form.min, existing && existing.min_order_yards, x => Math.round(yardsFrom(x, unit) * 100) / 100),
     description: form.description.value.trim()
   };
   if (!sellerForm.photos.length) return formError("fabric-form-error", "Add at least one photo of the fabric.");
   if (!values.name) return formError("fabric-form-error", "Give the fabric a name.");
-  if (!form.price.value || !(values.price_per_yard >= 0.5)) return formError("fabric-form-error", `Enter a price per yard of at least ${money(0.5)}.`);
-  if (form.stock.value === "" || !(values.yards_available >= 0)) return formError("fabric-form-error", "Enter how many yards you have (0 or more).");
-  if (!(values.min_order_yards >= 0.5)) return formError("fabric-form-error", "The smallest order must be at least 0.5 yd.");
+  if (!form.price.value || !(values.price_per_yard > 0)) return formError("fabric-form-error", `Enter a price per ${unitWord(unit)} in ${currency}.`);
+  if (form.stock.value === "" || !(values.yards_available >= 0)) return formError("fabric-form-error", `Enter how many ${unitWord(unit, true)} you have (0 or more).`);
+  if (!(Number(form.min.value) >= 0.5)) return formError("fabric-form-error", `The smallest order must be at least 0.5 ${unit}.`);
 
   const before = fabricId ? (findFabric(fabricId).photos || []) : [];
   const photos = sellerForm.photos;
@@ -346,8 +360,10 @@ function sellerOrdersScreen(seller) {
   const rows = sellerOrders(seller.id);
   const live = rows.filter(o => o.status !== "cancelled");
   const toSend = rows.filter(o => o.status === "new");
-  const earned = live.reduce((total, o) => total + o.total, 0);
+  // Each currency on its own (a seller who changed currency keeps older sales in the old one)
+  const earned = sumByCurrency(live, o => o.total, o => o.currency_code || sellerCurrency(seller));
   const yards = live.reduce((total, o) => total + o.yards, 0);
+  const unit = sellerFabricUnit(seller);
   const cards = rows.map(o => {
     const fabric = findFabric(o.fabric_id);
     const first = o.customer_first_name || customerName(o.customer_id).split(" ")[0];
@@ -358,7 +374,7 @@ function sellerOrdersScreen(seller) {
         <div class="sorder-main">
           <div class="row-between"><b>${escapeHtml(o.fabric_name)}</b><span class="badge sstatus-${o.status}">${statusLabel}</span></div>
           <div class="muted small-text">${escapeHtml(o.ref || o.id)} · ordered ${formatDate(o.created_at)} · for ${escapeHtml(first)}'s outfit</div>
-          <div>${o.yards} yd × ${money(o.price_per_yard)} = <b>${money(o.total)}</b></div>
+          <div>${lengthText(o.yards, unit)} × ${money(pricePerUnit(o.price_per_yard, unit), o.currency_code || sellerCurrency(seller))} = <b>${money(o.total, o.currency_code || sellerCurrency(seller))}</b></div>
           <div class="muted small-text">Send to: ${escapeHtml(o.deliver_to)}</div>
           ${o.status === "new" ? `<div class="job-buttons"><button class="small gold" onclick="sellerMarkSent('${o.id}')">Mark as sent</button></div>` : ""}
         </div>
@@ -369,8 +385,8 @@ function sellerOrdersScreen(seller) {
     <div class="statgrid">
       <div class="stat"><div class="l">To send</div><div class="n">${toSend.length}</div></div>
       <div class="stat"><div class="l">Orders</div><div class="n">${live.length}</div></div>
-      <div class="stat"><div class="l">Yards sold</div><div class="n">${Math.round(yards * 10) / 10} yd</div></div>
-      <div class="stat"><div class="l">Sales</div><div class="n">${money(earned)}</div></div>
+      <div class="stat"><div class="l">${capitalize(unitWord(unit, true))} sold</div><div class="n">${lengthText(yards, unit)}</div></div>
+      <div class="stat"><div class="l">Sales</div><div class="n">${totalsHtml(earned, sellerCurrency(seller))}</div></div>
     </div>
     ${rows.length ? `<div class="sorders">${cards}</div>` : `<div class="card"><p class="empty">No orders yet. They'll appear here when a customer chooses your fabric.</p></div>`}`;
 }
@@ -390,7 +406,8 @@ function sellerProfileScreen(seller) {
   if (!sellerForm || sellerForm.key !== key) {
     sellerForm = { key, logo: seller && seller.logo ? { ref: seller.logo, url: photoUrl(seller.logo) } : null };
   }
-  const v = seller || { name: "", location: "", phone: "", delivery_estimate: "1–3 days" };
+  const v = seller || { name: "", location: "", phone: "", delivery_estimate: "1–3 days", country_code: browserCountry() || "" };
+  const currency = (seller && seller.currency_code) || countryCurrency(v.country_code) || "GBP";
   const times = DELIVERY_TIMES.includes(v.delivery_estimate) ? DELIVERY_TIMES : DELIVERY_TIMES.concat(v.delivery_estimate);
   return `
     <div class="biz-head"><h1>${seller ? "Shop profile" : "Create your seller profile"}</h1>
@@ -399,8 +416,11 @@ function sellerProfileScreen(seller) {
       <div id="logo-row" class="logo-row">${logoRow(v.name)}</div>
       <div class="form-grid">
         <label>Shop name<input name="name" required maxlength="50" value="${escapeHtml(v.name)}" placeholder="e.g. Mama Titi Wax Prints" oninput="refreshLogoInitials(this.value)"></label>
+        <label>Country<select name="country" required onchange="suggestCurrency(this.form, this.value)">${countryOptions(v.country_code || "", "Choose your country")}</select></label>
         <label>Location<input name="location" required maxlength="60" value="${escapeHtml(v.location)}" placeholder="e.g. Peckham, London"></label>
-        <label>Phone<input name="phone" type="tel" required maxlength="20" autocomplete="tel" value="${escapeHtml(v.phone)}" placeholder="e.g. 07700 900123"></label>
+        <label>Phone${phoneFieldHtml("phone", v.phone, v.country_code, 'required placeholder="e.g. 7700 900123"')}</label>
+        <label>Your prices are in<select name="currency">${currencyOptions(currency)}</select></label>
+        <p class="hint wide">You sell by the ${unitWord(sellerFabricUnit({ country_code: v.country_code }))} in ${escapeHtml(currencyInfo(currency).name)}. Tailors in other countries see your prices converted at the day's exchange rate; you're always paid in your currency.${seller ? " Changing your currency converts your fabric prices at today's rate." : ""}</p>
         <label>Delivery time to ${escapeHtml(SHOP_NAME)}<select name="delivery">${times.map(t => `<option ${t === v.delivery_estimate ? "selected" : ""}>${escapeHtml(t)}</option>`).join("")}</select></label>
       </div>
       <p id="profile-form-error" class="form-error" role="alert"></p>
@@ -458,16 +478,24 @@ function saveSellerProfileForm(event) {
   const values = {
     name: form.name.value.trim(),
     location: form.location.value.trim(),
-    phone: form.phone.value.trim(),
-    delivery_estimate: form.delivery.value
+    phone: readPhone(form, "phone"),
+    delivery_estimate: form.delivery.value,
+    country_code: form.country.value || null,
+    currency_code: form.currency.value || countryCurrency(form.country.value) || "GBP"
   };
   if (!values.name) return formError("profile-form-error", "Enter your shop name.");
   if (db.suppliers.some(s => s.name.toLowerCase() === values.name.toLowerCase() && (!seller || s.id !== seller.id))) {
     return formError("profile-form-error", "Another seller already uses that shop name.");
   }
+  if (!values.country_code) return formError("profile-form-error", "Choose your country.");
   if (!values.location) return formError("profile-form-error", "Enter where your shop is.");
-  if (!/^\+?[0-9 ()-]{7,20}$/.test(values.phone) || values.phone.replace(/\D/g, "").length < 7) {
-    return formError("profile-form-error", "Enter a phone number customers and Nebeda Threads can call, e.g. 07700 900123.");
+  if (!/^\+?[0-9 ()-]{7,24}$/.test(values.phone) || !phoneLooksRight(values.phone)) {
+    return formError("profile-form-error", "Enter a phone number NebedaHub can call: choose the country code, then the number, e.g. 7700 900123.");
+  }
+  if (seller && seller.currency_code && seller.currency_code !== values.currency_code) {
+    const rate = fxRate(seller.currency_code, values.currency_code);
+    if (rate == null) return formError("profile-form-error", `There's no exchange rate for ${values.currency_code} yet. Try again tomorrow.`);
+    if (!confirm(`Change your currency from ${seller.currency_code} to ${values.currency_code}? Your fabric prices are converted at today's rate (${rateText(rate, seller.currency_code, values.currency_code)}). Orders already placed keep their currency.`)) return false;
   }
   const oldLogo = seller ? seller.logo : null;
   const logo = sellerForm.logo;

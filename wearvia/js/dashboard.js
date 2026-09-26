@@ -5,15 +5,24 @@
 
 let aiQuestion = "Which orders are late?";
 
+// Totals are kept per currency and never added across currencies: a tailor who
+// changed currency, or sells ready-to-wear in another, sees "£1,250 · ₦250,000"
 function businessTotals() {
+  const revenue = moneyTotals(), profit = moneyTotals(), pending = moneyTotals();
   // Only confirmed money counts
-  const orderRevenue = bizPayments().filter(isConfirmed).reduce((total, p) => total + p.amount, 0);
-  const shopRevenue = bizRtwSales().filter(isConfirmed).reduce((total, s) => total + s.price, 0);
+  bizPayments().filter(isConfirmed).forEach(p => addMoney(revenue, paymentCurrency(p), p.amount));
+  bizRtwSales().filter(isConfirmed).forEach(s => addMoney(revenue, rtwSaleCurrency(s), s.price));
   // Estimated profit = order value minus fabric and delivery costs, plus ready-to-wear margin
-  const orderProfit = placedOrders().reduce((total, o) => total + o.quote_total - o.fabric_cost - deliveryCostOf(o), 0);
-  const shopProfit = bizRtwSales().filter(isConfirmed).reduce((total, s) => total + s.price - s.cost, 0);
-  const pending = placedOrders().reduce((total, o) => total + Math.max(balanceOwed(o), 0), 0);
-  return { revenue: orderRevenue + shopRevenue, profit: orderProfit + shopProfit, pending };
+  placedOrders().forEach(o => addMoney(profit, orderCurrency(o), o.quote_total - o.fabric_cost - deliveryCostOf(o)));
+  bizRtwSales().filter(isConfirmed).forEach(s => addMoney(profit, rtwSaleCurrency(s), s.price - s.cost));
+  placedOrders().forEach(o => addMoney(pending, orderCurrency(o), Math.max(balanceOwed(o), 0)));
+  return { revenue, profit, pending };
+}
+
+// A payment is in its order's currency
+function paymentCurrency(payment) {
+  if (payment.currency_code) return payment.currency_code;
+  return orderCurrency(db.orders.find(o => o.id === payment.order_id));
 }
 
 function renderDashboard() {
@@ -43,19 +52,20 @@ function renderDashboard() {
 
     <div class="statgrid">
       <div class="stat"><div class="l">Total Orders</div><div class="n">${placedOrders().length}</div><div class="l">${open.length} in progress</div></div>
-      <div class="stat"><div class="l">Revenue</div><div class="n">${money(totals.revenue)}</div><div class="l">payments + ready-to-wear</div></div>
-      <div class="stat"><div class="l">Est. Profit</div><div class="n">${money(totals.profit)}</div><div class="l">after fabric &amp; delivery</div></div>
-      <div class="stat"><div class="l">Pending Payments</div><div class="n">${money(totals.pending)}</div><div class="l">balances owed</div></div>
+      <div class="stat"><div class="l">Revenue</div><div class="n">${totalsHtml(totals.revenue, bizCurrency())}</div><div class="l">payments + ready-to-wear</div></div>
+      <div class="stat"><div class="l">Est. Profit</div><div class="n">${totalsHtml(totals.profit, bizCurrency())}</div><div class="l">after fabric &amp; delivery</div></div>
+      <div class="stat"><div class="l">Pending Payments</div><div class="n">${totalsHtml(totals.pending, bizCurrency())}</div><div class="l">balances owed</div></div>
     </div>
+    ${[totals.revenue, totals.profit, totals.pending].some(t => t.size > 1) ? `<p class="hint">Totals in different currencies are shown side by side, never added together.</p>` : ""}
 
     ${late.length || lowStock.length || awaitingReview.length || waitingFabrics.length || waitingPayments.length || waitingQuotes.length || unreadChats.length || waitingTailors.length ? `<div class="alerts">
       ${waitingTailors.length ? `<a class="alert" href="#/biz/tailors">🧵 ${waitingTailors.length} new tailor${waitingTailors.length > 1 ? "s" : ""} waiting for your approval</a>` : ""}
       ${waitingQuotes.length ? `<a class="alert" href="#/biz/quotes">📝 ${waitingQuotes.length} customer${waitingQuotes.length > 1 ? "s" : ""} waiting for a quote</a>` : ""}
       ${unreadChats.length ? `<a class="alert" href="#/biz/${isPlaced(unreadChats[0]) ? "orders" : "quotes"}/${unreadChats[0].id}">💬 New messages on ${unreadChats.map(o => o.id).join(", ")}</a>` : ""}
-      ${waitingPayments.length ? `<a class="alert" href="#/biz/payments">💷 ${waitingPayments.length} payment${waitingPayments.length > 1 ? "s" : ""} to confirm</a>` : ""}
+      ${waitingPayments.length ? `<a class="alert" href="#/biz/payments">💳 ${waitingPayments.length} payment${waitingPayments.length > 1 ? "s" : ""} to confirm</a>` : ""}
       ${waitingFabrics.length ? `<a class="alert" href="#/biz/sellers">🧶 ${waitingFabrics.length} seller fabric${waitingFabrics.length > 1 ? "s" : ""} to approve</a>` : ""}
       ${late.length ? `<a class="alert" href="#/biz/orders">⚠ ${late.length} late order${late.length > 1 ? "s" : ""}</a>` : ""}
-      ${lowStock.length ? `<a class="alert" href="#/biz/fabrics">⚠ Low stock: ${lowStock.map(f => `${escapeHtml(f.name)} (${f.yards_available} yd)`).join(", ")}</a>` : ""}
+      ${lowStock.length ? `<a class="alert" href="#/biz/fabrics">⚠ Low stock: ${lowStock.map(f => `${escapeHtml(f.name)} (${lengthText(f.yards_available, screenFabricUnit())})`).join(", ")}</a>` : ""}
       ${awaitingReview.length ? `<span class="alert soft">${awaitingReview.length} delivered order${awaitingReview.length > 1 ? "s" : ""} awaiting a review</span>` : ""}
     </div>` : ""}
 
@@ -118,12 +128,12 @@ function answerQuestion(question) {
   }
   if (q.includes("stock") || q.includes("fabric") || q.includes("inventory") || q.includes("yard")) {
     const low = activeFabrics().filter(f => f.status === "approved" && f.yards_available < LOW_STOCK_YARDS);
-    return low.length ? `Running low: ${low.map(f => `${escapeHtml(f.name)} (${f.yards_available} yd)`).join(", ")}. Restock from Fabric Inventory.` : `Every fabric has at least ${LOW_STOCK_YARDS} yd in stock.`;
+    return low.length ? `Running low: ${low.map(f => `${escapeHtml(f.name)} (${lengthText(f.yards_available, screenFabricUnit())})`).join(", ")}. Restock from Fabric Inventory.` : `Every fabric has at least ${lengthText(LOW_STOCK_YARDS, screenFabricUnit())} in stock.`;
   }
   if (q.includes("owe") || q.includes("balance") || q.includes("pending") || q.includes("payment") || q.includes("unpaid")) {
     const owing = placedOrders().filter(o => balanceOwed(o) > 0);
     if (!owing.length) return "Every order is paid in full.";
-    return `${money(businessTotals().pending)} is owed across ${owing.length} orders: ${owing.map(o => `#${o.id} ${escapeHtml(customerName(o.customer_id))} ${money(balanceOwed(o))}`).join(", ")}.`;
+    return `${escapeHtml(totalsText(businessTotals().pending, bizCurrency()))} is owed across ${owing.length} orders: ${owing.map(o => `#${o.id} ${escapeHtml(customerName(o.customer_id))} ${money(balanceOwed(o), orderCurrency(o))}`).join(", ")}.`;
   }
   if (q.includes("staff") || q.includes("tailor") || q.includes("team") || q.includes("busy") || q.includes("workload")) {
     return bizStaff().map(s => {
@@ -137,7 +147,7 @@ function answerQuestion(question) {
   }
   if (q.includes("revenue") || q.includes("profit") || q.includes("money") || q.includes("sales")) {
     const t = businessTotals();
-    return `Revenue so far ${money(t.revenue)}, estimated profit ${money(t.profit)}, and ${money(t.pending)} still to collect.`;
+    return `Revenue so far ${escapeHtml(totalsText(t.revenue, bizCurrency()))}, estimated profit ${escapeHtml(totalsText(t.profit, bizCurrency()))}, and ${escapeHtml(totalsText(t.pending, bizCurrency()))} still to collect.`;
   }
   if (q.includes("review") || q.includes("rating")) {
     const r = designerRating(bizDesignerId());

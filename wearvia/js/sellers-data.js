@@ -112,13 +112,34 @@ function nextFabricId(data) {
 
 // ---- Marketplace search (what customers see) ----
 
-const PRICE_BANDS = [
-  { key: "any", label: "Any price", test: () => true },
-  { key: "u10", label: "Under £10/yd", test: p => p < 10 },
-  { key: "10-25", label: "£10–£25/yd", test: p => p >= 10 && p <= 25 },
-  { key: "25-50", label: "£25–£50/yd", test: p => p > 25 && p <= 50 },
-  { key: "50", label: "Over £50/yd", test: p => p > 50 }
-];
+// Price bands in the customer's own currency, per yard or metre: £10, £25 and £50 a
+// yard, converted and tidied (e.g. "Under ₦17,500/yd"). Fabrics in other currencies
+// are compared at today's rate.
+function priceBands() {
+  const currency = marketCurrency();
+  const unit = screenFabricUnit();
+  const to = x => nicePrice((convertMoney(pricePerUnit(x, unit), "GBP", currency) ?? x), currency);
+  const [a, b, c] = [to(10), to(25), to(50)];
+  const u = unit === "m" ? "m" : "yd";
+  const m = x => formatMoney(x, currency, { whole: true });
+  return [
+    { key: "any", label: "Any price", test: () => true },
+    { key: "u10", label: `Under ${m(a)}/${u}`, test: p => p < a },
+    { key: "10-25", label: `${m(a)}–${m(b)}/${u}`, test: p => p >= a && p <= b },
+    { key: "25-50", label: `${m(b)}–${m(c)}/${u}`, test: p => p > b && p <= c },
+    { key: "50", label: `Over ${m(c)}/${u}`, test: p => p > c }
+  ];
+}
+
+// The currency the marketplace compares prices in: the customer's own, or the tailor's
+function marketCurrency() {
+  return viewerCurrency() || screenCurrency();
+}
+
+// A fabric's price per yard or metre in another currency (null without a rate)
+function fabricPriceIn(fabric, currency, unit) {
+  return convertMoney(pricePerUnit(fabric.price_per_yard, unit), fabricCurrency(fabric), currency);
+}
 
 const MARKET_SORTS = [
   { key: "new", label: "Newest" },
@@ -128,7 +149,10 @@ const MARKET_SORTS = [
 
 function marketFabrics(filters) {
   const f = filters || {};
-  const band = PRICE_BANDS.find(p => p.key === f.price) || PRICE_BANDS[0];
+  const bands = priceBands();
+  const band = bands.find(p => p.key === f.price) || bands[0];
+  const currency = marketCurrency();
+  const unit = screenFabricUnit();
   const words = String(f.search || "").toLowerCase().split(/\s+/).filter(Boolean);
   const list = activeFabrics().filter(fabric => {
     if (!isOnMarket(fabric)) return false;
@@ -136,7 +160,7 @@ function marketFabrics(filters) {
     if (f.colour && f.colour !== "All" && fabric.colour_name !== f.colour) return false;
     if (f.seller && f.seller !== "All" && fabric.supplier_id !== f.seller) return false;
     if (f.inStock && isSoldOut(fabric)) return false;
-    if (!band.test(fabric.price_per_yard)) return false;
+    if (band.key !== "any" && !band.test(fabricPriceIn(fabric, currency, unit) ?? Infinity)) return false;
     if (words.length) {
       const seller = findSupplier(fabric.supplier_id);
       const text = [fabric.name, fabric.category, fabric.colour_name, fabric.description, seller && seller.name, seller && seller.location].join(" ").toLowerCase();
@@ -146,11 +170,17 @@ function marketFabrics(filters) {
   });
   const sorters = {
     new: (a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")) || (Number(b.id.slice(1)) || 0) - (Number(a.id.slice(1)) || 0),
-    low: (a, b) => a.price_per_yard - b.price_per_yard,
-    high: (a, b) => b.price_per_yard - a.price_per_yard
+    low: (a, b) => usdPerYard(a) - usdPerYard(b),
+    high: (a, b) => usdPerYard(b) - usdPerYard(a)
   };
   // Sold-out fabrics go to the end so customers see what they can buy first
   return list.sort((a, b) => (isSoldOut(a) - isSoldOut(b)) || (sorters[f.sort] || sorters.new)(a, b));
+}
+
+// Prices in different currencies compared in US dollars
+function usdPerYard(fabric) {
+  const rate = fxRate(fabricCurrency(fabric), "USD");
+  return rate == null ? fabric.price_per_yard : fabric.price_per_yard * rate;
 }
 
 // ---- Writes by a seller ----
@@ -166,6 +196,18 @@ function saveSellerProfile(sellerId, values) {
   seller.location = values.location;
   seller.phone = values.phone;
   seller.delivery_estimate = values.delivery_estimate;
+  seller.country_code = values.country_code || null;
+  const currency = values.currency_code || countryCurrency(values.country_code) || "GBP";
+  // Demo: a seller who changes currency has their prices converted (the database does this in live mode)
+  if (!Cloud.live && seller.currency_code && seller.currency_code !== currency) {
+    const rate = fxRate(seller.currency_code, currency);
+    if (rate == null) throw new Error(`There's no exchange rate for ${currency} yet.`);
+    db.fabrics.filter(f => f.supplier_id === seller.id).forEach(f => {
+      f.price_per_yard = roundMoney(f.price_per_yard * rate, currency);
+      f.currency_code = currency;
+    });
+  }
+  seller.currency_code = currency;
   if (values.logo !== undefined) seller.logo = values.logo;
   seller.updated_at = today();
   return seller;
@@ -181,6 +223,7 @@ function saveSellerFabric(sellerId, fabricId, values) {
     fabric = { id: nextFabricId(), supplier_id: sellerId, status: "pending", sold_out: false, deleted_at: null, created_at: today(), review_note: "" };
     db.fabrics.push(fabric);
   }
+  fabric.currency_code = sellerCurrency(findSupplier(sellerId));   // always the seller's currency
   const looksDifferent = !isNew && (
     fabric.name !== values.name || fabric.category !== values.category || fabric.colour_name !== values.colour_name ||
     (fabric.description || "") !== values.description || JSON.stringify(fabric.photos || []) !== JSON.stringify(values.photos));
@@ -230,12 +273,15 @@ function sellerOrders(sellerId) {
   return db.fabric_orders.filter(o => o.seller_id === sellerId).slice().sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id));
 }
 
+// The seller is paid in THEIR currency: the price and amount from when the quote was sent
 function fabricOrderFor(order) {
   const fabric = findFabric(order.fabric_id);
   return {
     id: "FO-" + order.id.split("-")[1], order_id: order.id, seller_id: fabric ? fabric.supplier_id : order.fabric_supplier_id,
     fabric_id: order.fabric_id, fabric_name: fabric ? fabric.name : "Fabric", yards: order.fabric_yards,
-    price_per_yard: fabric ? fabric.price_per_yard : order.fabric_cost / order.fabric_yards, total: order.fabric_cost,
+    price_per_yard: order.fabric_price_per_yard || (fabric ? fabric.price_per_yard : order.fabric_cost / order.fabric_yards),
+    total: order.fabric_cost_in_fabric_currency != null ? order.fabric_cost_in_fabric_currency : order.fabric_cost,
+    currency_code: order.fabric_currency_code || (fabric ? fabricCurrency(fabric) : "GBP"),
     customer_id: order.customer_id, deliver_to: `${designerName(order.designer_id)}, ${(designerById(order.designer_id) || { location: "" }).location}`,
     status: "new", created_at: order.created_at, sent_at: null
   };
@@ -263,10 +309,41 @@ function cancelFabricOrder(orderId) {
 
 function sampleSellers() {
   return [
-    { id: "S9",  name: "Mama Titi Wax Prints", location: "Peckham, London", phone: "07700 900301", delivery_estimate: "Next day", rating: 4.8, logo: "logo:MT:7c1f2e" },
-    { id: "S10", name: "Kente Corner",         location: "Birmingham",      phone: "07700 900302", delivery_estimate: "1–3 days", rating: 4.7, logo: "logo:KC:2d4f3a" },
-    { id: "S11", name: "Indigo Adire Studio",  location: "Abeokuta, Ogun",  phone: "+234 803 555 0142", delivery_estimate: "5–7 days", rating: 4.9, logo: "logo:IA:1e3a5f" },
-    { id: "S12", name: "Lace Lounge",          location: "Manchester",      phone: "07700 900304", delivery_estimate: "1–3 days", rating: 4.6, logo: "logo:LL:8a6d1f" }
+    { id: "S9",  name: "Mama Titi Wax Prints", location: "Peckham, London", phone: "+44 7700 900301", delivery_estimate: "Next day", rating: 4.8, logo: "logo:MT:7c1f2e", country_code: "GB", currency_code: "GBP" },
+    { id: "S10", name: "Kente Corner",         location: "Birmingham",      phone: "+44 7700 900302", delivery_estimate: "1–3 days", rating: 4.7, logo: "logo:KC:2d4f3a", country_code: "GB", currency_code: "GBP" },
+    { id: "S11", name: "Indigo Adire Studio",  location: "Abeokuta, Ogun",  phone: "+234 803 555 0142", delivery_estimate: "5–7 days", rating: 4.9, logo: "logo:IA:1e3a5f", country_code: "NG", currency_code: "GBP" },
+    { id: "S12", name: "Lace Lounge",          location: "Manchester",      phone: "+44 7700 900304", delivery_estimate: "1–3 days", rating: 4.6, logo: "logo:LL:8a6d1f", country_code: "GB", currency_code: "GBP" }
+  ];
+}
+
+// Sellers who price in their own currency: naira in Lagos, shillings (by the metre) in Nairobi
+function worldSampleSellers() {
+  return [
+    { id: "S13", name: "Balogun Market Textiles", location: "Balogun Market, Lagos Island", phone: "+234 802 555 0187", delivery_estimate: "3–5 days", rating: 4.7,
+      logo: "logo:BM:c9a24a", country_code: "NG", currency_code: "NGN" },
+    { id: "S14", name: "Kitenge House Nairobi", location: "Biashara Street, Nairobi", phone: "+254 712 555 014", delivery_estimate: "5–7 days", rating: 4.5,
+      logo: "logo:KH:1d7a5a", country_code: "KE", currency_code: "KES" }
+  ];
+}
+
+function worldSampleFabrics() {
+  const f = (id, seller, name, type, colour, currency, price, stock, min, kind, colours, description) => ({
+    id, name, category: type, colour_name: colour, color: colours[0], price_per_yard: price, supplier_id: seller, currency_code: currency,
+    yards_available: stock, min_order_yards: min, description, photos: samplePhotos(kind, colours, 3),
+    status: "approved", sold_out: false, deleted_at: null, created_at: addDays(-Number(id.slice(1)) + 20), review_note: ""
+  });
+  const perMetre = price => pricePerYardFrom(price, "m");     // Nairobi sells by the metre; stock is kept in yards
+  return [
+    f("F21", "S13", "Balogun Royal Aso Oke", "Aso Oke", "Gold", "NGN", 15000, 40, 2, "aso_oke", ["#c9a227", "#7c1f2e", "#fff2cc"],
+      "Hand-loomed aso oke from Iseyin, sold at Balogun Market. Priced in naira."),
+    f("F22", "S13", "Eko Beaded Lace", "Lace", "Ivory", "NGN", 22000, 25, 1, "lace", ["#efe6d2", "#c9a24a", "#ffffff"],
+      "Beaded cord lace for aso ebi and bridal outfits. Priced in naira."),
+    f("F23", "S13", "Lagos Sunrise Ankara", "Ankara", "Orange", "NGN", 6500, 90, 2, "ankara", ["#e8871e", "#1e3a5f", "#e8c21e"],
+      "Bright Lagos wax print, 100% cotton, 46 inches wide."),
+    f("F24", "S14", "Maasai Shuka Check", "Cotton", "Red", "KES", perMetre(950), 55, 1, "kente", ["#a3242e", "#1e3a5f", "#1b1b1b"],
+      "Classic red shuka check. Sold by the metre in Kenyan shillings."),
+    f("F25", "S14", "Kitenge Blue Leaf", "Ankara", "Blue", "KES", perMetre(780), 70, 1, "ankara", ["#1e3a5f", "#e8c21e", "#f4f1ea"],
+      "Kitenge print with gold leaves. Sold by the metre in Kenyan shillings.")
   ];
 }
 
@@ -321,8 +398,21 @@ function addSampleSellers(data) {
   });
   sampleSellerFabrics().forEach(fabric => {
     if (data.fabrics.some(f => f.id === fabric.id)) fabric.id = nextFabricId(data);
+    data.fabrics.push(Object.assign({ currency_code: "GBP" }, fabric));
+  });
+  addWorldSellers(data);
+}
+
+function addWorldSellers(data) {
+  if (data.world_sellers_added) return;
+  worldSampleSellers().forEach(s => {
+    if (!data.suppliers.some(existing => existing.id === s.id)) data.suppliers.push(Object.assign({ created_at: addDays(-30) }, s));
+  });
+  worldSampleFabrics().forEach(fabric => {
+    if (data.fabrics.some(f => f.id === fabric.id)) fabric.id = nextFabricId(data);
     data.fabrics.push(fabric);
   });
+  data.world_sellers_added = true;
 }
 
 // ---- Switching from metres to yards ----
@@ -345,7 +435,7 @@ function yardsLineItems(lines) {
     if (!match) return line;
     const yards = metresToYards(Number(match[1]));
     const price = yards > 0 ? Math.round(line.amount / yards * 100) / 100 : pricePerYardFromMetre(Number(match[2].replace(/,/g, "")));
-    return Object.assign({}, line, { label: line.label.slice(0, match.index) + `(${yards} yd × ${money(price)})` });
+    return Object.assign({}, line, { label: line.label.slice(0, match.index) + `(${yards} yd × ${money(price, "GBP")})` });
   });
 }
 
@@ -429,7 +519,8 @@ function upgradeData(data) {
     data.fabric_orders = [];
     const previous = db;
     db = data; // fabricOrderFor reads through the usual lookups
-    data.orders.forEach(order => {
+    // Only orders whose fabric was bought (a quote request hasn't bought any yet)
+    data.orders.filter(order => (order.quote_status || "accepted") === "accepted").forEach(order => {
       const row = fabricOrderFor(order);
       if (order.stage !== "tailor_assigned") { row.status = "sent"; row.sent_at = addDays(1, order.created_at); }
       data.fabric_orders.push(row);
@@ -440,8 +531,54 @@ function upgradeData(data) {
   if (!data.messages) data.messages = [];
   if (!data.chat_reads) data.chat_reads = [];
   data.draft = upgradeDraftToQuotes(data.draft, data);
-  data.version = 5;
+  upgradeDataToWorldwide(data);
+  data.version = 6;
   return data;
+}
+
+// Version 6: everything saved before currencies existed is in pounds. The demo
+// tailors in Nigeria and Kenya price in naira and shillings, and two sellers
+// who price in their own currency join the marketplace.
+function upgradeDataToWorldwide(data) {
+  const GB = ["London", "Manchester", "Galashiels", "Belfast", "Birmingham"];
+  const NG = ["Lagos", "Iseyin", "Kano", "Abeokuta"];
+  data.suppliers.forEach(s => {
+    if (!s.currency_code) s.currency_code = "GBP";
+    if (s.country_code === undefined) s.country_code = GB.some(x => (s.location || "").includes(x)) ? "GB" : NG.some(x => (s.location || "").includes(x)) ? "NG" : null;
+    if (s.phone && /^0\d/.test(s.phone) && s.country_code === "GB") s.phone = "+44 " + s.phone.replace(/^0/, "");
+  });
+  data.fabrics.forEach(f => { if (!f.currency_code) f.currency_code = (data.suppliers.find(s => s.id === f.supplier_id) || {}).currency_code || "GBP"; });
+  data.orders.forEach(o => {
+    if (!o.currency_code) o.currency_code = "GBP";
+    if (!o.fabric_currency_code) o.fabric_currency_code = "GBP";
+    if (!o.fabric_unit) o.fabric_unit = "yd";
+  });
+  data.invoices.forEach(i => { if (!i.currency_code) i.currency_code = "GBP"; });
+  data.payments.forEach(p => { if (!p.currency_code) p.currency_code = "GBP"; });
+  (data.fabric_orders || []).forEach(l => { if (!l.currency_code) l.currency_code = "GBP"; });
+  (data.ready_to_wear || []).forEach(i => { if (!i.currency_code) i.currency_code = "GBP"; });
+  (data.rtw_sales || []).forEach(x => { if (!x.currency_code) x.currency_code = "GBP"; });
+  data.customers.forEach(c => { if (!c.measurement_unit) c.measurement_unit = "in"; });
+  const previous = db;
+  db = data;
+  data.designers.forEach(d => {
+    if (d.currency_code) return;
+    // The demo tailors outside the UK move to their own currency, with their price list converted
+    d.currency_code = d.demo && d.country_code && d.country_code !== "GB" ? countryCurrency(d.country_code) || "GBP" : "GBP";
+    if (d.currency_code !== "GBP") {
+      const convert = startingPriceIn(d.currency_code);
+      data.prices.filter(p => p.designer_id === d.id).forEach(p => { p.price = convert(p.price); p.currency_code = d.currency_code; });
+    }
+  });
+  data.prices.forEach(p => { if (!p.currency_code) p.currency_code = (data.designers.find(d => d.id === p.designer_id) || {}).currency_code || "GBP"; });
+  // The Nairobi demo tailor
+  DEMO_TAILORS.filter(t => !data.designers.some(d => d.id === t.id)).forEach(t => {
+    const d = refreshDesignerPublic(demoTailor(t));
+    data.designers.push(d);
+    data.prices = data.prices.concat(newPriceListFor(d.id, null, d.currency_code));
+  });
+  addWorldSellers(data);
+  db = previous;
 }
 
 // Drafts from before "Send to tailor" could have fabric already bought (demo

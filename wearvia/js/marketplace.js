@@ -49,7 +49,7 @@ function marketFilterBar() {
     ${marketFiltersOpen ? `
       <div class="market-filters">
         <label class="field">Colour<select onchange="setMarketFilter('colour',this.value)">${option("All", "Any colour", f.colour)}${colours.map(c => option(c.name, c.name, f.colour)).join("")}</select></label>
-        <label class="field">Price per yard<select onchange="setMarketFilter('price',this.value)">${PRICE_BANDS.map(p => option(p.key, p.label, f.price)).join("")}</select></label>
+        <label class="field">Price per ${unitWord(screenFabricUnit())}<select onchange="setMarketFilter('price',this.value)">${priceBands().map(p => option(p.key, p.label, f.price)).join("")}</select></label>
         <label class="field">Seller<select onchange="setMarketFilter('seller',this.value)">${option("All", "All sellers", f.seller)}${sellers.map(s => option(s.id, s.name, f.seller)).join("")}</select></label>
         <label class="field">Sort by<select onchange="setMarketFilter('sort',this.value)">${MARKET_SORTS.map(s => option(s.key, s.label, f.sort)).join("")}</select></label>
         <label class="check"><input type="checkbox" ${f.inStock ? "checked" : ""} onchange="setMarketFilter('inStock',this.checked)"> In stock only</label>
@@ -62,6 +62,9 @@ function fabricTile(fabric, selectedId) {
   const soldOut = isSoldOut(fabric);
   const low = !soldOut && fabric.yards_available < LOW_STOCK_YARDS;
   const photos = fabricPhotoRefs(fabric).length;
+  // Per yard or metre, as the tailor the customer is ordering from measures fabric
+  const unit = screenFabricUnit();
+  const perUnit = pricePerUnit(fabric.price_per_yard, unit);
   return `<button class="mtile ${fabric.id === selectedId ? "sel" : ""} ${soldOut ? "is-out" : ""}" onclick="go('fabricView/${fabric.id}')">
     <span class="mphoto">
       <img src="${fabricCoverUrl(fabric)}" alt="${escapeHtml(fabric.name)}" loading="lazy">
@@ -70,9 +73,9 @@ function fabricTile(fabric, selectedId) {
       ${fabric.id === selectedId ? `<span class="picked">✓ Chosen</span>` : ""}
     </span>
     <span class="mname">${escapeHtml(fabric.name)}</span>
-    <span class="mprice">${money(fabric.price_per_yard)}<small> / yard</small></span>
+    <span class="mprice">${money(perUnit, fabricCurrency(fabric))}<small> / ${unitWord(unit)}</small>${approxMoney(perUnit, fabricCurrency(fabric))}</span>
     <span class="mseller">${escapeHtml(seller ? seller.name : "Seller")}</span>
-    <span class="mstock ${low ? "low" : ""}">${soldOut ? "Sold out" : `${fabric.yards_available} yd left`}</span>
+    <span class="mstock ${low ? "low" : ""}">${soldOut ? "Sold out" : `${lengthText(fabric.yards_available, unit)} left`}</span>
   </button>`;
 }
 
@@ -82,8 +85,10 @@ function marketResults() {
   if (!list.length) {
     return `<div class="empty">No fabrics match. <button class="linkish" onclick="clearMarketFilters()">Clear filters</button></div>`;
   }
+  const foreign = list.find(f => approxMoney(1, fabricCurrency(f)));
   return `<div class="meta">${list.length} fabric${list.length === 1 ? "" : "s"} from ${new Set(list.map(f => f.supplier_id)).size} seller${new Set(list.map(f => f.supplier_id)).size === 1 ? "" : "s"}</div>
-    <div class="mgrid">${list.map(f => fabricTile(f, selectedId)).join("")}</div>`;
+    <div class="mgrid">${list.map(f => fabricTile(f, selectedId)).join("")}</div>
+    ${foreign ? `<p class="approx-note">Sellers price fabric in their own currency. ≈ = approximate price in ${escapeHtml(currencyInfo(viewerCurrency()).name)} at today's exchange rate. Your tailor's quote converts it for you.</p>` : ""}`;
 }
 
 // ---- #/market — browse without starting an order ----
@@ -129,6 +134,9 @@ function screenFabricView(fabricId) {
     action = `<button class="cta" onclick="chooseMarketFabric('${fabric.id}')">Design an outfit in this fabric →</button>`;
   }
   const others = sellerFabrics(fabric.supplier_id).filter(f => f.id !== fabric.id && isOnMarket(f)).slice(0, 4);
+  const unit = screenFabricUnit();
+  const fc = fabricCurrency(fabric);
+  const perUnit = pricePerUnit(fabric.price_per_yard, unit);
   return `
     ${cTop(escapeHtml(fabric.name), inFlow ? "fabric" : "market")}
     <div class="content">
@@ -140,13 +148,15 @@ function screenFabricView(fabricId) {
       </div>
       ${refs.length > 1 ? `<div class="gallery-thumbs">${refs.map((ref, i) =>
         `<button class="${i === 0 ? "on" : ""}" onclick="showPhoto(${i})" aria-label="Show photo ${i + 1}"><img src="${photoUrl(ref)}" alt=""></button>`).join("")}</div>` : ""}
-      <div class="row-between"><span class="name big">${escapeHtml(fabric.name)}</span><span class="price big">${money(fabric.price_per_yard)} / yd</span></div>
+      <div class="row-between"><span class="name big">${escapeHtml(fabric.name)}</span><span class="price big">${money(perUnit, fc)} / ${unit}${approxMoney(perUnit, fc)}</span></div>
       <div class="tags">
         <span class="tag">${escapeHtml(fabric.category)}</span>
         <span class="tag"><span class="dot" style="background:${escapeHtml(fabric.color)}"></span>${escapeHtml(fabric.colour_name)}</span>
-        <span class="tag ${soldOut ? "low" : fabric.yards_available < LOW_STOCK_YARDS ? "low" : ""}">${soldOut ? "Sold out" : `${fabric.yards_available} yd in stock`}</span>
-        ${fabric.min_order_yards > 1 ? `<span class="tag">Min ${fabric.min_order_yards} yd</span>` : ""}
+        <span class="tag ${soldOut ? "low" : fabric.yards_available < LOW_STOCK_YARDS ? "low" : ""}">${soldOut ? "Sold out" : `${lengthText(fabric.yards_available, unit)} in stock`}</span>
+        ${fabric.min_order_yards > 1 ? `<span class="tag">Min ${lengthText(fabric.min_order_yards, unit)}</span>` : ""}
+        <span class="tag">Priced in ${escapeHtml(fc)}</span>
       </div>
+      ${approxNote(fc)}
       ${fabric.description ? `<p class="desc">${escapeHtml(fabric.description)}</p>` : ""}
       ${action}
       ${seller ? `

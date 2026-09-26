@@ -51,7 +51,7 @@ const FEATURED = [["GB", "London"], ["GB", "Manchester"], ["GB", "Birmingham"], 
 // Only what the public may see: business name, area, specialities, photos,
 // rating and reviews. No address, phone, email, website or social links.
 const PUBLIC_COLUMNS = "id,slug,business_name,profile_image_url,description,country_code,city,postcode_area,location,"
-  + "speciality_tags,delivery_available,custom_orders,rating,review_count,delivery_estimate,public_latitude,public_longitude,updated_at";
+  + "speciality_tags,delivery_available,custom_orders,rating,review_count,delivery_estimate,public_latitude,public_longitude,updated_at,currency_code";
 // The same contact-details filter as the app and the database, as a second check on what's published
 const { hideContactDetails } = createRequire(import.meta.url)(path.join(APP_DIR, "js", "no-leakage.js"));
 const clean = t => Object.assign({}, t, Object.fromEntries(["business_name", "description", "city", "location", "delivery_estimate"]
@@ -83,12 +83,35 @@ async function loadData() {
     const list = JSON.parse(js.match(/const DEMO_COUNTRIES = (\[.*?\])\.map/s)[1]);
     return { countries: list.map(([code, name, slug]) => ({ code, name, slug, flag: flagOf(code) })), tailors: [] };
   }
-  const [countries, tailors] = await Promise.all([
+  const [countries, tailors, prices, currencies] = await Promise.all([
     getAll("countries", "select=code,name,slug,flag&order=sort_order,name"),
-    getAll("designers", `select=${PUBLIC_COLUMNS}&admin_status=eq.approved&order=business_name`)
+    getAll("designers", `select=${PUBLIC_COLUMNS}&admin_status=eq.approved&order=business_name`),
+    // Each tailor's lowest tailoring price, in their own currency ("Tailoring from ₦95,000")
+    getAll("price_list", "select=designer_id,price,currency_code&kind=eq.outfit"),
+    getAll("currencies", "select=code,symbol,decimals,trim_zeros")
   ]);
-  return { countries, tailors: tailors.map(clean) };
+  currencies.forEach(c => CURRENCIES.set(c.code, c));
+  const lowest = new Map();
+  const byId = new Map(tailors.map(t => [t.id, t]));
+  prices.forEach(p => {
+    const t = byId.get(p.designer_id);
+    if (!t || p.currency_code !== (t.currency_code || "GBP")) return;
+    if (!lowest.has(t.id) || Number(p.price) < lowest.get(t.id)) lowest.set(t.id, Number(p.price));
+  });
+  return { countries, tailors: tailors.map(t => Object.assign(clean(t), { from_price: lowest.get(t.id) ?? null, currency_code: t.currency_code || "GBP" })) };
 }
+
+// Money written the way the app and the database write it: £1,250 · ₦250,000 · $1,250.00
+const CURRENCIES = new Map();
+function money(amount, code) {
+  const c = CURRENCIES.get(code) || { symbol: code + " ", decimals: 2, trim_zeros: false };
+  const places = Number(c.decimals);
+  const value = Math.round(Number(amount) * 10 ** places) / 10 ** places;
+  const whole = places === 0 || (c.trim_zeros && value % 1 === 0);
+  const digits = value.toLocaleString("en-GB", { minimumFractionDigits: whole ? 0 : places, maximumFractionDigits: whole ? 0 : places });
+  return c.symbol + (c.symbol.length > 1 && /[A-Za-z.]$/.test(c.symbol) ? " " : "") + digits;
+}
+const fromText = t => t.from_price != null ? `Tailoring from ${money(t.from_price, t.currency_code)}` : "";
 
 // ---- Small helpers ----
 
@@ -184,6 +207,9 @@ function localBusiness(t, country) {
     knowsAbout: (t.speciality_tags || []).length ? t.speciality_tags : undefined
   };
   if (t.profile_image_url) data.image = t.profile_image_url;
+  // Prices in the tailor's own currency
+  data.currenciesAccepted = t.currency_code || "GBP";
+  if (t.from_price != null) data.priceRange = `From ${money(t.from_price, t.currency_code)}`;
   // No street address or exact position: customers get those in the app once their deposit is confirmed
   if (t.review_count > 0 && t.rating) data.aggregateRating = { "@type": "AggregateRating", ratingValue: Number(t.rating).toFixed(1), reviewCount: t.review_count, bestRating: 5, worstRating: 1 };
   return JSON.parse(JSON.stringify(data));
@@ -242,6 +268,7 @@ for (const t of tailors) {
       <div>
         <p class="gold rating" data-live="rating">${esc(ratingText(t))}</p>
         <p>${country ? country.flag + " " : ""}${esc(areaText(t))}</p>
+        ${fromText(t) ? `<p class="price" data-live="price">${esc(fromText(t))} <small>(${esc(t.currency_code)})</small></p>` : ""}
         <p class="badges">${t.delivery_available ? `<span>🚚 Delivery available</span>` : ""}${t.custom_orders ? `<span>✂️ Custom orders</span>` : ""}</p>
       </div>
     </section>
@@ -255,9 +282,10 @@ for (const t of tailors) {
   write(rel, page({
     rel, image: t.profile_image_url,
     title: `${t.business_name} — tailor in ${where || "your area"} | NebedaHub`,
-    description: cut(`${t.business_name}: ${specs ? specs + ". " : ""}${t.description || "Bespoke tailoring"}${where ? " in " + where : ""}. ${ratingText(t)}. Request a quote on NebedaHub.`, 158),
+    description: cut(`${t.business_name}: ${specs ? specs + ". " : ""}${fromText(t) ? fromText(t) + ". " : ""}${t.description || "Bespoke tailoring"}${where ? " in " + where : ""}. ${ratingText(t)}. Request a quote on NebedaHub.`, 158),
     heading: t.business_name, intro: specs ? `Tailor in ${esc(where)} · ${esc(specs)}` : `Tailor in ${esc(where)}`,
-    body, jsonLd: Object.assign({ "@context": "https://schema.org" }, localBusiness(t, country)), live: { kind: "tailor", slug: t.slug }
+    body, jsonLd: Object.assign({ "@context": "https://schema.org" }, localBusiness(t, country)),
+    live: { kind: "tailor", slug: t.slug, currency: Object.assign({ code: t.currency_code }, CURRENCIES.get(t.currency_code) || {}) }
   }));
   urls.push({ loc: `${APP_URL}/tailor/${t.slug}/`, lastmod: (t.updated_at || "").slice(0, 10) });
 }

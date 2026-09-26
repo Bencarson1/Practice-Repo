@@ -20,7 +20,7 @@ function renderProduction() {
         nextButton = `<a class="button small" href="#/biz/payments" title="Confirm the deposit to start production">Awaiting deposit</a>`;
       } else {
         const blocked = next.key === "balance_paid" && balanceOwed(order) > 0;
-        nextButton = `<button class="small" onclick="moveStage('${order.id}', 1)" ${blocked ? `disabled title="Balance of ${money(balanceOwed(order))} owed"` : ""}>${blocked ? "Awaiting balance" : "Next ▶"}</button>`;
+        nextButton = `<button class="small" onclick="moveStage('${order.id}', 1)" ${blocked ? `disabled title="Balance of ${money(balanceOwed(order), orderCurrency(order))} owed"` : ""}>${blocked ? "Awaiting balance" : "Next ▶"}</button>`;
       }
       return `
         <div class="job-card ${isLate(order) ? "late" : ""}">
