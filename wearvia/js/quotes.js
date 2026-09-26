@@ -4,12 +4,13 @@
 // Customers send their design, style photos, measurements and chosen
 // fabric to the tailor. The tailor opens the request, chats with the
 // customer, enters the yards needed (and another fabric if they agreed one)
-// and presses "Send quote". The price is worked out from the fabric
-// seller's price per yard and the price list — in live mode by the
-// database (wearvia_send_quote), so it's always the same everywhere.
+// and presses "Send quote". The fabric cost is calculated from the seller's
+// price. The tailor enters their own tailoring, embroidery, delivery and
+// optional extra charges for this specific order. The database records the
+// quote so the customer and tailor see the same amount.
 // ============================================================
 
-const quoteForms = {};  // orderId → { fabric, yards, note } typed into the quote form, kept across redraws
+const quoteForms = {};  // orderId -> values typed into the quote form, kept across redraws
 
 // Requests that need the team: waiting for a quote, or a new message from the customer
 function quotesNeedingTeam() {
@@ -45,7 +46,7 @@ function renderQuotes(orderId) {
     .sort((a, b) => b.accepted_at.localeCompare(a.accepted_at)).slice(0, 5);
 
   return `
-    ${bizHeader("Quote requests", `Customers who sent their order to you. Chat with them to agree the ${unitWord(designerFabricUnit(bizDesigner()), true)}, then send the quote. The price is the fabric seller's price × the length, plus tailoring, embroidery and delivery from your price list — all in ${escapeHtml(currencyInfo(bizCurrency()).name)}. Fabric from a seller in another currency is converted at the day's exchange rate when you send the quote.`)}
+    ${bizHeader("Quote requests", `Customers who sent their order to you. Chat with them to agree the ${unitWord(designerFabricUnit(bizDesigner()), true)}, then enter your own price for this job and send the quote. Fabric cost is calculated from the seller's price. Your service charges are entered by you, in ${escapeHtml(currencyInfo(bizCurrency()).name)}. Fabric from another currency is converted at the day's exchange rate when you send the quote.`)}
     <div class="card">
       <h2>Waiting for you or the customer <span class="total">${requests.length}</span></h2>
       <div class="table-wrap"><table>
@@ -114,6 +115,12 @@ function renderQuoteDetail(orderId) {
   const currency = designerCurrency(designerById(order.designer_id));
   const startYards = typed.yards != null ? typed.yards : quoted ? lengthIn(order.fabric_yards, unit) : "";
   const startFabric = typed.fabric || (fabric && isBuyable(fabric) ? fabric.id : "");
+  const startTailoring = typed.tailoring != null ? typed.tailoring : quoted ? Number(order.tailoring_cost || 0) : "";
+  const startEmbroidery = typed.embroidery != null ? typed.embroidery : quoted ? Number(order.embroidery_cost || 0) : 0;
+  const startDelivery = typed.delivery != null ? typed.delivery : quoted ? Number(order.delivery_cost || 0) : 0;
+  const quotedExtra = quoted ? (order.line_items || []).find(l => l.kind === "extra") : null;
+  const startExtra = typed.extra != null ? typed.extra : quotedExtra ? Number(quotedExtra.amount || 0) : 0;
+  const startExtraLabel = typed.extraLabel != null ? typed.extraLabel : quotedExtra ? String(quotedExtra.label || "Extra charge") : "";
   const options = fabrics.map(f => {
     const seller = findSupplier(f.supplier_id);
     const out = !isBuyable(f);
@@ -138,8 +145,17 @@ function renderQuoteDetail(orderId) {
           <form id="quote-form" class="stack" onsubmit="return sendQuoteFromForm(event, '${order.id}')" oninput="updateQuotePreview(this, '${order.id}')">
             <label>Fabric<select name="fabric">${options || "<option value=''>No fabrics in stock</option>"}</select></label>
             <label>${capitalize(unitWord(unit, true))} needed<input name="yards" type="number" inputmode="decimal" min="0.25" max="100" step="0.25" value="${startYards}" required placeholder="e.g. 5.5"></label>
-            <div id="quote-preview" class="quote-preview">${quotePreviewHtml(order, startFabric, startYards)}</div>
-            <label>Message with the quote <small class="muted">(optional)</small><textarea name="note" rows="2" maxlength="${CHAT_TEXT_MAX}" placeholder="e.g. As we agreed: 5.5 yd so the robe reaches your ankles.">${escapeHtml(typed.note || "")}</textarea></label>
+            <div class="card soft">
+              <b>Your charges for this order (${escapeHtml(currency)})</b>
+              <p class="hint">You decide these amounts. NebedaHub does not set your tailoring price.</p>
+              <label>Tailoring price<input name="tailoring" type="number" inputmode="decimal" min="0" step="0.01" value="${startTailoring}" required placeholder="Enter your making price"></label>
+              <label>Embroidery charge<input name="embroidery" type="number" inputmode="decimal" min="0" step="0.01" value="${startEmbroidery}"></label>
+              <label>Delivery charge<input name="delivery" type="number" inputmode="decimal" min="0" step="0.01" value="${startDelivery}"></label>
+              <label>Extra charge <small class="muted">(optional)</small><input name="extra" type="number" inputmode="decimal" min="0" step="0.01" value="${startExtra}"></label>
+              <label>Extra charge description <small class="muted">(optional)</small><input name="extraLabel" maxlength="80" value="${escapeHtml(startExtraLabel)}" placeholder="e.g. Rush order"></label>
+            </div>
+            <div id="quote-preview" class="quote-preview">${quotePreviewHtml(order, startFabric, startYards, { tailoring: startTailoring, embroidery: startEmbroidery, delivery: startDelivery, extra: startExtra, extraLabel: startExtraLabel })}</div>
+            <label>Message with the quote <small class="muted">(optional)</small><textarea name="note" rows="2" maxlength="${CHAT_TEXT_MAX}" placeholder="e.g. I have reviewed your design and this is my quote.">${escapeHtml(typed.note || "")}</textarea></label>
             <div class="form-actions"><button type="submit" id="send-quote">${quoted ? "Send new quote" : "Send quote"}</button></div>
           </form>
           <p class="hint">The customer sees the quote in their order and in the chat, and taps <b>Accept quote</b>. Only then is the fabric taken out of stock and ordered from the seller.</p>
@@ -166,33 +182,57 @@ function styleBriefCompact(order) {
 // What the quote comes to, worked out the same way as the database does it — in the
 // tailor's currency, with a seller's fabric converted at today's rate. (The database
 // uses the rate at the moment you press Send quote, and saves it on the order.)
-function quotePreviewHtml(order, fabricId, yardsText) {
+function quotePreviewHtml(order, fabricId, yardsText, prices) {
   const fabric = findFabric(fabricId);
   const tailor = designerById(order.designer_id);
   const unit = designerFabricUnit(tailor);
   const currency = designerCurrency(tailor);
   const length = Number(yardsText);
   const yards = yardsFrom(length, unit);
+  const own = prices || {};
+  const tailoring = Number(own.tailoring);
+  const embroidery = Number(own.embroidery || 0);
+  const delivery = Number(own.delivery || 0);
+  const extra = Number(own.extra || 0);
+  const extraLabel = String(own.extraLabel || "Extra charge").trim() || "Extra charge";
   if (!fabric) return `<p class="muted">Choose a fabric.</p>`;
-  if (!yardsText || !(length > 0)) return `<p class="muted">Enter the ${unitWord(unit, true)} to see the quote. ${escapeHtml(fabric.name)} is ${escapeHtml(fabricPriceText(fabric, unit))}${fabric.min_order_yards > 0 ? `, smallest order ${lengthText(fabric.min_order_yards, unit)}` : ""}.</p>`;
+  if (!yardsText || !(length > 0)) return `<p class="muted">Enter the ${unitWord(unit, true)} to see the fabric cost and quote total.</p>`;
+  if (!(tailoring >= 0)) return `<p class="muted">Enter your tailoring price for this order.</p>`;
   let problem = "";
   if (Math.round(length * 4) !== length * 4) problem = `Use quarter ${unitWord(unit, true)} (for example 4.5 or 5.25).`;
   else if (yards < fabric.min_order_yards - 0.005) problem = `The smallest order for ${fabric.name} is ${lengthText(fabric.min_order_yards, unit)}.`;
   else if (yards > fabric.yards_available) problem = `Only ${lengthText(fabric.yards_available, unit)} of ${fabric.name} is left.`;
-  usePricesOf(order.designer_id);
-  const quote = computeQuote(order.outfit_type, order.embroidery, fabric, length, null, { currency, unit });
-  if (quote.noRate) return `<p class="owed">There's no exchange rate for ${escapeHtml(quote.fabricCurrency)} yet, so this fabric can't be priced in ${escapeHtml(currency)}. Try again later, or choose a fabric priced in ${escapeHtml(currency)}.</p>`;
-  return `${quote.lines.map(l => `<div class="qline"><span>${escapeHtml(l.label)}</span><span>${money(l.amount, currency)}</span></div>`).join("")}
-    <div class="qtotal"><span>Total</span><span>${money(quote.total, currency)}</span></div>
-    <div class="muted small-text">Deposit ${money(depositFor(quote.total), currency)} (${Math.round(DEPOSIT_RATE * 100)}%)</div>
-    ${quote.rate ? `<p class="hint">💱 The seller charges ${money(quote.fabricAmount, quote.fabricCurrency)}. Today ${escapeHtml(rateText(quote.rate, quote.fabricCurrency, currency))}; the rate when you press Send quote is saved on the order and shown to the customer.</p>` : ""}
+  const quote = computeQuote(order.outfit_type, order.embroidery, fabric, length, { tailoring, embroidery, delivery }, { currency, unit });
+  if (quote.noRate) return `<p class="owed">There is no exchange rate for ${escapeHtml(quote.fabricCurrency)} yet, so this fabric cannot be priced in ${escapeHtml(currency)}. Try again later, or choose a fabric priced in ${escapeHtml(currency)}.</p>`;
+  const lines = quote.lines.slice();
+  if (extra > 0) lines.push({ label: extraLabel, amount: roundMoney(extra, currency), kind: "extra" });
+  const total = roundMoney(quote.total + Math.max(0, extra), currency);
+  return `${lines.map(l => `<div class="qline"><span>${escapeHtml(l.label)}</span><span>${money(l.amount, currency)}</span></div>`).join("")}
+    <div class="qtotal"><span>Total</span><span>${money(total, currency)}</span></div>
+    <div class="muted small-text">Deposit ${money(depositFor(total), currency)} (${Math.round(DEPOSIT_RATE * 100)}%)</div>
+    ${quote.rate ? `<p class="hint">The seller charges ${money(quote.fabricAmount, quote.fabricCurrency)}. Today ${escapeHtml(rateText(quote.rate, quote.fabricCurrency, currency))}. The rate used when you send the quote is saved on the order.</p>` : ""}
     ${problem ? `<p class="owed">${escapeHtml(problem)}</p>` : ""}`;
 }
 
+function quoteFormPrices(form) {
+  return {
+    tailoring: form.tailoring.value,
+    embroidery: form.embroidery.value || 0,
+    delivery: form.delivery.value || 0,
+    extra: form.extra.value || 0,
+    extraLabel: form.extraLabel.value || ""
+  };
+}
+
 function updateQuotePreview(form, orderId) {
-  quoteForms[orderId] = { fabric: form.fabric.value, yards: form.yards.value, note: form.note.value };
+  const prices = quoteFormPrices(form);
+  quoteForms[orderId] = {
+    fabric: form.fabric.value, yards: form.yards.value, note: form.note.value,
+    tailoring: prices.tailoring, embroidery: prices.embroidery, delivery: prices.delivery,
+    extra: prices.extra, extraLabel: prices.extraLabel
+  };
   const el = document.getElementById("quote-preview");
-  if (el) el.innerHTML = quotePreviewHtml(findOrder(orderId), form.fabric.value, form.yards.value);
+  if (el) el.innerHTML = quotePreviewHtml(findOrder(orderId), form.fabric.value, form.yards.value, prices);
 }
 
 let sendingQuote = false;
@@ -207,16 +247,25 @@ function sendQuoteFromForm(event, orderId) {
   const currency = designerCurrency(tailor);
   const length = Number(form.yards.value);
   if (!fabric || !(length > 0)) { alert(`Choose a fabric and enter the ${unitWord(unit, true)} needed.`); return false; }
-  usePricesOf(order.designer_id);
-  const quote = computeQuote(order.outfit_type, order.embroidery, fabric, length, null, { currency, unit });
-  if (quote.noRate) { alert(`There's no exchange rate for ${quote.fabricCurrency} yet. Try again later.`); return false; }
-  if (!confirm(`Send ${customerName(order.customer_id).split(" ")[0]} a quote of about ${money(quote.total, currency)} for ${length} ${unit} of ${fabric.name}?${quote.rate ? ` (The fabric is converted from ${quote.fabricCurrency} at the exchange rate when you send.)` : ""}`)) return false;
+  const prices = quoteFormPrices(form);
+  const tailoring = Number(prices.tailoring);
+  const embroidery = Number(prices.embroidery || 0);
+  const delivery = Number(prices.delivery || 0);
+  const extra = Number(prices.extra || 0);
+  if (!(tailoring >= 0) || !(embroidery >= 0) || !(delivery >= 0) || !(extra >= 0)) {
+    alert("Enter valid charges. Each amount must be 0 or more.");
+    return false;
+  }
+  const quote = computeQuote(order.outfit_type, order.embroidery, fabric, length, { tailoring, embroidery, delivery }, { currency, unit });
+  if (quote.noRate) { alert(`There is no exchange rate for ${quote.fabricCurrency} yet. Try again later.`); return false; }
+  const total = roundMoney(quote.total + extra, currency);
+  if (!confirm(`Send ${customerName(order.customer_id).split(" ")[0]} your quote of ${money(total, currency)} for this order?${quote.rate ? ` The fabric is converted from ${quote.fabricCurrency} at the exchange rate when you send.` : ""}`)) return false;
   sendingQuote = true;
   const button = document.getElementById("send-quote");
   if (button) { button.disabled = true; button.textContent = "Sending…"; }
   let sent;
   try {
-    sent = sendQuote(order, fabric.id, length, form.note.value, unit);
+    sent = sendQuote(order, fabric.id, length, form.note.value, unit, prices);
   } catch (error) {
     sent = Promise.reject(error);
   }
@@ -229,7 +278,7 @@ function sendQuoteFromForm(event, orderId) {
       renderAll();
     })
     .catch(error => {
-      alert(error.message || "Couldn't send the quote.");
+      alert(error.message || "Could not send the quote.");
       if (button) { button.disabled = false; button.textContent = "Send quote"; }
     })
     .finally(() => { sendingQuote = false; });
