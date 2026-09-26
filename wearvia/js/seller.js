@@ -564,6 +564,7 @@ function sellerProfileScreen(seller) {
   return `
     <div class="biz-head"><h1>${seller ? "Shop & application" : "Apply to sell on " + APP_NAME}</h1>
       <p class="muted">${seller ? `Status: <b>${escapeHtml(SELLER_STATUS_LABELS[seller.admin_status || "approved"])}</b>. ` : ""}Customers and tailors only see your shop name, area, logo and fabrics. Your contact details, address and application are private: only you and the ${APP_NAME} team see them.</p></div>
+    ${seller ? sellerPaymentsCard() : ""}
     <form class="card seller-profile" onsubmit="return saveSellerProfileForm(event)" novalidate>
       <h2>Your business</h2>
       <div id="logo-row" class="logo-row">${logoRow(v.name)}</div>
@@ -602,6 +603,12 @@ function sellerProfileScreen(seller) {
       </div>
       ${approved ? "" : `<p class="hint">${seller ? "Changes are saved to your application." : `The ${APP_NAME} team reviews every new seller, usually within two working days.`}</p>`}
     </form>`;
+}
+
+function sellerPaymentsCard() {
+  return `<div class="card"><h2>Payments & payouts</h2>
+    <p><b>Not open yet.</b> NebedaHub is completing its protected payment and payout setup before fabric sellers can receive customer money.</p>
+    <p class="hint">Do not ask customers or tailors to pay you directly. Payout setup will be enabled here when it is ready.</p></div>`;
 }
 
 function sampleSlots() {
