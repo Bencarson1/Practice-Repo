@@ -136,6 +136,18 @@ function tabsHtml(tabs, active) {
   }).join("");
 }
 
+// The Sellers demo opens as the sample shop Lagos Wax Prints — from "Try the
+// demo", "Open the demo" or a shared link (/sellers/demo/ or /sellers/?demo=1).
+// Someone who signed out of the demo shop (the welcome page) stays signed out.
+function startSellerDemo() {
+  let started = /[?&]demo(=1|=true)?(&|$)/.test(location.search);
+  try { started = started || sessionStorage.getItem("wearvia-demo-start") === "1"; sessionStorage.removeItem("wearvia-demo-start"); } catch (e) { /* private browsing */ }
+  const route = currentRoute();
+  if (APP_KIND !== "seller" || !started || db.session.sellerId || ["welcome", "apply"].includes(route.screen) || !findSupplier(DEMO_SELLER_ID)) return;
+  db.session.sellerId = DEMO_SELLER_ID;
+  saveData();
+}
+
 // ---- NebedaHub Admin ----
 
 function renderAdminArea(screen, id) {
@@ -263,6 +275,7 @@ if (!appMoving) Cloud.start()
     Auth.hide();
     Auth.drawChrome();
     if (!location.hash || !/^#\//.test(location.hash)) history.replaceState(null, "", "#/" + APP.home);
+    startSellerDemo();
     renderAll();
     // Uploaded photos load from the browser's photo store a moment later; draw again when they're in
     PhotoStore.ready.then(renderAll);

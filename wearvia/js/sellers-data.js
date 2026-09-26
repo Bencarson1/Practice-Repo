@@ -35,6 +35,7 @@ const FABRIC_STATUS_LABELS = { pending: "Waiting for approval", approved: "Live"
 const SELLER_STATUS_LABELS = { pending: "In review", approved: "Approved", declined: "Changes needed", hidden: "Hidden" };
 const FABRIC_ORDER_LABELS = { new: "New", confirmed: "Stock confirmed", sent: "Dispatched", cancelled: "Cancelled" };
 const MAX_SAMPLE_PHOTOS = 5;
+const DEMO_SELLER_ID = "S15";   // Lagos Wax Prints: the shop the Sellers demo opens as
 // Where a seller sends an order. "customer" is kept for later: the database
 // refuses it for now, so customers' addresses stay private.
 const SHIP_TO_OPTIONS = [{ key: "tailor", label: "Send to the customer's tailor", ready: true },
@@ -675,7 +676,7 @@ function upgradeDataToSellerApps(data) {
    line("FOL-4", "FO-2104", "F26", "Idumota Emerald Wax", 3, 7500, "new", 0, { customer_first_name: "Ada", deposit_confirmed: false })
   ].forEach(l => { if (!data.fabric_orders.some(x => x.id === l.id)) data.fabric_orders.push(l); });
   // The Sellers demo opens as Lagos Wax Prints
-  if (!data.session.sellerId) data.session.sellerId = "S15";
+  if (!data.session.sellerId) data.session.sellerId = DEMO_SELLER_ID;
   data.seller_apps_added = true;
 }
 
