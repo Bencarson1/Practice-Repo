@@ -201,3 +201,122 @@ function renderHiddenContacts() {
     ${bizHeader("Hidden contact details", `Chat messages where the ${APP_NAME} filter hid a phone number, email, website, social handle or an "outside the app" request. Customers and tailors only see the hidden version; the original is kept for safety and only you can read it.`)}
     <div class="card">${rows || `<p class="empty">No messages have had contact details hidden.</p>`}</div>`;
 }
+
+
+// ---- Homepage manager ----
+
+const HOMEPAGE_CATEGORIES = [
+  ["Agbada", "agbada"], ["Kaftan", "kaftan"], ["Senator", "senator"], ["Bubu", "bubu"],
+  ["Two Piece", "two_piece"], ["Dress", "dress"], ["Wedding", "wedding"], ["Suit", "suit"]
+];
+
+function homepageSetting(key, fallback) {
+  return (db.homepage && db.homepage[key]) || fallback || "";
+}
+
+function renderHomepageManager() {
+  const order = String(homepageSetting("category_order", "Agbada,Kaftan,Senator,Bubu,Two Piece,Dress,Wedding,Suit"))
+    .split(",").map(x => x.trim()).filter(Boolean);
+  const hidden = new Set(String(homepageSetting("hidden_categories", "")).split(",").map(x => x.trim()).filter(Boolean));
+  const position = name => {
+    const i = order.indexOf(name);
+    return i < 0 ? 99 : i + 1;
+  };
+  const categoryRows = HOMEPAGE_CATEGORIES.map(([name, key]) => {
+    const image = homepageSetting("category_" + key, "");
+    return `<div class="homepage-category-row">
+      <div class="homepage-preview">${image ? `<img src="${escapeHtml(image)}" alt="${escapeHtml(name)} preview">` : `<span>No image</span>`}</div>
+      <div class="grow">
+        <b>${escapeHtml(name)}</b>
+        <label class="check"><input type="checkbox" name="show_${key}" ${hidden.has(name) ? "" : "checked"}> Show on homepage</label>
+        <label>Display order
+          <input name="order_${key}" type="number" min="1" max="8" value="${position(name)}">
+        </label>
+        <label>Replace image
+          <input name="file_${key}" type="file" accept="image/*">
+        </label>
+      </div>
+    </div>`;
+  }).join("");
+
+  const hero = homepageSetting("hero_image", "");
+  return `
+    ${bizHeader("Homepage", "Change the customer homepage without editing GitHub. Upload a new hero or category image, hide categories, and change their order.")}
+    <form class="card homepage-manager" onsubmit="return saveHomepageManager(event)">
+      <h2>Hero section</h2>
+      <div class="homepage-hero-edit">
+        <div class="homepage-hero-preview">${hero ? `<img src="${escapeHtml(hero)}" alt="Current homepage hero">` : `<span>No hero image</span>`}</div>
+        <div class="grow form-grid">
+          <label>Headline
+            <input name="hero_title" maxlength="100" required value="${escapeHtml(homepageSetting("hero_title", "Design it. Find the fabric. Choose the tailor."))}">
+          </label>
+          <label>Supporting text
+            <textarea name="hero_text" rows="3" maxlength="240" required>${escapeHtml(homepageSetting("hero_text", "NebedaHub brings custom fashion, trusted tailors and marketplace fabrics into one connected order."))}</textarea>
+          </label>
+          <label>Replace hero image
+            <input name="hero_file" type="file" accept="image/*">
+          </label>
+        </div>
+      </div>
+
+      <h2>Shop by category</h2>
+      <p class="hint">Untick a category to remove it from the homepage. Use 1 to 8 to control the display order. The category still exists in the ordering system.</p>
+      <div class="homepage-category-list">${categoryRows}</div>
+
+      <div class="form-actions">
+        <button type="submit">Save homepage</button>
+        <a class="button ghost" href="${escapeHtml(appUrl("customer", "home"))}" target="_blank" rel="noopener">Preview customer homepage</a>
+      </div>
+    </form>`;
+}
+
+function homepageFileData(file) {
+  return new Promise((resolve, reject) => {
+    if (!file) return resolve(null);
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("That image could not be read."));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function saveHomepageManager(event) {
+  event.preventDefault();
+  const form = event.target;
+  const button = form.querySelector('button[type="submit"]');
+  button.disabled = true;
+  button.textContent = "Saving…";
+  try {
+    const values = {
+      hero_title: form.hero_title.value.trim(),
+      hero_text: form.hero_text.value.trim()
+    };
+
+    const heroFile = form.hero_file.files && form.hero_file.files[0];
+    if (heroFile) values.hero_image = await Cloud.uploadPhoto(await homepageFileData(heroFile), "homepage");
+
+    const order = HOMEPAGE_CATEGORIES.slice().sort((a, b) => {
+      const av = Number(form["order_" + a[1]].value) || 99;
+      const bv = Number(form["order_" + b[1]].value) || 99;
+      return av - bv;
+    }).map(x => x[0]);
+    values.category_order = order.join(",");
+    values.hidden_categories = HOMEPAGE_CATEGORIES.filter(([name, key]) => !form["show_" + key].checked).map(x => x[0]).join(",");
+
+    for (const [name, key] of HOMEPAGE_CATEGORIES) {
+      const input = form["file_" + key];
+      const file = input && input.files && input.files[0];
+      if (file) values["category_" + key] = await Cloud.uploadPhoto(await homepageFileData(file), "homepage");
+    }
+
+    await Cloud.saveHomepageSettings(values);
+    toast("Homepage updated.");
+    renderAll();
+  } catch (error) {
+    alert(error.message || "The homepage could not be saved.");
+  } finally {
+    button.disabled = false;
+    button.textContent = "Save homepage";
+  }
+  return false;
+}
