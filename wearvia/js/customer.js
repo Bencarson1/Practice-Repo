@@ -170,6 +170,11 @@ function screenHome() {
             <span>✓ Quote before payment</span>
             <span>✓ Order chat stays in NebedaHub</span>
           </div>
+          <div class="market-mobile-links">
+            <button onclick="go('market')">Browse Fabric Marketplace</button>
+            <a href="${escapeHtml(appUrl("seller", "welcome"))}">Sell your fabric</a>
+            <a href="${escapeHtml(appUrl("business", "welcome"))}">Join as tailor or designer</a>
+          </div>
         </div>
         <div class="market-hero-visual">
           ${heroImage ? `<img src="${escapeHtml(heroImage)}" alt="Fashion marketplace preview">` : `<div class="market-hero-fallback">NebedaHub</div>`}
