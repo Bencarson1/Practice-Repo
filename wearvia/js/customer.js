@@ -136,12 +136,18 @@ function screenHome() {
   const fabrics = (db.fabrics || [])
     .filter(f => f.status === "approved" && !f.deleted_at && !f.sold_out && Number(f.yards_available || 0) > 0)
     .slice(0, 6);
+  const categoryPhotos = {
+    Agbada: "https://images.unsplash.com/photo-1782566208081-6b5135fddf23?auto=format&fit=crop&w=700&q=82",
+    Kaftan: "https://images.unsplash.com/photo-1776880470534-2e19345ab02b?auto=format&fit=crop&w=700&q=82",
+    Senator: "https://images.unsplash.com/photo-1775754787083-238dd19e1545?auto=format&fit=crop&w=700&q=82",
+    Bubu: "https://images.unsplash.com/photo-1663044022557-7d5d4c1d5318?auto=format&fit=crop&w=700&q=82",
+    "Two Piece": "https://images.unsplash.com/photo-1663043994777-7ed4b4e6cba3?auto=format&fit=crop&w=700&q=82",
+    Dress: "https://images.unsplash.com/photo-1648328414427-fc902f51808c?auto=format&fit=crop&w=700&q=82",
+    Wedding: "https://images.unsplash.com/photo-1648328414427-fc902f51808c?auto=format&fit=crop&w=700&q=82",
+    Suit: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=700&q=82"
+  };
   const categories = OUTFITS.slice(0, 8);
-  const heroFabric = fabrics[0] || null;
-  const heroTailor = tailors[0] || null;
-  const heroImage = heroFabric ? fabricCoverUrl(heroFabric)
-    : heroTailor ? (photoUrl(heroTailor.profile_image) || photoUrl(`logo:${initialsOf(heroTailor.business_name)}:7a1f2b`))
-    : "";
+  const heroImage = "https://images.unsplash.com/photo-1648328414427-fc902f51808c?auto=format&fit=crop&w=1600&q=88";
 
   return `
     <div class="market-home">
@@ -200,11 +206,13 @@ function screenHome() {
           <button class="market-text-link" onclick="startOrder()">View all outfits →</button>
         </div>
         <div class="market-category-grid">
-          ${categories.map(o => `<button class="market-category-card" onclick="startHomeOutfit('${escapeHtml(o.name)}')">
-            <span class="market-category-art">${conceptSVG({ outfit:o.name, colour:"#7a1f2b", embroidery:"None", sleeve:"Fitted", neck:"Round" },1)}</span>
-            <b>${escapeHtml(o.name)}</b>
-            <small>Request a tailor quote</small>
-          </button>`).join("")}
+          ${categories.map(o => {
+            const photo = categoryPhotos[o.name] || categoryPhotos.Dress;
+            return `<button class="market-category-card" onclick="startHomeOutfit('${escapeHtml(o.name)}')">
+              <span class="market-category-art"><img src="${escapeHtml(photo)}" alt="${escapeHtml(o.name)} fashion" loading="lazy"></span>
+              <span class="market-category-copy"><b>${escapeHtml(o.name)}</b><small>Request a tailor quote</small></span>
+            </button>`;
+          }).join("")}
         </div>
       </section>
 
