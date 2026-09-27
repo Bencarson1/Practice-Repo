@@ -191,16 +191,14 @@ function joinAsTailor(event) {
   const businessFile = form.businessDocument.files[0] || null;
 
   Promise.all([
-    resizeImage(profileFile, LOGO_MAX_SIZE, 0.85).then(url => Cloud.uploadPhoto(url, "designer")),
+    resizeImage(profileFile, LOGO_MAX_SIZE, 0.85),
     Cloud.uploadVerificationFile(idFile, "tailor-id"),
     Cloud.uploadVerificationFile(addressFile, "tailor-address"),
     businessFile ? Cloud.uploadVerificationFile(businessFile, "tailor-business-registration") : Promise.resolve(null),
-    Promise.all(portfolioFiles.slice(0, 8).map(file =>
-      resizeImage(file, PHOTO_MAX_SIZE, 0.82).then(url => Cloud.uploadPhoto(url, "designer"))
-    ))
+    Promise.all(portfolioFiles.slice(0, 8).map(file => resizeImage(file, PHOTO_MAX_SIZE, 0.82)))
   ])
-    .then(([profileImageUrl, verificationId, verificationAddress, businessRegistration, portfolioUrls]) => {
-      Object.assign(details, { profileImageUrl, verificationId, verificationAddress, businessRegistration, portfolioUrls });
+    .then(([profileImageData, verificationId, verificationAddress, businessRegistration, portfolioData]) => {
+      Object.assign(details, { profileImageData, verificationId, verificationAddress, businessRegistration, portfolioData });
       return Cloud.registerDesigner(details);
     })
     .then(() => {
