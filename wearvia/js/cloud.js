@@ -628,7 +628,7 @@ const Cloud = (() => {
         id, customer_id: details.customerId, designer_id: details.designerId || draftDesignerId(),
         outfit_type: details.outfit, colour: details.colour, embroidery: details.embroidery,
         sleeve_style: details.sleeve, neck_style: details.neck, concept_variation: details.variation || 1,
-        measurement_profile_id: details.profileId || null, fabric_id: details.fabric.id,
+        measurement_profile_id: details.profileId || null, fabric_id: details.fabric ? details.fabric.id : null,
         inspiration_photos: insp ? (insp.aiSelected ? [insp.aiSelected].concat(insp.photos || []) : (insp.photos || []))
           .map(ref => photoPath(ref, STYLE)).filter(Boolean) : [],
         inspiration_link: insp ? insp.link || null : null,
