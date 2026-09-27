@@ -64,18 +64,12 @@ function sellerStatusBadge(fabric) {
 // ---- Onboarding: how it works, apply or sign in ----
 
 function sellerWelcome() {
-  const shops = db.suppliers.filter(s => !Cloud.live).slice().sort((a, b) => (b.id === "S15") - (a.id === "S15") || a.name.localeCompare(b.name));
   return `
     ${bizHeader(`Sell your fabric on ${APP_NAME}`, `Put your fabrics in front of customers and tailors on ${APP_NAME}, like a stall at the market. You're paid in your own currency, and every order goes straight to the customer's tailor.`)}
-    ${Cloud.live && Cloud.me ? `<div class="notice no-shop">This account (${escapeHtml(Cloud.me.email)}) isn't a fabric seller yet. <a href="#/apply"><b>Apply to sell</b></a> — being a tailor and a fabric seller are separate approvals. Or <a href="${escapeHtml(appUrl("customer", ""))}">open the customer app</a>.</div>` : ""}
-    ${Cloud.live ? `<div class="card demo-card">
-      <div><h2>Just looking? Try the demo</h2>
-        <p class="hint">Open a sample shop, <b>Lagos Wax Prints</b>: add fabrics, confirm orders and dispatch them to a tailor. Nothing you do is saved online, and you don't need an account.</p></div>
-      <button class="gold demo-button" onclick="Cloud.enterDemo()">Try the demo</button>
-    </div>` : ""}
+    ${Cloud.me ? `<div class="notice no-shop">This account (${escapeHtml(Cloud.me.email)}) isn't a fabric seller yet. <a href="#/apply"><b>Apply to sell</b></a>. Being a tailor and a fabric seller are separate approvals. Or <a href="${escapeHtml(appUrl("customer", ""))}">open the customer app</a>.</div>` : ""}
     <ol class="how-steps">
       <li><b>Apply</b><span>Your business, contact details, where you are, what you sell and a few sample photos.</span></li>
-      <li><b>${APP_NAME} reviews it</b><span>We check every new seller. You can add your fabrics while you wait — customers can't see them yet.</span></li>
+      <li><b>${APP_NAME} reviews it</b><span>We check every new seller. You can add your fabrics while you wait. Customers can't see them yet.</span></li>
       <li><b>Approved: start selling</b><span>Your fabrics go on the marketplace. Confirm each order, then send it to the customer's tailor with a tracking number.</span></li>
     </ol>
     <div class="card">
@@ -83,7 +77,7 @@ function sellerWelcome() {
       <ul class="benefit-list">
         <li>Customers and tailors choosing fabric for their outfits</li>
         <li>Prices in your own currency, by the yard or the metre</li>
-        <li>Secure payments through ${APP_NAME} — no chasing money</li>
+        <li>Secure payments through ${APP_NAME}</li>
         <li>Orders go straight to the tailor who's making the outfit</li>
       </ul>
     </div>
@@ -95,14 +89,9 @@ function sellerWelcome() {
       </div>
       <div class="card">
         <h2>Already selling?</h2>
-        ${Cloud.isGuest() ? `<p class="hint">Sign in to ${APP.name} to see your fabrics and orders.</p><button class="ghost" onclick="Auth.show('signIn')">Sign in</button>`
-          : Cloud.live ? `<p class="hint">Your shop opens here once you've applied. Signed in with a different email? <button class="linkish strong" onclick="Auth.signOut()">Sign out</button> and sign in with the one your shop uses.</p>` : `
-        <p class="hint">Choose your shop to sign in. (Demo: there are no passwords yet.)</p>
-        <div class="shop-list">${shops.map(s => `
-          <button class="shop-pick" onclick="sellerSignIn('${s.id}')">
-            <img class="logo" src="${sellerLogoUrl(s)}" alt="">
-            <span><b>${escapeHtml(s.name)}</b><small>${escapeHtml(s.location)} · ${isSellerLive(s) ? `${sellerFabrics(s.id).length} fabric${sellerFabrics(s.id).length === 1 ? "" : "s"}` : escapeHtml(SELLER_STATUS_LABELS[s.admin_status])}</small></span>
-          </button>`).join("")}</div>`}
+        ${Cloud.isGuest()
+          ? `<p class="hint">Sign in to ${APP.name} to see your fabrics and orders.</p><button class="ghost" onclick="Auth.show('signIn')">Sign in</button>`
+          : `<p class="hint">Your shop opens here once you've applied. Signed in with a different email? <button class="linkish strong" onclick="Auth.signOut()">Sign out</button> and sign in with the one your shop uses.</p>`}
       </div>
     </div>`;
 }
