@@ -26,6 +26,8 @@ function renderFabrics() {
           <p class="${isLow ? "owed" : ""}"><b>${lengthText(fabric.yards_available, unit)}</b> in stock${isLow ? " — low stock!" : ""}</p>
           <div class="job-buttons">
             <button class="small" onclick="restockFabric('${fabric.id}', ${unit === "m" ? yardsFrom(10, "m") : 10})">Restock +10 ${unit}</button>
+            ${fabric.status !== "hidden" ? `<button class="small ghost" onclick="hideSellerFabric('${fabric.id}')">Hide</button>` : `<button class="small gold" onclick="approveSellerFabric('${fabric.id}')">Restore live</button>`}
+            <button class="small danger" onclick="archiveSellerFabric('${fabric.id}')">Archive</button>
           </div>
         </div>
       </div>`;
