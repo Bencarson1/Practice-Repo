@@ -67,9 +67,9 @@ function tailorWelcome() {
     ${bizHeader(`Join ${APP_NAME} as a tailor or designer`, `Get found by customers near you, and run every order from one place.`)}
     ${notYet ? `<div class="notice no-shop">This account (${escapeHtml(Cloud.me.email)}) isn't a tailor yet. <button class="linkish strong" onclick="go('join')">Join as a tailor</button> — or <a href="${escapeHtml(appUrl("customer", ""))}">open the customer app</a>.</div>` : ""}
     <ol class="how-steps">
-      <li><b>Create your tailor profile</b><span>Your business name, where you are, and the ${APP_NAME} tailor terms.</span></li>
-      <li><b>Show your work and set your prices</b><span>Add your photo, specialities and portfolio, and your prices for each outfit.</span></li>
-      <li><b>Get approved and receive orders</b><span>The ${APP_NAME} team checks your profile, then customers can find you and send quote requests.</span></li>
+      <li><b>Create your tailor profile</b><span>Add your business details, address, specialities and the ${APP_NAME} tailor terms.</span></li>
+      <li><b>Verify your business</b><span>Upload your ID, proof of address, profile photo and examples of your work.</span></li>
+      <li><b>Get approved and quote each job</b><span>The ${APP_NAME} team checks your application, then customers can send you quote requests and you decide your price for each order.</span></li>
     </ol>
     <div class="card">
       <h2>Why join ${APP_NAME}</h2>
