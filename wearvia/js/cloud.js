@@ -246,7 +246,7 @@ const Cloud = (() => {
   async function load() {
     const tables = ["fabrics", "measurement_profiles", "orders", "fabric_recommendations", "payments",
       "invoices", "deliveries", "fabric_order_lines", "tailors", "wedding_orders", "wedding_order_members",
-      "ready_to_wear_sales", "order_messages", "order_chat_reads", "countries", "specialities", "designer_customer_notes",
+      "ready_to_wear_items", "ready_to_wear_sales", "order_messages", "order_chat_reads", "countries", "specialities", "designer_customer_notes",
       "currencies", "exchange_rates", "homepage_settings"];
     const sortBy = { order_chat_reads: "last_read_at", countries: "sort_order", specialities: "sort_order", designer_customer_notes: "updated_at",
       currencies: "sort_order", exchange_rates: "currency_code", homepage_settings: "key" };
@@ -275,21 +275,20 @@ const Cloud = (() => {
 
     // Only the tailors this person needs: their own, their orders' tailors,
     // Nebeda Threads, and the one they're ordering from now
-    const ids = new Set(rows.my_designers.map(d => d.id).concat(rows.orders.map(o => o.designer_id)));
+    const ids = new Set(rows.my_designers.map(d => d.id).concat(rows.orders.map(o => o.designer_id), (rows.ready_to_wear_items || []).map(i => i.designer_id)));
     (state.me && state.me.designers || []).forEach(d => ids.add(d.id));
     if (state.me && state.me.main_designer_id) ids.add(state.me.main_designer_id);
     const draftTailor = (db && db.draft && db.draft.designerId) || (loadDraft() || {}).designerId;
     if (draftTailor) ids.add(draftTailor);
     const list = Array.from(ids).filter(Boolean);
     const inList = q => q.in(list.length ? "designer_id" : "id", list.length ? list : ["00000000-0000-0000-0000-000000000000"]);
-    const [designers, prices, items, reviews, portfolio] = await Promise.all([
+    const [designers, prices, reviews, portfolio] = await Promise.all([
       fetchAll("designers", "created_at", DESIGNER_PUBLIC, q => q.in("id", list.length ? list : ["00000000-0000-0000-0000-000000000000"])),
       fetchAll("price_list", "sort_order", null, inList),
-      fetchAll("ready_to_wear_items", "created_at", null, inList),
       fetchAll("reviews", "created_at", null, inList),
       fetchAll("designer_portfolio_items", "sort_order", null, inList)
     ]);
-    Object.assign(rows, { designers, price_list: prices, ready_to_wear_items: items, reviews, designer_portfolio_items: portfolio });
+    Object.assign(rows, { designers, price_list: prices, reviews, designer_portfolio_items: portfolio });
 
     const previous = db;
     state.loadedAt = Date.now();
