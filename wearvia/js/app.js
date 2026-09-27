@@ -122,12 +122,6 @@ function renderAll() {
     document.getElementById("biz-tabs").innerHTML = tabsHtml(tabs, tab);
     document.title = `${tab.label} · ${(bizDesigner() || {}).business_name || SHOP_NAME} · ${APP.name}`;
   } else if (needsCustomerRecord()) {
-    // A business-only account should open its real business workspace instead
-    // of stopping on the old account-type notice screen.
-    if (Cloud.me && Cloud.me.is_team) {
-      location.replace(appUrl("business", "dashboard"));
-      return;
-    }
     document.getElementById("customer-app").innerHTML = notACustomerScreen();
     document.title = APP.name;
   } else {
