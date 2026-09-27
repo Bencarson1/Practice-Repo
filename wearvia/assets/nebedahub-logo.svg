@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 120" role="img" aria-labelledby="title desc">
+<title id="title">NebedaHub</title><desc id="desc">NebedaHub fashion marketplace logo</desc>
+<defs>
+  <linearGradient id="burgundy" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#B85D6C"/>
+    <stop offset=".55" stop-color="#9B3A4A"/>
+    <stop offset="1" stop-color="#6E2230"/>
+  </linearGradient>
+  <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#D0B17E"/>
+    <stop offset="1" stop-color="#B7925A"/>
+  </linearGradient>
+</defs>
+<g transform="translate(8,9)">
+  <path d="M16 87V28c0-11 8-20 19-20 8 0 15 4 20 10l48 61V20h20v67c0 10-7 18-17 18-7 0-12-3-17-9L36 30v57z" fill="url(#burgundy)"/>
+  <path d="M27 22c18 5 29 17 40 31 13 16 25 32 48 43" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
+  <path d="M27 28c17 6 27 17 38 31 12 15 23 29 45 39" fill="none" stroke="#E7C993" stroke-width="2.2" stroke-linecap="round" stroke-dasharray="7 7"/>
+  <path d="M6 101c25-7 41-23 53-42 11-17 23-38 45-47" fill="none" stroke="url(#gold)" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="111" cy="11" r="7" fill="url(#gold)"/>
+</g>
+<text x="150" y="68" font-family="Inter,Arial,sans-serif" font-size="48" font-weight="800" letter-spacing="-2" fill="#242424">Nebeda<tspan fill="#9B3A4A">Hub</tspan></text>
+<text x="153" y="92" font-family="Inter,Arial,sans-serif" font-size="13" font-weight="600" letter-spacing="4" fill="#5F6368">FASHION CONNECTS PEOPLE</text>
+</svg>
