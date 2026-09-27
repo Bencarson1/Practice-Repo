@@ -24,7 +24,7 @@ function hasInspiration(insp) {
 
 function draftInspiration() {
   const d = draft();
-  if (!d.inspiration) d.inspiration = { photos: [], link: "", note: "" };
+  if (!d.inspiration) d.inspiration = { photos: [], link: "", note: "", aiVariations: [], aiSelected: null };
   return d.inspiration;
 }
 
@@ -33,6 +33,9 @@ function clearDraftInspiration() {
   const d = db.draft;
   if (!d || !d.inspiration) return;
   d.inspiration.photos.forEach(ref => PhotoStore.remove(ref));
+  (d.inspiration.aiVariations || []).forEach(ref => {
+    if (!(d.inspiration.photos || []).includes(ref)) PhotoStore.remove(ref);
+  });
   d.inspiration = null;
 }
 
@@ -230,6 +233,104 @@ function removeStyle() {
   clearDraftInspiration();
   saveData();
   go("outfit");
+}
+
+// ---- Real AI variations from the customer's uploaded reference ----
+
+let aiStyleGenerating = false;
+let aiStyleError = "";
+
+function aiVariationPanel(insp) {
+  if (!hasInspiration(insp)) return "";
+  const variations = insp.aiVariations || [];
+  const selected = insp.aiSelected || null;
+  const source = insp.photos[0];
+  return `
+    <div class="card ai-style-card">
+      <h2>AI style variations</h2>
+      <p class="meta">Use your first uploaded photo as the reference. NebedaHub keeps the original photo and asks AI to create faithful variations based on your requested changes.</p>
+      ${aiStyleError ? `<div class="form-error">${escapeHtml(aiStyleError)}</div>` : ""}
+      ${variations.length ? `
+        <div class="photo-slots style-slots">
+          ${variations.map((ref, i) => `
+            <button type="button" class="photo-slot ${selected === ref ? "selected" : ""}" onclick="chooseAiStyleVariation(${i})" aria-label="Choose AI variation ${i + 1}">
+              <img src="${photoUrl(ref)}" alt="AI variation ${i + 1}">
+              <small>${selected === ref ? "✓ Selected" : "Variation " + (i + 1)}</small>
+            </button>`).join("")}
+        </div>
+        <div class="optbtns two">
+          <button type="button" class="optbtn" onclick="generateAiStyleVariations()" ${aiStyleGenerating ? "disabled" : ""}>↻ Generate new set</button>
+          <button type="button" class="optbtn" onclick="useOriginalStyle()">Use original instead</button>
+        </div>
+      ` : `
+        <button type="button" class="cta" onclick="generateAiStyleVariations()" ${aiStyleGenerating ? "disabled" : ""}>
+          ${aiStyleGenerating ? "Generating 3 variations…" : "Generate 3 AI Variations"}
+        </button>
+        <div class="meta centre">Your original reference stays attached to the order. AI does not replace it.</div>
+      `}
+    </div>`;
+}
+
+function generateAiStyleVariations() {
+  const d = draft();
+  const insp = draftInspiration();
+  if (!hasInspiration(insp) || aiStyleGenerating) return;
+  if (!Cloud.live) {
+    aiStyleError = "Sign in to NebedaHub to generate AI style variations.";
+    renderAll();
+    return;
+  }
+  aiStyleGenerating = true;
+  aiStyleError = "";
+  renderAll();
+
+  Cloud.generateStyleVariations({
+    sourceRef: insp.photos[0],
+    note: insp.note || "",
+    outfit: d.outfit,
+    colour: colourName(d.colour),
+    embroidery: d.embroidery,
+    sleeve: d.sleeve,
+    neck: d.neck
+  }).then(refs => {
+    (insp.aiVariations || []).forEach(ref => {
+      if (!(insp.photos || []).includes(ref)) PhotoStore.remove(ref);
+    });
+    insp.aiVariations = refs;
+    insp.aiSelected = refs[0] || null;
+    d.conceptApproved = false;
+    saveData();
+  }).catch(error => {
+    aiStyleError = error.message || "Could not generate AI style variations.";
+  }).finally(() => {
+    aiStyleGenerating = false;
+    renderAll();
+  });
+}
+
+function chooseAiStyleVariation(index) {
+  const insp = draftInspiration();
+  const ref = (insp.aiVariations || [])[index];
+  if (!ref) return;
+  insp.aiSelected = ref;
+  draft().conceptApproved = false;
+  saveData();
+  renderAll();
+}
+
+function useOriginalStyle() {
+  const insp = draftInspiration();
+  insp.aiSelected = null;
+  draft().conceptApproved = false;
+  saveData();
+  renderAll();
+}
+
+function selectedStyleSummary(insp) {
+  if (!insp) return "";
+  if (insp.aiSelected) return '<div class="notice"><b>Selected design:</b> AI variation. Your original reference photos will also be sent to the tailor.</div>';
+  if (hasInspiration(insp)) return '<div class="notice"><b>Selected design:</b> Original uploaded style.</div>';
+  return "";
 }
 
 // ---- Business: what the designer and tailors see ----
