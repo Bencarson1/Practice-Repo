@@ -163,10 +163,12 @@ const Cloud = (() => {
 
   async function startGuest() {
     const lists = await loadPublicLists().catch(() => ({ countries: [], specialities: [] }));
+    const homepage = await publicClient().from("homepage_settings").select("*").order("key").then(r => r.data || []).catch(() => []);
     const empty = {};
     ["suppliers", "fabrics", "customers", "measurement_profiles", "orders", "payments", "invoices", "deliveries", "fabric_order_lines",
      "tailors", "wedding_orders", "wedding_order_members", "ready_to_wear_items", "ready_to_wear_sales", "reviews", "price_list",
-     "order_messages", "order_chat_reads", "designers", "my_designers", "designer_portfolio_items", "designer_customer_notes"].forEach(t => { empty[t] = []; });
+     "order_messages", "order_chat_reads", "designers", "my_designers", "designer_portfolio_items", "designer_customer_notes", "homepage_settings"].forEach(t => { empty[t] = []; });
+    empty.homepage_settings = homepage;
     empty.countries = lists.countries;
     empty.specialities = lists.specialities;
     empty.currencies = lists.currencies;
@@ -183,7 +185,7 @@ const Cloud = (() => {
   const num = value => value == null || value === "" ? null : Number(value);
 
   const STYLE = "style-photos", FABRIC_PHOTOS = "fabric-photos", LOGOS = "seller-logos", CHAT = "chat-photos", DESIGNER_PHOTOS = "designer-photos",
-        SELLER_FILES = "seller-files";
+        SELLER_FILES = "seller-files", HOMEPAGE_IMAGES = "homepage-images";
   // The tailor columns everyone may read. The exact address, postcode and map
   // position are private: owners read their own through wearvia_my_designers().
   // (public_address is always empty now: the address is only shared with a
@@ -237,9 +239,9 @@ const Cloud = (() => {
     const tables = ["fabrics", "measurement_profiles", "orders", "fabric_recommendations", "payments",
       "invoices", "deliveries", "fabric_order_lines", "tailors", "wedding_orders", "wedding_order_members",
       "ready_to_wear_sales", "order_messages", "order_chat_reads", "countries", "specialities", "designer_customer_notes",
-      "currencies", "exchange_rates"];
+      "currencies", "exchange_rates", "homepage_settings"];
     const sortBy = { order_chat_reads: "last_read_at", countries: "sort_order", specialities: "sort_order", designer_customer_notes: "updated_at",
-      currencies: "sort_order", exchange_rates: "currency_code" };
+      currencies: "sort_order", exchange_rates: "currency_code", homepage_settings: "key" };
     const rows = {};
     const results = await Promise.all(tables.map(t => fetchAll(t, sortBy[t] || "created_at"))
       .concat([fetchAll("customers", "created_at", CUSTOMER_COLUMNS),
@@ -329,6 +331,7 @@ const Cloud = (() => {
       exchange_rates: (r.exchange_rates || []).map(x => ({ currency_code: x.currency_code, units_per_usd: num(x.units_per_usd), rate_date: x.rate_date, source: x.source || "" })),
       specialities: r.specialities.map(x => ({ id: x.id, name: x.name, sort_order: x.sort_order, active: x.active !== false })),
       customer_notes: r.designer_customer_notes.map(n => ({ designer_id: n.designer_id, customer_id: n.customer_id, notes: n.notes || "" })),
+      homepage: Object.fromEntries((r.homepage_settings || []).map(x => [x.key, x.value])),
 
       suppliers: r.suppliers.map(s => ({
         id: s.id, name: s.name || "Seller", location: s.location || "", city: s.city || "", phone: s.phone || "",
@@ -989,11 +992,11 @@ const Cloud = (() => {
 
   async function uploadPhoto(dataUrl, folder) {
     const bucket = folder === "style" ? STYLE : folder === "chat" ? CHAT : folder === "logo" ? LOGOS : folder === "designer" ? DESIGNER_PHOTOS
-      : folder === "seller-file" ? SELLER_FILES : FABRIC_PHOTOS;
+      : folder === "seller-file" ? SELLER_FILES : folder === "homepage" ? HOMEPAGE_IMAGES : FABRIC_PHOTOS;
     const path = `${state.me.user_id}/${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}.jpg`;
     const { error } = await state.client.storage.from(bucket).upload(path, dataUrlToBlob(dataUrl), { contentType: "image/jpeg", upsert: false });
     if (error) throw new Error(friendly(error));
-    if (bucket === LOGOS || bucket === DESIGNER_PHOTOS) return publicUrl(bucket, path);
+    if (bucket === LOGOS || bucket === DESIGNER_PHOTOS || bucket === HOMEPAGE_IMAGES) return publicUrl(bucket, path);
     const ref = `sb:${bucket}/${path}`;
     state.localPhotos.set(ref, dataUrl);
     return ref;
@@ -1244,6 +1247,14 @@ const Cloud = (() => {
     return data;
   }
 
+  async function saveHomepageSettings(values) {
+    if (!state.me || !state.me.is_admin) throw new Error("Only NebedaHub admins can change the homepage.");
+    const rows = Object.entries(values || {}).map(([key, value]) => ({ key, value: String(value == null ? "" : value), updated_at: new Date().toISOString() }));
+    const { error } = await state.client.from("homepage_settings").upsert(rows, { onConflict: "key" });
+    if (error) throw new Error(friendly(error));
+    await load();
+  }
+
   return {
     get live() { return state.live; },
     get me() { return state.me; },
@@ -1256,6 +1267,6 @@ const Cloud = (() => {
     uploadPhoto, removePhoto, photoUrl,
     loadTeamLogins, addTeamLogin, removeTeamLogin,
     registerDesigner, acceptTailorTerms, setDeliveryAddress, saveDesignerProfile, addPortfolioItem, removePortfolioItem, setDesignerStatus, reviewSeller, resubmitSeller, addSpeciality,
-    saveCustomerNotes, searchTailors, tailorPage, ensurePrices, loadPublicLists, convertPriceList
+    saveCustomerNotes, searchTailors, tailorPage, ensurePrices, loadPublicLists, convertPriceList, saveHomepageSettings
   };
 })();
