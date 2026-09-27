@@ -107,7 +107,7 @@ function adminSellersTable() {
 let sellerAppFilter = "pending";
 
 function renderSellerApplications() {
-  const groups = { pending: "Waiting", approved: "Approved", declined: "Changes asked", hidden: "Hidden" };
+  const groups = { pending: "Waiting", approved: "Approved", declined: "Changes asked", hidden: "Suspended" };
   const all = db.suppliers;
   const status = s => s.admin_status || "approved";
   const shown = all.filter(s => status(s) === sellerAppFilter)
@@ -129,9 +129,10 @@ function renderSellerApplications() {
         ${s.admin_note ? `<div class="small-text owed">Your note: ${escapeHtml(s.admin_note)}</div>` : ""}
       </div>
       <div class="nowrap job-buttons">
-        ${status(s) !== "approved" ? `<button class="small gold" onclick="setSellerStatus('${s.id}', 'approved')">✓ Approve</button>` : ""}
+        ${status(s) === "hidden" ? `<button class="small gold" onclick="setSellerStatus('${s.id}', 'approved')">Restore shop</button>`
+          : status(s) !== "approved" ? `<button class="small gold" onclick="setSellerStatus('${s.id}', 'approved')">✓ Approve</button>` : ""}
         ${status(s) === "pending" ? `<button class="small ghost" onclick="setSellerStatus('${s.id}', 'declined')">Ask for changes</button>` : ""}
-        ${status(s) !== "hidden" ? `<button class="small danger" onclick="setSellerStatus('${s.id}', 'hidden')">Hide</button>` : ""}
+        ${status(s) !== "hidden" ? `<button class="small danger" onclick="setSellerStatus('${s.id}', 'hidden')">Suspend shop</button>` : ""}
       </div>
     </div>`;
   }).join("");
@@ -151,7 +152,7 @@ function setSellerStatus(id, status) {
   }
   let note = "";
   if (status === "declined" || status === "hidden") {
-    note = prompt(status === "declined" ? `What should ${s.name} change? They'll see this note.` : `Why hide ${s.name}? They'll see this note.`, "");
+    note = prompt(status === "declined" ? `What should ${s.name} change? They'll see this note.` : `Why suspend ${s.name}? They'll see this note.`, "");
     if (note === null) return;
   }
   const done = () => { toast(`${s.name}: ${SELLER_STATUS_LABELS[status].toLowerCase()}.`); renderAll(); };
