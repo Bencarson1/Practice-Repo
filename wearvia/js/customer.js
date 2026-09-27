@@ -442,64 +442,108 @@ function setFabricPlan(plan) {
 
 // ---- Send to tailor (end of step 4) ----
 
+function draftPrimaryStyleRef(d) {
+  if (!d || !hasInspiration(d.inspiration)) return null;
+  return d.inspiration.aiSelected || (d.inspiration.photos && d.inspiration.photos[0]) || null;
+}
+
+function orderPrimaryStyleRef(order) {
+  if (!order || !hasInspiration(order.inspiration)) return null;
+  return (order.inspiration.photos && order.inspiration.photos[0]) || null;
+}
+
+function stylePreviewThumb(ref, alt, extraClass) {
+  return ref
+    ? `<button type="button" class="style-preview-thumb ${extraClass || ""}" onclick="openStylePreviewRef('${escapeHtml(ref)}','${escapeHtml(alt || "Style reference")}')" aria-label="View ${escapeHtml(alt || "style reference")} full screen"><img src="${photoUrl(ref)}" alt="${escapeHtml(alt || "Style reference")}"></button>`
+    : "";
+}
+
+function openStylePreviewRef(ref, title) {
+  if (!ref) return;
+  styleViewer = { photos: [ref], index: 0, title: title || "Style reference", returnFocus: document.activeElement };
+  document.addEventListener("keydown", styleViewerKeys);
+  drawStyleViewer();
+}
+
 function screenSend() {
   const d = draft();
   let fabric = findFabric(d.fabricId);
   if (fabric && !isBuyable(fabric)) {
     d.fabricId = null;
-    d.fabricPlan = "later";
+    d.fabricPlan = "recommend";
     fabric = null;
   }
   const seller = fabric ? findSupplier(fabric.supplier_id) : null;
   const profile = findProfile(d.profileId);
-  const photos = hasInspiration(d.inspiration) ? d.inspiration.photos.length : 0;
   const tailor = draftDesigner();
   const currency = designerCurrency(tailor);
   const unit = designerFabricUnit(tailor);
   const fc = fabric ? fabricCurrency(fabric) : currency;
   const perUnit = fabric ? pricePerUnit(fabric.price_per_yard, unit) : 0;
+  const styleRef = draftPrimaryStyleRef(d);
+  const styleLabel = d.inspiration && d.inspiration.aiSelected ? "Selected AI design" : styleRef ? "Uploaded style reference" : "Design preview";
+  const tailorName = draftHasTailor() ? draftDesigner().business_name : "Your tailor";
+  const fabricTitle = fabric
+    ? fabric.name
+    : d.fabricPlan === "own"
+      ? "I already have my fabric"
+      : d.fabricPlan === "recommend"
+        ? "Let my tailor recommend fabric"
+        : "Decide fabric with tailor";
+  const fabricText = fabric
+    ? `${fabricPriceText(fabric, unit)}${approxMoney(perUnit, fc)} · ${seller ? seller.name : ""}`
+    : d.fabricPlan === "own"
+      ? "You will provide your own fabric for this order."
+      : "Your tailor will recommend suitable fabrics from the NebedaHub marketplace after reviewing your design.";
+
   return `
     ${cTop("Send to Tailor", "fabric")}
-    <div class="content">
+    <div class="content send-review">
       ${flowBar("send")}
-      <div class="order-head">
-        <div class="thumb">${conceptSVG(d, d.variation)}</div>
-        <div>
-          <div class="name">${escapeHtml(d.outfit)}${draftHasTailor() ? ` by ${escapeHtml(draftDesigner().business_name)}` : ""}</div>
-          <div class="meta">${escapeHtml(colourName(d.colour))} · ${escapeHtml(d.embroidery)} embroidery · ${escapeHtml(d.sleeve)} sleeve · ${escapeHtml(d.neck)} neck</div>
+      <section class="send-summary-card">
+        <div class="send-style-row">
+          ${styleRef
+            ? stylePreviewThumb(styleRef, styleLabel, "send-style-image")
+            : `<div class="style-preview-thumb send-style-image fallback">${conceptSVG(d, d.variation)}</div>`}
+          <div class="send-style-copy">
+            <span class="eyebrow">${escapeHtml(styleLabel)}</span>
+            <div class="name big">${escapeHtml(d.outfit)}${draftHasTailor() ? ` by ${escapeHtml(tailorName)}` : ""}</div>
+            <div class="meta">${escapeHtml(colourName(d.colour))} · ${escapeHtml(d.embroidery)} embroidery · ${escapeHtml(d.sleeve)} sleeve · ${escapeHtml(d.neck)} neck</div>
+          </div>
         </div>
-      </div>
-      <div class="mrow"><span>Style photos</span><span>${photos ? `${photos} attached` : "None"}</span></div>
-      <div class="mrow"><span>Measurements</span><span>${profile ? `Saved (${escapeHtml(profile.label)})` : "Saved"}</span></div>
-      ${fabric ? `
-      <div class="pick-head">
-        <img src="${fabricCoverUrl(fabric)}" alt="">
-        <div><div class="name">${escapeHtml(fabric.name)}</div>
-          <div class="meta">${fabricPriceText(fabric, unit)}${approxMoney(perUnit, fc)} · ${escapeHtml(seller ? seller.name : "")}</div></div>
-        <button class="linkish" onclick="go('fabric')">Change</button>
-      </div>` : `
-      <div class="notice">
-        <b>Fabric: ${d.fabricPlan === "own" ? "Customer already has fabric" : d.fabricPlan === "recommend" ? "Tailor will recommend marketplace fabric" : "To be decided with tailor"}</b>
-        <div class="meta">You can start the order and chat now. A marketplace fabric can be added later before the tailor sends a fabric-inclusive quote.</div>
-        <button class="linkish" onclick="go('fabric')">Choose from marketplace instead</button>
-      </div>`}
-      <div class="send-next">
+        <div class="send-check-row"><span>Measurements</span><strong>✓ ${profile ? `Saved (${escapeHtml(profile.label)})` : "Saved"}</strong></div>
+      </section>
+
+      <section class="send-choice-card">
+        <div class="row-between">
+          <div><span class="eyebrow">Fabric preference</span><h3>${escapeHtml(fabricTitle)}</h3></div>
+          <button class="linkish" type="button" onclick="go('fabric')">Change</button>
+        </div>
+        ${fabric ? `
+          <div class="recommended-choice send-fabric-choice">
+            <img src="${fabricCoverUrl(fabric)}" alt="">
+            <div><b>${escapeHtml(fabric.name)}</b><div class="meta">${escapeHtml(fabricText)}</div></div>
+          </div>`
+          : `<p class="meta">${escapeHtml(fabricText)}</p>`}
+        ${!fabric && d.fabricPlan === "recommend" ? `<div class="status-pill waiting">Waiting for tailor recommendation</div>` : ""}
+      </section>
+
+      <section class="send-next compact">
         <b>What happens next</b>
         <ol>
-          <li>${draftHasTailor() ? escapeHtml(draftDesigner().business_name) : "Your tailor"} looks at your design, photos and measurements.</li>
-          <li>You chat here in the app about the fabric. If you have not chosen one yet, you can agree it with the tailor later.</li>
-          <li>Your tailor enters their own tailoring price and any embroidery, delivery or extra charges, then sends the full itemised quote through ${APP_NAME}.</li>
-          <li>The quote is recorded in the tailor\'s currency. If your local currency is different, ${APP_NAME} also shows an approximate converted amount for you.</li>
-          ${fabric && fc !== currency ? `<li>The seller prices this fabric in ${escapeHtml(currencyInfo(fc).name)}. ${draftHasTailor() ? escapeHtml(tailor.business_name) + "'s" : "Your tailor's"} quote converts it into ${escapeHtml(currencyInfo(currency).name)} at the day's exchange rate${fxRate(fc, currency) ? ` (today ${escapeHtml(rateText(fxRate(fc, currency), fc, currency))})` : ""}, and shows the rate used.</li>` : ""}
-          <li>Accept it and pay a ${Math.round(DEPOSIT_RATE * 100)}% deposit. The fabric is only bought then.</li>
+          <li>${escapeHtml(tailorName)} reviews your design and measurements.</li>
+          <li>${fabric ? "The tailor confirms how much fabric is needed." : d.fabricPlan === "own" ? "You and the tailor confirm your own fabric is suitable." : "The tailor recommends marketplace fabrics for you to choose from."}</li>
+          <li>Your tailor sends the final itemised quote.</li>
+          <li>You accept the quote before any marketplace fabric is bought.</li>
         </ol>
-      </div>
+      </section>
+
       ${approxNote(currency) || (fabric ? approxNote(fc) : "")}
-      <label class="field"><span>Anything to tell the tailor? <small>(optional)</small></span>
-        <textarea id="tailor-note" rows="3" maxlength="${CHAT_TEXT_MAX}" placeholder="e.g. It's for a wedding on 12 June. I'm 6ft 2 and like a loose fit."
+      <label class="field send-note"><span>Note to your tailor <small>(optional)</small></span>
+        <textarea id="tailor-note" rows="3" maxlength="${CHAT_TEXT_MAX}" placeholder="Wedding date, fit preference, special request…"
           oninput="draft().tailorNote=this.value;saveData()">${escapeHtml(d.tailorNote || "")}</textarea></label>
-      ${draftHasTailor() ? `<button id="send-request" class="cta" onclick="sendToTailor()">Send to Tailor</button>
-      <div class="meta centre">Nothing to pay now.</div>` : `<div class="notice">Choose the tailor who'll make it. Your design, photos, measurements and fabric are kept.</div>
+      ${draftHasTailor() ? `<button id="send-request" class="cta send-main-cta" onclick="sendToTailor()">Send Request to Tailor</button>
+      <div class="meta centre">No payment required yet.</div>` : `<div class="notice">Choose the tailor who'll make it. Your design, measurements and fabric preference are kept.</div>
       <button id="send-request" class="cta" onclick="startOrder()">Choose your tailor</button>`}
     </div>`;
 }
@@ -536,7 +580,7 @@ function sendToTailor() {
     variation: d.variation, profileId: d.profileId, fabric: fabric || null,
     fabricPlan: d.fabricPlan || (fabric ? "marketplace" : "recommend"),
     inspiration: hasInspiration(d.inspiration)
-      ? { photos: d.inspiration.photos.slice(), link: cleanStyleLink(d.inspiration.link) || "", note: d.inspiration.note || "" }
+      ? { photos: d.inspiration.photos.slice(), aiSelected: d.inspiration.aiSelected || null, link: cleanStyleLink(d.inspiration.link) || "", note: d.inspiration.note || "" }
       : null,
     note: (d.tailorNote || "").trim()
   });
@@ -943,7 +987,9 @@ function screenTracking(orderId) {
     <div class="content">
       ${flash()}
       <div class="order-head">
-        <div class="thumb">${conceptSVG({ outfit: order.outfit_type, colour: order.colour, embroidery: order.embroidery, sleeve: order.sleeve_style, neck: order.neck_style }, order.concept_variation)}</div>
+        ${orderPrimaryStyleRef(order)
+          ? stylePreviewThumb(orderPrimaryStyleRef(order), "Order style", "order-style-thumb")
+          : `<div class="thumb">${conceptSVG({ outfit: order.outfit_type, colour: order.colour, embroidery: order.embroidery, sleeve: order.sleeve_style, neck: order.neck_style }, order.concept_variation)}</div>`}
         <div>
           <div class="name">${escapeHtml(order.outfit_type)} by ${escapeHtml(designerName(order.designer_id))}</div>
           ${placed ? `
