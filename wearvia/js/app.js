@@ -186,7 +186,7 @@ function notACustomerScreen() {
     <div class="auth-brand">${APP_NAME}</div>
     <h2>This is ${kind === "admin" ? "an admin" : "a tailor"} account</h2>
     <p>${escapeHtml(Cloud.me.email)} is set up for ${APPS[kind].name}. You can open it, or use the same email to order outfits here too.</p>
-    <a class="cta" href="${escapeHtml(appUrl(kind, ""))}">Open ${APPS[kind].name}</a>
+    <a class="cta" href="${escapeHtml(appUrl(kind, kind === "business" ? "dashboard" : ""))}">${kind === "business" ? "Open Business Dashboard" : "Open " + APPS[kind].name}</a>
     <button class="btn-outline" id="make-customer" onclick="startOrderingToo()">Order outfits with this account too</button>
     <button class="linkish" onclick="Auth.signOut()">Sign out</button>
   </div>`;
