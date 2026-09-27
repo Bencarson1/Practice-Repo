@@ -1942,6 +1942,10 @@ tr.clickable:hover td {
 .market-hero-card b { font-size: 13px; }
 .market-hero-card span { color: #6b7280; font-size: 11px; }
 
+.market-mobile-links {
+  display: none;
+}
+
 .market-search-strip {
   display: flex;
   justify-content: center;
@@ -2312,5 +2316,26 @@ tr.clickable:hover td {
   }
   .market-hero-visual {
     display: none;
+  }
+  .market-mobile-links {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 14px;
+  }
+  .market-mobile-links button,
+  .market-mobile-links a {
+    width: 100%;
+    min-height: 42px;
+    border-radius: 7px;
+    border: 1px solid rgba(255,255,255,.4);
+    background: transparent;
+    color: #fff;
+    display: grid;
+    place-items: center;
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 700;
   }
 }
