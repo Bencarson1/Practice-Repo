@@ -208,7 +208,7 @@ function screenDesign() {
       <div class="selopt"><span class="fl">Embroidery</span><span class="optbtns">${opts("embroidery", EMBROIDERY.map(e => e.name))}</span></div>
       <div class="selopt"><span class="fl">Sleeve</span><span class="optbtns">${opts("sleeve", SLEEVES)}</span></div>
       <div class="selopt"><span class="fl">Neck</span><span class="optbtns">${opts("neck", NECKS)}</span></div>
-      <button class="cta" onclick="generateConcept()">Generate AI Concept →</button>
+      <button class="cta" onclick="generateConcept()">${hasInspiration(d.inspiration) ? "Use My Uploaded Style →" : "Preview My Design →"}</button>
     </div>`;
 }
 
@@ -219,37 +219,63 @@ function generateConcept() {
   go("concept");
 }
 
-// ---- Screen 4: AI design concept (step 2) ----
+// ---- Screen 4: style reference or design preview (step 2) ----
 
-let conceptGenerating = false; // true while "Generating…" shows after Regenerate
+let conceptGenerating = false;
 
 function screenConcept() {
   const d = draft();
+  const hasStyle = hasInspiration(d.inspiration);
   const busy = conceptGenerating;
+
+  if (hasStyle) {
+    return `
+      ${cTop("Your Style Reference", "design")}
+      <div class="content">
+        ${flowBar("concept")}
+        ${inspirationBlock("draft", d.inspiration)}
+        <div class="notice">
+          <b>Your uploaded photos are the design reference.</b>
+          <div class="meta">NebedaHub will send these original photos to your tailor. We will not replace them with a generic generated drawing.</div>
+        </div>
+        ${d.inspiration && d.inspiration.note ? `<div class="card"><b>Your requested changes</b><p>${escapeHtml(d.inspiration.note)}</p></div>` : ""}
+        <button class="cta" onclick="approveConcept()">Use This Style →</button>
+        <button class="btn-outline" onclick="go('inspiration')">Edit photos or instructions</button>
+        <button class="linkish" onclick="go('design')">Change design options</button>
+      </div>`;
+  }
+
   return `
-    ${cTop("AI Design Concept", "design")}
+    ${cTop("Design Preview", "design")}
     <div class="content">
       ${flowBar("concept")}
-      ${inspirationBlock("draft", d.inspiration)}
-      ${hasInspiration(d.inspiration) ? `<b class="insp-title">Our concept</b>` : ""}
+      <div class="notice">
+        <b>This is a simple preview, not an AI copy of a real garment.</b>
+        <div class="meta">It only reflects the outfit type, colour, neckline, sleeves and embroidery options you selected.</div>
+      </div>
       <div class="fab-card concept">
         <div class="concept-art ${busy ? "generating" : ""}" aria-busy="${busy}">
           ${conceptSVG(d, d.variation)}
-          ${busy ? `<div class="gen-overlay" role="status"><span class="gen-spin"></span>Generating…</div>` : ""}
+          ${busy ? `<div class="gen-overlay" role="status"><span class="gen-spin"></span>Updating…</div>` : ""}
         </div>
         <div class="name">${escapeHtml(d.outfit)} · ${escapeHtml(d.embroidery)} embroidery · ${escapeHtml(d.sleeve)} sleeve</div>
-        <div class="meta">${escapeHtml(colourName(d.colour))} · ${escapeHtml(d.neck)} neck · AI-generated concept based on your choices · Variation ${d.variation}</div>
+        <div class="meta">${escapeHtml(colourName(d.colour))} · ${escapeHtml(d.neck)} neck · visual preview based on your choices</div>
       </div>
       <div class="optbtns two">
-        <button class="optbtn" onclick="regenerateConcept()" ${busy ? "disabled" : ""}>↻ Regenerate</button>
-        <button class="optbtn sel" onclick="approveConcept()" ${busy ? "disabled" : ""}>✓ Approve Concept</button>
+        <button class="optbtn" onclick="regenerateConcept()" ${busy ? "disabled" : ""}>↻ Another Preview</button>
+        <button class="optbtn sel" onclick="approveConcept()" ${busy ? "disabled" : ""}>✓ Use This Design</button>
       </div>
+      <button class="style-cta" onclick="go('inspiration')">
+        <span class="style-cta-icon" aria-hidden="true">📷</span>
+        <span><b>Have a photo of the style?</b><small>Upload it and your tailor will receive the original reference</small></span>
+        <span aria-hidden="true">›</span>
+      </button>
       <button class="linkish" onclick="go('design')">Change my options</button>
     </div>`;
 }
 
 function regenerateConcept() {
-  if (conceptGenerating) return;
+  if (conceptGenerating || hasInspiration(draft().inspiration)) return;
   conceptGenerating = true;
   renderAll();
   setTimeout(() => {
@@ -259,7 +285,7 @@ function regenerateConcept() {
     conceptGenerating = false;
     saveData();
     renderAll();
-  }, 1000);
+  }, 500);
 }
 
 function approveConcept() {
