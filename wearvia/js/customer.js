@@ -426,7 +426,7 @@ function screenFabric() {
         </div>` : `
         <div class="pick-bar stack">
           <div class="notice"><b>No marketplace fabric yet?</b><div class="meta">You can still send your design and measurements to the tailor and start the chat. Fabric can be agreed later.</div></div>
-          <button class="cta" onclick="setFabricPlan('later')">Decide fabric with tailor later →</button>
+          <button class="cta" onclick="setFabricPlan('recommend')">Let my tailor recommend fabric →</button>
           <button class="btn-outline" onclick="setFabricPlan('own')">I already have my fabric</button>
         </div>`}
     </div>`;
@@ -479,7 +479,7 @@ function screenSend() {
         <button class="linkish" onclick="go('fabric')">Change</button>
       </div>` : `
       <div class="notice">
-        <b>Fabric: ${d.fabricPlan === "own" ? "Customer already has fabric" : "To be decided with tailor"}</b>
+        <b>Fabric: ${d.fabricPlan === "own" ? "Customer already has fabric" : d.fabricPlan === "recommend" ? "Tailor will recommend marketplace fabric" : "To be decided with tailor"}</b>
         <div class="meta">You can start the order and chat now. A marketplace fabric can be added later before the tailor sends a fabric-inclusive quote.</div>
         <button class="linkish" onclick="go('fabric')">Choose from marketplace instead</button>
       </div>`}
@@ -533,6 +533,7 @@ function sendToTailor() {
   const sent = requestQuote({
     customerId: owner.id, designerId: draftDesignerId(),
     outfit: d.outfit, colour: d.colour, embroidery: d.embroidery, sleeve: d.sleeve, neck: d.neck,
+    fabricPlan: d.fabricPlan || (fabric ? "marketplace" : "recommend"),
     variation: d.variation, profileId: d.profileId, fabric: fabric || null, fabricPlan: d.fabricPlan || (fabric ? "marketplace" : "later"),
     inspiration: hasInspiration(d.inspiration)
       ? { photos: d.inspiration.photos.slice(), link: cleanStyleLink(d.inspiration.link) || "", note: d.inspiration.note || "" }
@@ -745,7 +746,7 @@ function quoteBlock(order) {
     return `${recs}<div class="quote-card waiting">
       <b>${escapeHtml(QUOTE_STATUS_LABELS.requested)}</b>
       ${order.fabric_problem ? `<div class="notice warn">${escapeHtml(order.fabric_problem)}. ${escapeHtml(designerName(order.designer_id))} will suggest another fabric in the chat.</div>` : ""}
-      <div class="meta">${recs ? "Once you choose a recommended fabric, your tailor confirms the amount needed and sends the quote." : escapeHtml(designerName(order.designer_id)) + " will chat with you about the fabric, confirm how much is needed, then send your quote here."} Nothing is bought or charged until you accept the quote.</div>
+      <div class="meta">${recs ? "Once you choose a recommended fabric, your tailor confirms the amount needed and sends the quote." : order.fabric_plan === "recommend" ? escapeHtml(designerName(order.designer_id)) + " will recommend suitable marketplace fabrics here. You can choose one before the quote is sent." : escapeHtml(designerName(order.designer_id)) + " will chat with you about the fabric, confirm how much is needed, then send your quote here."} Nothing is bought or charged until you accept the quote.</div>
       ${chatButton(order, true)}
     </div>`;
   }
