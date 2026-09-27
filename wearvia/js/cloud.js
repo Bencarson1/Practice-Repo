@@ -1124,6 +1124,10 @@ const Cloud = (() => {
       const where = splitRef(ref);
       return where && where.bucket === VERIFICATION_FILES ? where.path : null;
     };
+    const profileImageUrl = details.profileImageData ? await uploadPhoto(details.profileImageData, "designer") : null;
+    const portfolioUrls = details.portfolioData && details.portfolioData.length
+      ? await Promise.all(details.portfolioData.map(url => uploadPhoto(url, "designer")))
+      : [];
     const profile = {
       owner_name: details.ownerName || "",
       address_line: details.address || null,
@@ -1133,7 +1137,7 @@ const Cloud = (() => {
       delivery_estimate: details.deliveryEstimate || "7–14 days",
       currency_code: details.currency || countryCurrency(details.country) || "GBP",
       delivery_available: !!details.deliveryAvailable,
-      profile_image_url: details.profileImageUrl || null,
+      profile_image_url: profileImageUrl,
       verification_id_path: verificationPath(details.verificationId),
       verification_address_path: verificationPath(details.verificationAddress),
       business_registration_path: verificationPath(details.businessRegistration),
@@ -1141,8 +1145,8 @@ const Cloud = (() => {
     };
     const update = await state.client.from("designers").update(profile).eq("id", data).select("id");
     if (update.error) throw new Error(friendly(update.error));
-    if (details.portfolioUrls && details.portfolioUrls.length) {
-      const rows = details.portfolioUrls.map((url, i) => ({ designer_id: data, image_url: url, title: "Work sample " + (i + 1), sort_order: i + 1 }));
+    if (portfolioUrls.length) {
+      const rows = portfolioUrls.map((url, i) => ({ designer_id: data, image_url: url, title: "Work sample " + (i + 1), sort_order: i + 1 }));
       const inserted = await state.client.from("designer_portfolio_items").insert(rows);
       if (inserted.error) throw new Error(friendly(inserted.error));
     }
