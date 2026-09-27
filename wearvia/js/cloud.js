@@ -1133,6 +1133,7 @@ const Cloud = (() => {
       delivery_estimate: details.deliveryEstimate || "7–14 days",
       currency_code: details.currency || countryCurrency(details.country) || "GBP",
       delivery_available: !!details.deliveryAvailable,
+      profile_image_url: details.profileImageUrl || null,
       verification_id_path: verificationPath(details.verificationId),
       verification_address_path: verificationPath(details.verificationAddress),
       business_registration_path: verificationPath(details.businessRegistration),
