@@ -117,7 +117,7 @@ function fabricRecommendationCard(order) {
       <h2>Recommend marketplace fabric</h2>
       <span class="meta">Choose up to 3</span>
     </div>
-    <p class="hint">Send suitable NebedaHub marketplace fabrics to the customer. They choose one before you prepare the fabric-inclusive quote.</p>
+    <p class="hint">${order.fabric_plan === "recommend" ? "<b>The customer asked you to help choose fabric.</b> " : ""}Send suitable NebedaHub marketplace fabrics to the customer. They choose one before you prepare the fabric-inclusive quote.</p>
     ${selectedFabric ? `<div class="notice"><b>Customer selected:</b> ${escapeHtml(selectedFabric.name)}. You can use it in the quote below.</div>` : ""}
     ${current.length ? `<div class="notice soft"><b>Waiting for customer:</b> ${current.length} recommendation${current.length === 1 ? "" : "s"} sent.</div>` : ""}
     <form id="fabric-rec-form-${order.id}" class="stack" onsubmit="return sendFabricRecommendations(event, '${order.id}')">
