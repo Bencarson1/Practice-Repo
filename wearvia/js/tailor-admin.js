@@ -334,7 +334,7 @@ function acceptTermsFromProfile(event, designerId) {
 let tailorAdminFilter = "pending";
 
 function renderTailorAdmin() {
-  const groups = { pending: "Waiting", approved: "Approved", hidden: "Hidden" };
+  const groups = { pending: "Waiting", approved: "Approved", hidden: "Suspended" };
   const all = db.designers.filter(d => !d.from_search || d.is_mine);
   const shown = all.filter(d => d.admin_status === tailorAdminFilter)
     .sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")));
@@ -353,13 +353,14 @@ function renderTailorAdmin() {
       </div>
       <div class="nowrap job-buttons">
         <a class="button small ghost" href="${escapeHtml(appUrl("customer", "tailor/" + d.slug))}" target="_blank" rel="noopener">View page</a>
-        ${d.admin_status !== "approved" ? `<button class="small gold" onclick="setTailorStatus('${d.id}', 'approved')">✓ Approve</button>` : ""}
-        ${d.admin_status !== "hidden" && d.id !== (mainDesigner() || {}).id ? `<button class="small danger" onclick="setTailorStatus('${d.id}', 'hidden')">Hide</button>` : ""}
+        ${d.admin_status === "hidden" ? `<button class="small gold" onclick="setTailorStatus('${d.id}', 'approved')">Restore</button>`
+          : d.admin_status !== "approved" ? `<button class="small gold" onclick="setTailorStatus('${d.id}', 'approved')">✓ Approve</button>` : ""}
+        ${d.admin_status !== "hidden" && d.id !== (mainDesigner() || {}).id ? `<button class="small danger" onclick="setTailorStatus('${d.id}', 'hidden')">Suspend</button>` : ""}
       </div>
     </div>`;
   }).join("");
   return `
-    ${bizHeader("Tailors", `Approve new tailors before customers can find them, or hide one. Approved tailors appear in “Find tailors near me” and on the public tailor pages.`)}
+    ${bizHeader("Tailors", `Approve new tailors before customers can find them. Suspend a profile to remove it from customer search and public pages, then restore it later if needed.`)}
     <div class="card">
       <div class="chips">${Object.keys(groups).map(k => `<button class="chip ${k === tailorAdminFilter ? "active" : ""}" onclick="tailorAdminFilter='${k}';renderAll()">${groups[k]} (${all.filter(d => d.admin_status === k).length})</button>`).join("")}</div>
       ${rows || `<p class="empty">No ${groups[tailorAdminFilter].toLowerCase()} tailors.</p>`}
@@ -388,7 +389,7 @@ function setTailorStatus(id, status) {
   }
   let note = "";
   if (status === "hidden") {
-    note = prompt(`Why hide ${d.business_name}? They'll see this note.`, "");
+    note = prompt(`Why suspend ${d.business_name}? They'll see this note.`, "");
     if (note === null) return;
   }
   if (Cloud.live) {

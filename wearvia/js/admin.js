@@ -48,6 +48,16 @@ function renderAdminOverview() {
     </div>
 
     <div class="card">
+      <div class="row-between wrap"><div><h2>Moderation</h2><p class="hint">Temporarily suspend accounts or hide listings. Archive fabrics you no longer want in the marketplace and restore them later if needed.</p></div>
+      <div class="job-buttons"><a class="button small" href="#/tailors">Manage tailors</a><a class="button small" href="#/applications">Manage sellers</a><a class="button small" href="#/sellers">Manage fabrics</a></div></div>
+      <div class="alerts">
+        <span class="alert soft">${tailors.filter(d => d.admin_status === "hidden").length} suspended tailor${tailors.filter(d => d.admin_status === "hidden").length === 1 ? "" : "s"}</span>
+        <span class="alert soft">${db.suppliers.filter(s => s.admin_status === "hidden").length} suspended seller${db.suppliers.filter(s => s.admin_status === "hidden").length === 1 ? "" : "s"}</span>
+        <span class="alert soft">${db.fabrics.filter(f => f.deleted_at).length} archived fabric${db.fabrics.filter(f => f.deleted_at).length === 1 ? "" : "s"}</span>
+      </div>
+    </div>
+
+    <div class="card">
       <h2>Waiting for approval</h2>
       ${waitingTailors.length || waitingFabrics.length || waitingSellers.length ? `<div class="alerts">
         ${waitingSellers.length ? `<a class="alert" href="#/applications">🏪 ${waitingSellers.length} new fabric seller${waitingSellers.length > 1 ? "s" : ""}: ${waitingSellers.slice(0, 4).map(s => escapeHtml(s.name)).join(", ")}</a>` : ""}
@@ -107,7 +117,7 @@ function adminSellersTable() {
 let sellerAppFilter = "pending";
 
 function renderSellerApplications() {
-  const groups = { pending: "Waiting", approved: "Approved", declined: "Changes asked", hidden: "Hidden" };
+  const groups = { pending: "Waiting", approved: "Approved", declined: "Changes asked", hidden: "Suspended" };
   const all = db.suppliers;
   const status = s => s.admin_status || "approved";
   const shown = all.filter(s => status(s) === sellerAppFilter)
@@ -129,9 +139,10 @@ function renderSellerApplications() {
         ${s.admin_note ? `<div class="small-text owed">Your note: ${escapeHtml(s.admin_note)}</div>` : ""}
       </div>
       <div class="nowrap job-buttons">
-        ${status(s) !== "approved" ? `<button class="small gold" onclick="setSellerStatus('${s.id}', 'approved')">✓ Approve</button>` : ""}
+        ${status(s) === "hidden" ? `<button class="small gold" onclick="setSellerStatus('${s.id}', 'approved')">Restore shop</button>`
+          : status(s) !== "approved" ? `<button class="small gold" onclick="setSellerStatus('${s.id}', 'approved')">✓ Approve</button>` : ""}
         ${status(s) === "pending" ? `<button class="small ghost" onclick="setSellerStatus('${s.id}', 'declined')">Ask for changes</button>` : ""}
-        ${status(s) !== "hidden" ? `<button class="small danger" onclick="setSellerStatus('${s.id}', 'hidden')">Hide</button>` : ""}
+        ${status(s) !== "hidden" ? `<button class="small danger" onclick="setSellerStatus('${s.id}', 'hidden')">Suspend shop</button>` : ""}
       </div>
     </div>`;
   }).join("");
@@ -151,7 +162,7 @@ function setSellerStatus(id, status) {
   }
   let note = "";
   if (status === "declined" || status === "hidden") {
-    note = prompt(status === "declined" ? `What should ${s.name} change? They'll see this note.` : `Why hide ${s.name}? They'll see this note.`, "");
+    note = prompt(status === "declined" ? `What should ${s.name} change? They'll see this note.` : `Why suspend ${s.name}? They'll see this note.`, "");
     if (note === null) return;
   }
   const done = () => { toast(`${s.name}: ${SELLER_STATUS_LABELS[status].toLowerCase()}.`); renderAll(); };
