@@ -533,8 +533,8 @@ function sendToTailor() {
   const sent = requestQuote({
     customerId: owner.id, designerId: draftDesignerId(),
     outfit: d.outfit, colour: d.colour, embroidery: d.embroidery, sleeve: d.sleeve, neck: d.neck,
+    variation: d.variation, profileId: d.profileId, fabric: fabric || null,
     fabricPlan: d.fabricPlan || (fabric ? "marketplace" : "recommend"),
-    variation: d.variation, profileId: d.profileId, fabric: fabric || null, fabricPlan: d.fabricPlan || (fabric ? "marketplace" : "later"),
     inspiration: hasInspiration(d.inspiration)
       ? { photos: d.inspiration.photos.slice(), link: cleanStyleLink(d.inspiration.link) || "", note: d.inspiration.note || "" }
       : null,
