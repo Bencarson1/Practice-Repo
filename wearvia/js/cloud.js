@@ -588,6 +588,34 @@ const Cloud = (() => {
     });
   }
 
+  // ---- AI style variations ----
+  async function generateStyleVariations(details) {
+    if (!state.live || !state.client) throw new Error("AI style variations are only available when you are signed in.");
+    const { data, error } = await state.client.functions.invoke("generate-style-variations", {
+      body: {
+        source_ref: details.sourceRef,
+        note: details.note || "",
+        outfit: details.outfit || "",
+        colour: details.colour || "",
+        embroidery: details.embroidery || "",
+        sleeve: details.sleeve || "",
+        neck: details.neck || ""
+      }
+    });
+    if (error) {
+      let message = error.message || "Could not generate style variations.";
+      try {
+        const body = await error.context.json();
+        if (body && body.error) message = body.error;
+      } catch (e) { /* use the normal message */ }
+      throw new Error(message);
+    }
+    if (!data || !Array.isArray(data.variations) || !data.variations.length) {
+      throw new Error("The AI service did not return any style variations.");
+    }
+    return data.variations;
+  }
+
   // ---- Quotes: the customer sends their order, the team quotes, the customer accepts ----
 
   function requestQuote(details) {
@@ -601,8 +629,10 @@ const Cloud = (() => {
         outfit_type: details.outfit, colour: details.colour, embroidery: details.embroidery,
         sleeve_style: details.sleeve, neck_style: details.neck, concept_variation: details.variation || 1,
         measurement_profile_id: details.profileId || null, fabric_id: details.fabric.id,
-        inspiration_photos: insp ? insp.photos.map(ref => photoPath(ref, STYLE)).filter(Boolean) : [],
-        inspiration_link: insp ? insp.link || null : null, inspiration_note: insp ? insp.note || null : null
+        inspiration_photos: insp ? (insp.aiSelected ? [insp.aiSelected].concat(insp.photos || []) : (insp.photos || []))
+          .map(ref => photoPath(ref, STYLE)).filter(Boolean) : [],
+        inspiration_link: insp ? insp.link || null : null,
+        inspiration_note: insp ? ((insp.aiSelected ? "[Selected AI variation included first] " : "") + (insp.note || "")) || null : null
       };
       const created = await state.client.from("orders").insert(row).select("id, order_number").single();
       if (created.error) {
@@ -1207,7 +1237,7 @@ const Cloud = (() => {
     start, afterSignIn, signIn, signUp, signOut, sendPasswordReset, setNewPassword,
     enterDemo, leaveDemo, newId, isTeam, isOwner, homeRoute, becomeCustomer,
     save, flush, refresh, refreshIfStale, placeOrder, deleteOrder,
-    requestQuote, sendQuote, acceptQuote, sendMessage, markChatRead, refreshChat,
+    requestQuote, sendQuote, acceptQuote, generateStyleVariations, sendMessage, markChatRead, refreshChat,
     uploadPhoto, removePhoto, photoUrl,
     loadTeamLogins, addTeamLogin, removeTeamLogin,
     registerDesigner, acceptTailorTerms, setDeliveryAddress, saveDesignerProfile, addPortfolioItem, removePortfolioItem, setDesignerStatus, reviewSeller, resubmitSeller, addSpeciality,
