@@ -19,7 +19,6 @@ const BIZ_TABS = [
   { key: "customers", label: "Customers", render: renderCustomers },
   { key: "measurements", label: "Measurements", render: renderMeasurements },
   { key: "payments", label: "Payments", render: renderPayments },
-  { key: "prices", label: "Prices", render: renderPrices, show: () => canManageBusinessSettings() },
   { key: "weddings", label: "Wedding Orders", render: renderWeddings },
   { key: "shop", label: "Ready to Wear", render: renderShop },
   { key: "deliveries", label: "Deliveries", render: renderDeliveries },
@@ -97,7 +96,7 @@ function renderAll() {
     if (el) el.hidden = id !== view;
   });
   document.body.classList.toggle("in-business", business);
-  // Quotes and prices on screen use the right tailor's price list
+  // Quotes use the currently selected tailor context.
   usePricesOf(contextDesignerId());
   const shop = business ? bizDesigner() : null;
   document.getElementById("shop-pill").innerHTML = shop ? `Business: <b>${escapeHtml(shop.business_name)}</b>` : escapeHtml(APP_PILLS[APP_KIND]);
@@ -112,6 +111,10 @@ function renderAll() {
     renderTailorJoin(route.screen);
   } else if (business) {
     const tabs = BIZ_TABS.filter(t => !t.show || t.show());
+    if (route.screen === "prices") {
+      go("quotes", true);
+      return;
+    }
     const tab = tabs.find(t => t.key === route.screen) || tabs[0];
     // The page first: opening a chat marks it read, so the badges are drawn after
     document.getElementById("biz-content").innerHTML = bizSwitcher() + (tab.key === "profile" ? "" : tailorStatusBanner(bizDesigner())) + tab.render(route.id);
