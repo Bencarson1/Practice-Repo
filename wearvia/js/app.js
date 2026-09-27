@@ -182,13 +182,67 @@ function needsCustomerRecord() {
 
 function notACustomerScreen() {
   const kind = Cloud.me.is_admin && !(Cloud.me.designers || []).length ? "admin" : "business";
-  return `<div class="content not-customer">
-    <div class="auth-brand">${APP_NAME}</div>
-    <h2>This is ${kind === "admin" ? "an admin" : "a tailor"} account</h2>
-    <p>${escapeHtml(Cloud.me.email)} is set up for ${APPS[kind].name}. You can open it, or use the same email to order outfits here too.</p>
-    <a class="cta" href="${escapeHtml(appUrl(kind, ""))}">Open ${APPS[kind].name}</a>
-    <button class="btn-outline" id="make-customer" onclick="startOrderingToo()">Order outfits with this account too</button>
-    <button class="linkish" onclick="Auth.signOut()">Sign out</button>
+  const workspaceName = APPS[kind].name;
+  const accountLabel = kind === "admin" ? "NebedaHub Admin account" : "NebedaHub Business account";
+
+  return `<div class="content account-hub">
+    <section class="account-hub-hero">
+      <div class="account-hub-copy">
+        <div class="account-hub-eyebrow">${APP_NAME}</div>
+        <h1>Welcome back</h1>
+        <p class="account-hub-lead">Your email is connected to a <strong>${escapeHtml(accountLabel)}</strong>. Choose how you want to continue.</p>
+        <div class="account-hub-email">${escapeHtml(Cloud.me.email)}</div>
+      </div>
+      <div class="account-hub-badge">
+        <span class="account-hub-badge-icon">N</span>
+        <span><b>One account</b><small>Business and shopping</small></span>
+      </div>
+    </section>
+
+    <section class="account-hub-choices" aria-label="Choose how to continue">
+      <article class="account-hub-card account-hub-card-primary">
+        <div class="account-hub-card-top">
+          <span class="account-hub-icon">B</span>
+          <span class="account-hub-kicker">Your workspace</span>
+        </div>
+        <h2>${escapeHtml(workspaceName)}</h2>
+        <p>Manage your fashion business, orders, customers, products, ready to wear, fabrics and shop settings.</p>
+        <div class="account-hub-tags">
+          <span>Orders</span><span>Products</span><span>Customers</span><span>Shop</span>
+        </div>
+        <a class="account-hub-action account-hub-action-solid" href="${escapeHtml(appUrl(kind, ""))}">Open ${escapeHtml(workspaceName)}</a>
+      </article>
+
+      <article class="account-hub-card">
+        <div class="account-hub-card-top">
+          <span class="account-hub-icon account-hub-icon-light">S</span>
+          <span class="account-hub-kicker">Personal shopping</span>
+        </div>
+        <h2>Shop on NebedaHub</h2>
+        <p>Use this same email to browse designers, ready to wear, fabrics and place personal fashion orders.</p>
+        <div class="account-hub-tags">
+          <span>Ready to Wear</span><span>Designers</span><span>Fabrics</span><span>Custom Made</span>
+        </div>
+        <button class="account-hub-action account-hub-action-outline" id="make-customer" onclick="startOrderingToo()">Continue shopping</button>
+      </article>
+    </section>
+
+    <section class="account-hub-bottom">
+      <div>
+        <h3>Everything fashion, one account</h3>
+        <p>Your business access stays separate from your personal shopping activity, while you keep one secure sign in.</p>
+      </div>
+      <div class="account-hub-feature-grid">
+        <div><b>Business</b><span>Run your shop and fulfil orders</span></div>
+        <div><b>Marketplace</b><span>Discover fashion businesses</span></div>
+        <div><b>Ready to Wear</b><span>Browse items available to buy</span></div>
+        <div><b>Custom Made</b><span>Order outfits made for you</span></div>
+      </div>
+    </section>
+
+    <div class="account-hub-footer">
+      <button class="linkish" onclick="Auth.signOut()">Sign out</button>
+    </div>
   </div>`;
 }
 
