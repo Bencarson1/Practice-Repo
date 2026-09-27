@@ -1,6 +1,22 @@
 -- NebedaHub: tailor marketplace fabric recommendations.
 -- Tailor recommends 1-3 approved fabrics before quoting; customer chooses one.
 
+alter table public.orders
+  add column if not exists fabric_plan text not null default 'marketplace';
+
+do $
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'orders_fabric_plan_check'
+      and conrelid = 'public.orders'::regclass
+  ) then
+    alter table public.orders
+      add constraint orders_fabric_plan_check
+      check (fabric_plan in ('marketplace','recommend','own','later'));
+  end if;
+end $;
+
 create table if not exists public.fabric_recommendations (
   id uuid primary key default gen_random_uuid(),
   batch_id uuid not null default gen_random_uuid(),
