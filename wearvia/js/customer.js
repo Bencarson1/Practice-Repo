@@ -411,6 +411,7 @@ function screenFabric() {
       ${gone}
       ${marketFilterBar()}
       <div id="market-results" class="stack">${marketResults()}</div>
+      ${marketplaceSellerDirectory()}
       ${selected ? `
         <div class="pick-bar">
           <div class="pick-head">
