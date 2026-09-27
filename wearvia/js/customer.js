@@ -136,18 +136,24 @@ function screenHome() {
   const fabrics = (db.fabrics || [])
     .filter(f => f.status === "approved" && !f.deleted_at && !f.sold_out && Number(f.yards_available || 0) > 0)
     .slice(0, 6);
+  const home = db.homepage || {};
   const categoryPhotos = {
-    Agbada: "https://images.unsplash.com/photo-1782566208081-6b5135fddf23?auto=format&fit=crop&w=700&q=82",
-    Kaftan: "https://images.unsplash.com/photo-1776880470534-2e19345ab02b?auto=format&fit=crop&w=700&q=82",
-    Senator: "https://images.unsplash.com/photo-1775754787083-238dd19e1545?auto=format&fit=crop&w=700&q=82",
-    Bubu: "https://images.unsplash.com/photo-1663044022557-7d5d4c1d5318?auto=format&fit=crop&w=700&q=82",
-    "Two Piece": "https://images.unsplash.com/photo-1663043994777-7ed4b4e6cba3?auto=format&fit=crop&w=700&q=82",
-    Dress: "https://images.unsplash.com/photo-1648328414427-fc902f51808c?auto=format&fit=crop&w=700&q=82",
-    Wedding: "https://images.unsplash.com/photo-1648328414427-fc902f51808c?auto=format&fit=crop&w=700&q=82",
-    Suit: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=700&q=82"
+    Agbada: home.category_agbada || "https://images.unsplash.com/photo-1782566208081-6b5135fddf23?auto=format&fit=crop&w=700&q=82",
+    Kaftan: home.category_kaftan || "https://images.unsplash.com/photo-1776880470534-2e19345ab02b?auto=format&fit=crop&w=700&q=82",
+    Senator: home.category_senator || "https://images.unsplash.com/photo-1775754787083-238dd19e1545?auto=format&fit=crop&w=700&q=82",
+    Bubu: home.category_bubu || "https://images.unsplash.com/photo-1663044022557-7d5d4c1d5318?auto=format&fit=crop&w=700&q=82",
+    "Two Piece": home.category_two_piece || "https://images.unsplash.com/photo-1663043994777-7ed4b4e6cba3?auto=format&fit=crop&w=700&q=82",
+    Dress: home.category_dress || "https://images.unsplash.com/photo-1648328414427-fc902f51808c?auto=format&fit=crop&w=700&q=82",
+    Wedding: home.category_wedding || "https://images.unsplash.com/photo-1648328414427-fc902f51808c?auto=format&fit=crop&w=700&q=82",
+    Suit: home.category_suit || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=700&q=82"
   };
-  const categories = OUTFITS.slice(0, 8);
-  const heroImage = "https://images.unsplash.com/photo-1648328414427-fc902f51808c?auto=format&fit=crop&w=1600&q=88";
+  const hiddenCategories = new Set(String(home.hidden_categories || "").split(",").map(x => x.trim()).filter(Boolean));
+  const orderNames = String(home.category_order || "Agbada,Kaftan,Senator,Bubu,Two Piece,Dress,Wedding,Suit").split(",").map(x => x.trim()).filter(Boolean);
+  const outfitByName = new Map(OUTFITS.map(o => [o.name, o]));
+  const categories = orderNames.map(name => outfitByName.get(name)).filter(Boolean).filter(o => !hiddenCategories.has(o.name)).slice(0, 8);
+  const heroImage = home.hero_image || "https://images.unsplash.com/photo-1648328414427-fc902f51808c?auto=format&fit=crop&w=1600&q=88";
+  const heroTitle = home.hero_title || "Design it. Find the fabric. Choose the tailor.";
+  const heroText = home.hero_text || `${APP_NAME} brings custom fashion, trusted tailors and marketplace fabrics into one connected order.`;
 
   return `
     <div class="market-home">
@@ -164,8 +170,8 @@ function screenHome() {
       <section class="market-hero">
         <div class="market-hero-copy">
           <span class="market-kicker">Fashion marketplace</span>
-          <h1>Design it. Find the fabric. Choose the tailor.</h1>
-          <p>${APP_NAME} brings custom fashion, trusted tailors and marketplace fabrics into one connected order.</p>
+          <h1>${escapeHtml(heroTitle)}</h1>
+          <p>${escapeHtml(heroText)}</p>
           <div class="market-hero-actions">
             <button class="market-primary" onclick="startOrder()">Start an order</button>
             <button class="market-secondary" onclick="go('tailors')">Find tailors near me</button>
