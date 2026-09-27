@@ -412,7 +412,7 @@ function buildSampleData() {
       concept_variation: 1, concept_image_url: "",
       measurement_profile_id: measurementProfile.id,
       fabric_id: fabric ? fabric.id : null, fabric_supplier_id: fabric ? fabric.supplier_id : null,
-    fabric_plan: details.fabricPlan || (fabric ? "marketplace" : "recommend"), fabric_yards: s.yards, fabric_cost: quote.fabricCost,
+      fabric_plan: fabric ? "marketplace" : "later", fabric_yards: s.yards, fabric_cost: quote.fabricCost,
       line_items: quote.lines, quote_total: quote.total,
       currency_code: "GBP", fabric_currency_code: "GBP", fabric_price_per_yard: fabric.price_per_yard, fabric_cost_in_fabric_currency: quote.fabricCost,
       exchange_rate: null, exchange_rate_date: null, fabric_unit: "yd",
@@ -772,6 +772,7 @@ function requestQuote(details) {
     inspiration: details.inspiration || null,
     measurement_profile_id: details.profileId || null,
     fabric_id: fabric ? fabric.id : null, fabric_supplier_id: fabric ? fabric.supplier_id : null,
+    fabric_plan: details.fabricPlan || (fabric ? "marketplace" : "recommend"),
     fabric_yards: 0, fabric_cost: 0, line_items: [], quote_total: 0,
     // In the tailor's currency; the seller's fabric is converted when the quote is sent
     currency_code: designerCurrency(tailor), fabric_currency_code: fabric ? fabricCurrency(fabric) : null, fabric_unit: designerFabricUnit(tailor),
