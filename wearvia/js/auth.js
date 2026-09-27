@@ -261,11 +261,21 @@ const Auth = (() => {
       });
     }
     work.catch(problem => {
+      // Keep the current form on screen when a request fails. In particular,
+      // don't redraw the sign-up form and make the password field appear to
+      // "go back" or disappear after Supabase rejects an email request.
       busy = false;
       error = problem.message || String(problem);
-      draw();
-      const again = document.querySelector("#auth-view form");
-      if (again) Object.keys(values).forEach(k => { if (again[k] && k !== "password") again[k].value = values[k]; });
+      setError(error);
+      if (button) {
+        button.disabled = false;
+        button.textContent = screen === "signIn" ? "Sign in"
+          : screen === "signUp" ? "Create account"
+          : screen === "forgot" ? "Send the link"
+          : "Save password";
+      }
+      // The values stay in the existing form. Nothing is re-submitted
+      // automatically, and the busy guard above still blocks double submits.
     });
     return false;
   }
