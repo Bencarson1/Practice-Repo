@@ -2,7 +2,7 @@
 // customer.js — the customer app: design, send to the tailor, chat,
 // accept the quote, pay, track, review
 // Follows the order lifecycle in WEARVIA-SPEC.md exactly:
-//   1 outfit & design → 2 AI concept → 3 measurements → 4 fabric → send to tailor →
+//   1 outfit & design → 2 style reference / AI variation → 3 measurements → 4 fabric → send to tailor →
 //   5 tailor's quote (the tailor decides the yards in the chat) → 6 accept (fabric bought) →
 //   7 deposit → (8–15 production) → 16 review
 // ============================================================
@@ -236,10 +236,12 @@ function screenConcept() {
         ${inspirationBlock("draft", d.inspiration)}
         <div class="notice">
           <b>Your uploaded photos are the design reference.</b>
-          <div class="meta">NebedaHub will send these original photos to your tailor. We will not replace them with a generic generated drawing.</div>
+          <div class="meta">You can use the original style exactly, or ask AI for three faithful variations. The original photos always stay attached for your tailor.</div>
         </div>
         ${d.inspiration && d.inspiration.note ? `<div class="card"><b>Your requested changes</b><p>${escapeHtml(d.inspiration.note)}</p></div>` : ""}
-        <button class="cta" onclick="approveConcept()">Use This Style →</button>
+        ${aiVariationPanel(d.inspiration)}
+        ${selectedStyleSummary(d.inspiration)}
+        <button class="cta" onclick="approveConcept()">${d.inspiration && d.inspiration.aiSelected ? "Use Selected AI Variation →" : "Use Original Style →"}</button>
         <button class="btn-outline" onclick="go('inspiration')">Edit photos or instructions</button>
         <button class="linkish" onclick="go('design')">Change design options</button>
       </div>`;
