@@ -346,7 +346,13 @@ function renderTailorAdmin() {
         <b>${escapeHtml(d.business_name)}</b>
         <div class="muted small-text">${country ? country.flag + " " + escapeHtml(country.name) : "No country yet"}${d.city ? " · " + escapeHtml(d.city) : ""}${d.postcode ? " · " + escapeHtml(d.postcode) : ""}
           ${d.public_latitude == null ? ` · <span class="owed">no map position</span>` : ""}${d.phone ? ` · 📞 ${escapeHtml(d.phone)}` : ""}</div>
+        <div class="small-text">${escapeHtml(d.owner_name || "Owner name missing")}${d.address_line ? " · " + escapeHtml(d.address_line) : " · address missing"}</div>
         <div class="small-text">${escapeHtml((d.speciality_tags || []).join(", ") || "No specialities yet")} · ${(d.portfolio || []).length} portfolio photo${(d.portfolio || []).length === 1 ? "" : "s"}${d.description ? "" : " · no description"}</div>
+        <div class="small-text verification-links">
+          ${typeof adminVerificationLink === "function" ? adminVerificationLink(d.verification_id, "Government ID") : ""}
+          · ${typeof adminVerificationLink === "function" ? adminVerificationLink(d.verification_address, "Proof of address") : ""}
+          ${d.business_registration && typeof adminVerificationLink === "function" ? " · " + adminVerificationLink(d.business_registration, "Business registration") : " · business registration not supplied"}
+        </div>
         ${d.admin_note ? `<div class="small-text owed">Hidden because: ${escapeHtml(d.admin_note)}</div>` : ""}
         ${d.tailor_terms_accepted_at ? `<div class="small-text paid">✓ Accepted the tailor terms ${formatDate(String(d.tailor_terms_accepted_at).slice(0, 10))}</div>`
           : d.is_mine === false ? "" : `<div class="small-text owed">Hasn't accepted the tailor terms yet</div>`}
