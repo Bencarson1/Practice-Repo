@@ -411,7 +411,7 @@ function addSpecialityFromForm(event) {
     Cloud.addSpeciality(name).then(() => { toast(`${name} added.`); renderAll(); }, error => alert(error.message));
     return false;
   }
-  if (!db.specialities) db.specialities = SPECIALITIES.map(sp => Object.assign({}, sp));
+  if (!db.specialities) db.specialities = DEMO_SPECIALITIES.map(sp => Object.assign({}, sp));
   db.specialities.push({ id: "SP" + (db.specialities.length + 1), name, sort_order: 100, active: true });
   saveData();
   toast(`${name} added.`);
