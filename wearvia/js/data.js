@@ -411,7 +411,7 @@ function buildSampleData() {
       outfit_type: s.outfit, colour: s.colour, embroidery: s.embroidery, sleeve_style: s.sleeve, neck_style: s.neck,
       concept_variation: 1, concept_image_url: "",
       measurement_profile_id: measurementProfile.id,
-      fabric_id: fabric.id, fabric_supplier_id: fabric.supplier_id, fabric_yards: s.yards, fabric_cost: quote.fabricCost,
+      fabric_id: fabric ? fabric.id : null, fabric_supplier_id: fabric ? fabric.supplier_id : null, fabric_yards: s.yards, fabric_cost: quote.fabricCost,
       line_items: quote.lines, quote_total: quote.total,
       currency_code: "GBP", fabric_currency_code: "GBP", fabric_price_per_yard: fabric.price_per_yard, fabric_cost_in_fabric_currency: quote.fabricCost,
       exchange_rate: null, exchange_rate_date: null, fabric_unit: "yd",
@@ -773,7 +773,7 @@ function requestQuote(details) {
     fabric_id: fabric.id, fabric_supplier_id: fabric.supplier_id,
     fabric_yards: 0, fabric_cost: 0, line_items: [], quote_total: 0,
     // In the tailor's currency; the seller's fabric is converted when the quote is sent
-    currency_code: designerCurrency(tailor), fabric_currency_code: fabricCurrency(fabric), fabric_unit: designerFabricUnit(tailor),
+    currency_code: designerCurrency(tailor), fabric_currency_code: fabric ? fabricCurrency(fabric) : null, fabric_unit: designerFabricUnit(tailor),
     deposit_amount: 0, deposit_paid_at: null, balance_paid_at: null,
     stage: "tailor_assigned",
     assigned_staff: { cutting: "", sewing: "", embroidery: "", finishing: "", quality_control: "" },
@@ -782,7 +782,7 @@ function requestQuote(details) {
     due_date: addDays(14), created_at: today(), updated_at: today()
   };
   db.orders.push(order);
-  addSystemMessage(order, `Thanks — your request is with ${tailor.business_name}. We'll look at your design, style photos and measurements, and chat with you here to agree how many yards of fabric you need. Then we'll send your quote. Nothing is bought or charged until you accept it.`);
+  addSystemMessage(order, `Thanks — your request is with ${tailor.business_name}. We'll look at your design, style photos and measurements, and chat with you here about the fabric and quote. You do not need to choose marketplace fabric before starting the conversation.`);
   if (details.note) addChatMessage(order, "customer", details.note, []);
   return order;
 }
