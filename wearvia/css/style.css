@@ -83,6 +83,21 @@ button:disabled { cursor: not-allowed; opacity: .5; }
   color: var(--gold);
   text-decoration: none;
 }
+.wordmark {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+.wordmark img {
+  display: block;
+  width: 230px;
+  max-width: 34vw;
+  height: 50px;
+  object-fit: contain;
+  object-position: left center;
+}
+.wordmark-app-name { display: none !important; }
+
 .shop-pill { font-size: 12px; opacity: .8; }
 .shop-pill b { color: var(--on-navy); font-weight: 600; }
 
@@ -997,6 +1012,7 @@ td select { width: auto !important; }
 
 @media (max-width: 520px) {
   .appbar { padding: 8px 16px; gap: 8px; }
+  .wordmark img { width: 174px; height: 42px; max-width: 58vw; }
   .wordmark { font-size: 22px; }
   .customer-view { padding: 0; }
   .capp { max-width: none; border-radius: 0; border: none; box-shadow: none; height: calc(100vh - var(--appbar-h, 96px)); height: calc(100dvh - var(--appbar-h, 96px)); min-height: 480px; }
