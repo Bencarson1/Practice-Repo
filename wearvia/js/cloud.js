@@ -1,24 +1,14 @@
 // ============================================================
 // cloud.js — saving and loading through Supabase
 //
-// The app has two modes:
-//   Live mode  — everyone signs in; data lives in Supabase and is shared
-//                by every phone and laptop.
-//   Demo mode  — the sample data, kept in this browser only (the "Try the
-//                demo" button). Nothing is sent to Supabase.
-//
-// In live mode the screens still read and change the same `db` object as
-// before. After each change, saveData() calls Cloud.save(), which works out
-// what changed since the last load and sends only that to Supabase. Then
-// everything is loaded again, so what's on screen is what the database
-// says. The database's own rules (supabase/setup.sql) decide what each
-// person is allowed to change — the browser is never trusted with that.
+// Everyone uses live Supabase data shared across phones and laptops.
+// The screens read and change the same `db` object, then saveData() sends
+// permitted changes to Supabase. Database rules decide what each account
+// may read or change.
 // ============================================================
 
-// Each app keeps its own demo switch and its own sign-in, so the same email
-// can be signed in to NebedaHub and NebedaHub Business separately. The
-// customer app keeps Supabase's usual key, so customers stay signed in.
-const MODE_KEY = APP_KIND === "customer" ? "wearvia-mode" : `wearvia-mode-${APP_KIND}`;
+// Each app keeps its own authentication storage, so the same email can be
+// signed in to different NebedaHub areas separately.
 const AUTH_STORAGE_KEY = APP_KIND === "customer" ? undefined : `nebedahub-${APP_KIND}-auth`;
 const REFRESH_EVERY_MS = 45000;
 
@@ -37,25 +27,7 @@ const Cloud = (() => {
     teamLogins: null
   };
 
-  // ---- Mode ----
-
-  function wantsDemo() {
-    if (/[?&]demo(=1|=true)?(&|$)/.test(location.search)) return true;
-    try { return localStorage.getItem(MODE_KEY) === "demo"; } catch (e) { return false; }
-  }
-
-  function enterDemo() {
-    try { localStorage.setItem(MODE_KEY, "demo"); sessionStorage.setItem("wearvia-demo-start", "1"); } catch (e) { /* private browsing */ }
-    location.hash = "#/" + APP.home;
-    location.reload();
-  }
-
-  function leaveDemo() {
-    try { localStorage.removeItem(MODE_KEY); } catch (e) { /* private browsing */ }
-    const url = location.pathname + "#/" + APP.home;
-    history.replaceState(null, "", url);
-    location.reload();
-  }
+  // ---- IDs ----
 
   function newId() {
     if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
@@ -85,11 +57,8 @@ const Cloud = (() => {
   // ---- Start-up ----
 
   async function start() {
-    if (wantsDemo() || typeof supabase === "undefined" || typeof SUPABASE_URL === "undefined") {
-      state.live = false;
-      try { localStorage.setItem(MODE_KEY, "demo"); } catch (e) { /* private browsing */ }
-      db = loadData();
-      return { signedIn: true };
+    if (typeof supabase === "undefined" || typeof SUPABASE_URL === "undefined" || typeof SUPABASE_PUBLISHABLE_KEY === "undefined") {
+      throw new Error("NebedaHub could not connect to its online service. Please refresh and try again.");
     }
     state.live = true;
     // A link from a sign-up or password email arrives as #access_token=… — that's for Supabase, not a page address
@@ -1281,7 +1250,7 @@ const Cloud = (() => {
     GUEST_SCREENS, isGuest, startGuest,
     get teamLogins() { return state.teamLogins; },
     start, afterSignIn, signIn, signUp, signOut, sendPasswordReset, setNewPassword,
-    enterDemo, leaveDemo, newId, isTeam, isOwner, homeRoute, becomeCustomer,
+    newId, isTeam, isOwner, homeRoute, becomeCustomer,
     save, flush, refresh, refreshIfStale, placeOrder, deleteOrder,
     requestQuote, sendQuote, acceptQuote, recommendFabrics, chooseRecommendedFabric, generateStyleVariations, sendMessage, markChatRead, refreshChat,
     uploadPhoto, removePhoto, photoUrl,

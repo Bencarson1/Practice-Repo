@@ -343,7 +343,7 @@ function renderTailorAdmin() {
     return `<div class="tailor-admin-row">
       <img class="tailor-logo" src="${escapeHtml(photoUrl(d.profile_image) || photoUrl(`logo:${initialsOf(d.business_name)}:1e2a44`))}" alt="">
       <div class="grow">
-        <b>${escapeHtml(d.business_name)}</b> ${d.demo ? `<span class="pill muted-pill">demo</span>` : ""}
+        <b>${escapeHtml(d.business_name)}</b>
         <div class="muted small-text">${country ? country.flag + " " + escapeHtml(country.name) : "No country yet"}${d.city ? " · " + escapeHtml(d.city) : ""}${d.postcode ? " · " + escapeHtml(d.postcode) : ""}
           ${d.public_latitude == null ? ` · <span class="owed">no map position</span>` : ""}${d.phone ? ` · 📞 ${escapeHtml(d.phone)}` : ""}</div>
         <div class="small-text">${escapeHtml((d.speciality_tags || []).join(", ") || "No specialities yet")} · ${(d.portfolio || []).length} portfolio photo${(d.portfolio || []).length === 1 ? "" : "s"}${d.description ? "" : " · no description"}</div>

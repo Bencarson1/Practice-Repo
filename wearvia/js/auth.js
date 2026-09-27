@@ -82,13 +82,6 @@ const Auth = (() => {
       <div id="auth-error" class="form-error" role="alert">${escapeHtml(error)}</div>`;
   }
 
-  function demoBox() {
-    return `<div class="auth-demo">
-      <p>Just looking? The demo has sample ${APP_KIND === "customer" ? "tailors, fabrics and orders" : APP_KIND === "seller" ? "fabric shops and orders" : "tailors, customers and orders"}. Nothing you do in it is saved online.</p>
-      <button type="button" class="btn-outline" onclick="Cloud.enterDemo()">Try the demo</button>
-    </div>`;
-  }
-
   function draw() {
     const el = document.getElementById("auth-view");
     const title = { signIn: "Sign in", signUp: "Create your account", forgot: "Reset your password", newPassword: "Choose a new password" }[screen];
@@ -160,7 +153,7 @@ const Auth = (() => {
       </div>
       ${screen === "newPassword" ? "" : APP_KIND === "customer" ? `<button type="button" class="btn-outline find-tailors-link" onclick="Auth.browseTailors()">📍 Just looking? Find tailors near me</button>`
         : APP_KIND !== "admin" ? `<button type="button" class="btn-outline find-tailors-link" onclick="Auth.browseWelcome()">How ${APP.name} works</button>` : ""}
-      ${screen === "newPassword" ? "" : demoBox()}`;
+`;
     document.title = `${title} · ${APP.name}`;
   }
 
@@ -287,28 +280,20 @@ const Auth = (() => {
     else renderAll();
   }
 
-  // Top bar and footer: who is signed in, demo mode, which areas they can open
+  // Top bar and footer: who is signed in and which area they can open
   function drawChrome() {
     const account = document.getElementById("account");
     const footer = document.getElementById("footer-text");
-    if (!Cloud.live) {
-      account.innerHTML = `<span class="demo-pill" title="Sample data in this browser only">Demo mode</span>
-        <button class="chip-button" onclick="Cloud.leaveDemo()">Sign in</button>`;
-      footer.innerHTML = `Demo mode: sample data, saved in this browser only.
-        <button class="link-button" onclick="resetSampleData()">Reset to sample data</button> ·
-        <button class="link-button" onclick="Cloud.leaveDemo()">Leave demo</button>`;
-    } else if (Cloud.isGuest()) {
+    if (Cloud.isGuest()) {
       account.innerHTML = `<button class="chip-button" onclick="Auth.show('signIn')">Sign in</button>`;
-      footer.innerHTML = `${APP.name} · ${APP_KIND === "customer" ? "Tailors near you" : "For " + APP.who}. <button class="link-button" onclick="Auth.show('signIn')">Sign in</button>${APP_KIND === "customer" ? " to order" : ""} ·
-        <button class="link-button" onclick="Cloud.enterDemo()">Open the demo</button>`;
+      footer.innerHTML = `${APP.name} · ${APP_KIND === "customer" ? "Tailors near you" : "For " + APP.who}. <button class="link-button" onclick="Auth.show('signIn')">Sign in</button>${APP_KIND === "customer" ? " to order" : ""}`;
     } else if (Cloud.me) {
       const me = Cloud.me;
       const role = APP_KIND === "admin" ? (me.is_admin ? "Admin" : "")
         : APP_KIND === "business" ? (me.is_admin ? "Admin" : me.is_team ? (me.is_owner ? "Owner" : "Team") : "") : "";
       account.innerHTML = `<span class="who" title="${escapeHtml(me.email)}">${escapeHtml(me.name || me.email)}${role ? ` · <b>${role}</b>` : ""}</span>
         <button class="chip-button" onclick="Auth.signOut()">Sign out</button>`;
-      footer.innerHTML = `Signed in as ${escapeHtml(me.email)}. Your data is saved securely online and shared across your devices.
-        <button class="link-button" onclick="Cloud.enterDemo()">Open the demo</button>`;
+      footer.innerHTML = `Signed in as ${escapeHtml(me.email)}. Your data is saved securely online and shared across your devices.`;
     } else {
       account.innerHTML = "";
       footer.innerHTML = `${APP.name} · ${APP_KIND === "customer" ? APP_TAGLINE : "For " + APP.who}`;
