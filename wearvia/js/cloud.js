@@ -245,7 +245,7 @@ const Cloud = (() => {
     const rows = {};
     const results = await Promise.all(tables.map(t => fetchAll(t, sortBy[t] || "created_at"))
       .concat([fetchAll("customers", "created_at", CUSTOMER_COLUMNS),
-               state.me && state.me.is_team ? rpcRows("wearvia_my_designers") : Promise.resolve([]),
+               state.me && (state.me.is_team || state.me.is_admin) ? rpcRows("wearvia_my_designers") : Promise.resolve([]),
                rpcRows("wearvia_customer_contacts"),
                rpcRows("wearvia_delivery_details"),
                state.me && state.me.is_admin ? fetchAll("hidden_contact_details", "created_at", "source, source_id, original", q => q.eq("source", "chat")) : Promise.resolve([]),
