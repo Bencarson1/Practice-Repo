@@ -221,7 +221,8 @@ function saveSellerProfile(sellerId, values) {
   seller.delivery_estimate = values.delivery_estimate;
   seller.country_code = values.country_code || null;
   // The application (a new shop is sent for review; the database does this in live mode)
-  ["contact_name", "email", "address_line", "city", "postcode", "sells", "sample_photos"].forEach(k => {
+  ["contact_name", "email", "address_line", "city", "postcode", "sells", "business_description", "delivery_areas", "sample_photos",
+   "verification_id", "verification_address", "business_registration", "verification_submitted_at"].forEach(k => {
     if (values[k] !== undefined) seller[k] = values[k];
   });
   if (values.accept_terms && !seller.seller_terms_accepted_at) seller.seller_terms_accepted_at = new Date().toISOString();
