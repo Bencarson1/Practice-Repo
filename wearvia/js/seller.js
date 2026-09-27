@@ -543,27 +543,34 @@ function sellerProfileScreen(seller) {
     sellerForm = { key, logo: seller && seller.logo ? { ref: seller.logo, url: photoUrl(seller.logo) } : null,
       samples: (seller && seller.sample_photos || []).map(ref => ({ ref, url: photoUrl(ref) })) };
   }
-  const me = Cloud.live && Cloud.me ? Cloud.me : {};
+  const me = Cloud.me || {};
   const v = seller || { name: "", location: "", city: "", phone: "", delivery_estimate: "1–3 days", country_code: browserCountry() || "",
-    contact_name: me.name || "", email: me.email || "", address_line: "", postcode: "", sells: "" };
+    contact_name: me.name || "", email: me.email || "", address_line: "", postcode: "", sells: "", business_description: "", delivery_areas: "" };
   const currency = (seller && seller.currency_code) || countryCurrency(v.country_code) || "GBP";
   const times = DELIVERY_TIMES.includes(v.delivery_estimate) ? DELIVERY_TIMES : DELIVERY_TIMES.concat(v.delivery_estimate);
   const field = (label, name, value, attrs) => `<label>${label}<input name="${name}" value="${escapeHtml(value || "")}" ${attrs || ""}></label>`;
   const approved = seller && isSellerLive(seller);
+  const verificationLink = (ref, label) => {
+    if (!ref) return "";
+    const url = photoUrl(ref);
+    return url ? `<a class="small-text" href="${escapeHtml(url)}" target="_blank" rel="noopener">✓ View current ${escapeHtml(label)}</a>` : `<span class="small-text paid">✓ ${escapeHtml(label)} uploaded</span>`;
+  };
   return `
     <div class="biz-head"><h1>${seller ? "Shop & application" : "Apply to sell on " + APP_NAME}</h1>
-      <p class="muted">${seller ? `Status: <b>${escapeHtml(SELLER_STATUS_LABELS[seller.admin_status || "approved"])}</b>. ` : ""}Customers and tailors only see your shop name, area, logo and fabrics. Your contact details, address and application are private: only you and the ${APP_NAME} team see them.</p></div>
+      <p class="muted">${seller ? `Status: <b>${escapeHtml(SELLER_STATUS_LABELS[seller.admin_status || "approved"])}</b>. ` : ""}Customers and tailors only see your public shop information. Identity documents, phone, email and exact address stay private between you and the ${APP_NAME} team.</p></div>
     ${seller ? sellerPaymentsCard() : ""}
     <form class="card seller-profile" onsubmit="return saveSellerProfileForm(event)" novalidate>
       <h2>Your business</h2>
       <div id="logo-row" class="logo-row">${logoRow(v.name)}</div>
       <div class="form-grid">
         <label>Business name<input name="name" required maxlength="50" value="${escapeHtml(v.name)}" placeholder="e.g. Lagos Wax Prints" oninput="refreshLogoInitials(this.value)"></label>
-        ${field("Contact name", "contact", v.contact_name, 'required maxlength="80" autocomplete="name"')}
+        ${field("Owner / contact name", "contact", v.contact_name, 'required maxlength="80" autocomplete="name"')}
         <label>Phone${phoneFieldHtml("phone", v.phone, v.country_code, 'required placeholder="e.g. 803 555 0199"')}</label>
         ${field("Email", "email", v.email, 'type="email" required maxlength="120" autocomplete="email"')}
       </div>
-      <h2>Where you are</h2>
+      <label>Business description<textarea name="businessDescription" rows="3" maxlength="700" required placeholder="Tell us about your shop, experience and the customers you serve.">${escapeHtml(v.business_description || "")}</textarea></label>
+
+      <h2>Where you are and deliver</h2>
       <div class="form-grid">
         <label>Country<select name="country" required onchange="suggestCurrency(this.form, this.value)">${countryOptions(v.country_code || "", "Choose your country")}</select></label>
         ${field("City or town", "city", v.city, 'required maxlength="60" placeholder="e.g. Lagos"')}
@@ -572,25 +579,44 @@ function sellerProfileScreen(seller) {
         ${field("Area customers see", "location", v.location, 'required maxlength="60" placeholder="e.g. Idumota Market, Lagos"')}
         <label>Delivery time to a tailor<select name="delivery">${times.map(t => `<option ${t === v.delivery_estimate ? "selected" : ""}>${escapeHtml(t)}</option>`).join("")}</select></label>
       </div>
+      <label>Delivery areas<textarea name="deliveryAreas" rows="2" maxlength="400" required placeholder="e.g. UK-wide, Lagos and Abuja, international by courier">${escapeHtml(v.delivery_areas || "")}</textarea></label>
+
       <h2>What you sell</h2>
       <div class="form-grid">
         <label class="wide">Tell us about your fabrics<textarea name="sells" rows="3" maxlength="500" required placeholder="e.g. Dutch wax and Ankara prints, George and lace for aso ebi">${escapeHtml(v.sells || "")}</textarea></label>
         <label>Your prices are in<select name="currency">${currencyOptions(currency)}</select></label>
-        <p class="hint">You set your prices in this currency, by the yard or the metre as fabric is sold in your country. Tailors in other countries see your prices converted at the day's exchange rate; you're always paid in your currency.${seller ? " Changing your currency converts your fabric prices at today's rate." : ""}</p>
+        <p class="hint">You set your own fabric prices. Tailors in other countries can see approximate converted prices, while your original selling currency is preserved.</p>
       </div>
+
       <fieldset class="photo-field">
-        <legend>Sample photos <small class="muted">(up to ${MAX_SAMPLE_PHOTOS} — your shop, stall or fabrics. Only the ${APP_NAME} team sees these)</small></legend>
+        <legend>Sample photos <small class="muted">(at least 2, up to ${MAX_SAMPLE_PHOTOS}. Add clear photos of your shop, stall or fabrics.)</small></legend>
         <div id="sample-slots" class="photo-slots">${sampleSlots()}</div>
       </fieldset>
+
+      <h2>Private verification</h2>
+      <p class="hint">These files are private and are only available to you and NebedaHub Admin.</p>
+      <label>Government-issued ID <small>(passport, driving licence or national ID)</small>
+        <input name="identityDocument" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" ${seller && seller.verification_id ? "" : "required"}>
+        ${verificationLink(seller && seller.verification_id, "ID")}
+      </label>
+      <label>Proof of business/home address <small>(utility bill, bank statement or official letter)</small>
+        <input name="addressDocument" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" ${seller && seller.verification_address ? "" : "required"}>
+        ${verificationLink(seller && seller.verification_address, "proof of address")}
+      </label>
+      <label>Business registration document <small>(optional if you are not formally registered)</small>
+        <input name="businessDocument" type="file" accept="image/jpeg,image/png,image/webp,application/pdf">
+        ${verificationLink(seller && seller.business_registration, "business registration")}
+      </label>
+
       ${seller && seller.seller_terms_accepted_at ? `<p class="hint paid">✓ You agreed to the ${APP_NAME} seller terms.</p>` : `
       <details class="terms-box" open><summary>${APP_NAME} seller terms</summary><ol>${SELLER_TERMS.map(t => `<li>${escapeHtml(t)}</li>`).join("")}</ol></details>
       <label class="check terms-check"><input type="checkbox" name="acceptTerms" value="yes" required> I agree to the ${APP_NAME} seller terms.</label>`}
       <p id="profile-form-error" class="form-error" role="alert"></p>
       <div class="job-buttons">
-        <button type="submit" class="gold">${seller ? "Save" : "Send my application"}</button>
+        <button type="submit" class="gold">${seller ? "Save application" : "Send my application"}</button>
         ${seller ? "" : `<a class="button ghost" href="#/welcome">Cancel</a>`}
       </div>
-      ${approved ? "" : `<p class="hint">${seller ? "Changes are saved to your application." : `The ${APP_NAME} team reviews every new seller, usually within two working days.`}</p>`}
+      ${approved ? "" : `<p class="hint">${seller ? "Changes are saved to your application." : `The ${APP_NAME} team reviews every new seller before their shop goes live.`}</p>`}
     </form>`;
 }
 
@@ -697,46 +723,63 @@ function saveSellerProfileForm(event) {
     postcode: form.postcode.value.trim(),
     location: form.location.value.trim(),
     delivery_estimate: form.delivery.value,
+    delivery_areas: form.deliveryAreas.value.trim(),
     sells: form.sells.value.trim(),
+    business_description: form.businessDescription.value.trim(),
     currency_code: form.currency.value || countryCurrency(form.country.value) || "GBP",
     accept_terms: form.acceptTerms ? form.acceptTerms.checked : true
   };
   if (!values.name) return formError("profile-form-error", "Enter your business name.");
-  if (db.suppliers.some(s => s.name.toLowerCase() === values.name.toLowerCase() && (!seller || s.id !== seller.id))) {
-    return formError("profile-form-error", "Another seller already uses that name.");
-  }
-  if (hideContactDetails([values.name, values.location, values.city].join(" ")).hidden) {
-    return formError("profile-form-error", "Your business name and area can't include a phone number, email, website or social handle.");
-  }
-  if (!values.contact_name) return formError("profile-form-error", "Enter the name of the person we should talk to.");
-  if (!/^\+?[0-9 ()-]{7,24}$/.test(values.phone) || !phoneLooksRight(values.phone)) {
-    return formError("profile-form-error", "Enter a phone number NebedaHub can call: choose the country code, then the number, e.g. 803 555 0199.");
-  }
+  if (db.suppliers.some(s => s.name.toLowerCase() === values.name.toLowerCase() && (!seller || s.id !== seller.id))) return formError("profile-form-error", "Another seller already uses that name.");
+  if (hideContactDetails([values.name, values.location, values.city].join(" ")).hidden) return formError("profile-form-error", "Your business name and area can't include a phone number, email, website or social handle.");
+  if (!values.contact_name) return formError("profile-form-error", "Enter the owner or contact person's name.");
+  if (!/^\+?[0-9 ()-]{7,24}$/.test(values.phone) || !phoneLooksRight(values.phone)) return formError("profile-form-error", "Enter a valid phone number.");
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.email)) return formError("profile-form-error", "Enter your email address.");
   if (!values.country_code) return formError("profile-form-error", "Choose your country.");
   if (!values.city) return formError("profile-form-error", "Enter your city or town.");
   if (!values.address_line) return formError("profile-form-error", "Enter your shop or warehouse address.");
-  if (!values.location) return formError("profile-form-error", "Enter the area customers will see, e.g. the market and city.");
+  if (!values.location) return formError("profile-form-error", "Enter the area customers will see.");
+  if (!values.business_description) return formError("profile-form-error", "Tell us about your business.");
+  if (!values.delivery_areas) return formError("profile-form-error", "Tell us where you can deliver.");
   if (!values.sells) return formError("profile-form-error", "Tell us what fabrics you sell.");
-  if (!seller && !(sellerForm.samples || []).length) return formError("profile-form-error", "Add at least one sample photo of your fabrics or shop.");
+  if ((sellerForm.samples || []).length < 2) return formError("profile-form-error", "Add at least 2 clear sample photos of your fabrics or shop.");
+  if (!seller && !form.identityDocument.files[0]) return formError("profile-form-error", "Add a government-issued ID.");
+  if (!seller && !form.addressDocument.files[0]) return formError("profile-form-error", "Add proof of address.");
+  if (seller && !seller.verification_id && !form.identityDocument.files[0]) return formError("profile-form-error", "Add a government-issued ID.");
+  if (seller && !seller.verification_address && !form.addressDocument.files[0]) return formError("profile-form-error", "Add proof of address.");
   if (!values.accept_terms) return formError("profile-form-error", "Please tick the box to agree to the seller terms.");
   if (seller && seller.currency_code && seller.currency_code !== values.currency_code) {
     const rate = fxRate(seller.currency_code, values.currency_code);
     if (rate == null) return formError("profile-form-error", `There's no exchange rate for ${values.currency_code} yet. Try again tomorrow.`);
     if (!confirm(`Change your currency from ${seller.currency_code} to ${values.currency_code}? Your fabric prices are converted at today's rate (${rateText(rate, seller.currency_code, values.currency_code)}). Orders already placed keep their currency.`)) return false;
   }
+
   const oldLogo = seller ? seller.logo : null;
   const logo = sellerForm.logo;
   const samples = sellerForm.samples || [];
   const oldSamples = seller ? (seller.sample_photos || []) : [];
+  const idFile = form.identityDocument.files[0] || null;
+  const addressFile = form.addressDocument.files[0] || null;
+  const businessFile = form.businessDocument.files[0] || null;
+
   sellerSaving = true;
   const button = form.querySelector("button[type=submit]");
-  if (button) { button.disabled = true; button.textContent = "Saving…"; }
-  Promise.all([logo ? (logo.ref || PhotoStore.put(logo.url, "logo")) : null]
-      .concat(samples.map(p => p.ref || PhotoStore.put(p.url, "seller-file"))))
-    .then(([ref, ...sampleRefs]) => {
+  if (button) { button.disabled = true; button.textContent = "Uploading and saving…"; }
+
+  Promise.all([
+    logo ? (logo.ref || PhotoStore.put(logo.url, "logo")) : null,
+    Promise.all(samples.map(p => p.ref || PhotoStore.put(p.url, "seller-file"))),
+    idFile ? Cloud.uploadVerificationFile(idFile, "seller-id") : Promise.resolve(seller && seller.verification_id || null),
+    addressFile ? Cloud.uploadVerificationFile(addressFile, "seller-address") : Promise.resolve(seller && seller.verification_address || null),
+    businessFile ? Cloud.uploadVerificationFile(businessFile, "seller-business-registration") : Promise.resolve(seller && seller.business_registration || null)
+  ])
+    .then(([ref, sampleRefs, verificationId, verificationAddress, businessRegistration]) => {
       values.logo = ref;
       values.sample_photos = sampleRefs;
+      values.verification_id = verificationId;
+      values.verification_address = verificationAddress;
+      values.business_registration = businessRegistration;
+      values.verification_submitted_at = seller && seller.verification_submitted_at || new Date().toISOString();
       const saved = saveSellerProfile(seller ? seller.id : null, values);
       if (oldLogo && oldLogo !== ref) PhotoStore.remove(oldLogo);
       oldSamples.filter(x => !sampleRefs.includes(x)).forEach(x => PhotoStore.remove(x));
@@ -744,17 +787,17 @@ function saveSellerProfileForm(event) {
       saveData();
       sellerForm = null;
       if (seller) {
-        toast("Saved.");
+        toast("Application saved.");
         renderAll();
       } else {
-        toast(`Thanks, ${saved.name}! Your application is with the ${APP_NAME} team. Add your fabrics while you wait.`);
+        toast(`Thanks, ${saved.name}! Your application is with the ${APP_NAME} team for verification.`);
         go("fabrics");
       }
     })
     .catch(error => {
       console.warn(error);
-      formError("profile-form-error", Cloud.live ? "Couldn't upload the photos: " + (error.message || "please try again.") : "Couldn't save the photos — this browser's storage may be full.");
-      if (button) { button.disabled = false; button.textContent = seller ? "Save" : "Send my application"; }
+      formError("profile-form-error", "Couldn't save your application: " + (error.message || "please try again."));
+      if (button) { button.disabled = false; button.textContent = seller ? "Save application" : "Send my application"; }
     })
     .finally(() => { sellerSaving = false; });
   return false;
