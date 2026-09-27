@@ -2382,3 +2382,78 @@ tr.clickable:hover td {
   .homepage-category-row { grid-template-columns: 96px 1fr; }
   .homepage-preview { height: 116px; }
 }
+
+
+/* Ready-to-wear storefront */
+.rtw-storefront { max-width: 1180px; margin: 0 auto; }
+.rtw-store-hero {
+  display: flex; justify-content: space-between; gap: 20px; align-items: end;
+  padding: 26px; margin-bottom: 18px; border: 1px solid var(--line); background: var(--soft); border-radius: 18px;
+}
+.rtw-store-hero h1 { margin: 4px 0 6px; font-size: clamp(28px, 4vw, 44px); }
+.rtw-store-hero p { margin: 0; max-width: 720px; color: var(--muted); }
+.rtw-trust { max-width: 330px; font-size: 12px; color: var(--muted); }
+.rtw-shop-toolbar { margin-bottom: 18px; }
+.rtw-shop-toolbar > input {
+  width: 100%; border: 1px solid var(--line); border-radius: 12px; padding: 13px 14px; font-size: 15px; background: #fff; margin-bottom: 10px;
+}
+.rtw-shop-toolbar .chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 3px; }
+.rtw-shop-toolbar .chip {
+  border: 1px solid var(--line); background: #fff; border-radius: 20px; padding: 8px 13px; white-space: nowrap;
+}
+.rtw-shop-toolbar .chip.active { background: var(--burgundy, #9B3A4A); color: #fff; border-color: transparent; }
+.rtw-product-grid {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px;
+}
+.rtw-product-card {
+  background: #fff; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; min-width: 0;
+}
+.rtw-product-photo {
+  position: relative; display: block; width: 100%; aspect-ratio: 4 / 5; padding: 0; border: 0; background: var(--soft); overflow: hidden;
+}
+.rtw-product-photo img, .rtw-detail-photo img, .rtw-admin-photo img, .rtw-editor-photo img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+}
+.rtw-photo-empty { width: 100%; height: 100%; min-height: 180px; display: grid; place-items: center; padding: 20px; color: var(--muted); background: var(--soft); text-align: center; }
+.rtw-featured-badge, .rtw-soldout-badge, .rtw-hidden-badge {
+  position: absolute; top: 10px; left: 10px; border-radius: 999px; padding: 6px 9px; font-size: 11px; font-weight: 700; background: #fff;
+}
+.rtw-soldout-badge, .rtw-hidden-badge { left: auto; right: 10px; background: rgba(36,36,36,.88); color: #fff; }
+.rtw-product-info { padding: 12px 13px 14px; }
+.rtw-product-name { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 0; font-size: 15px; font-weight: 700; color: var(--ink); }
+.rtw-product-price, .rtw-detail-price { font-size: 18px; font-weight: 800; margin: 7px 0 5px; }
+.rtw-detail-grid { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(320px, .95fr); gap: 28px; align-items: start; }
+.rtw-detail-photo { aspect-ratio: 4 / 5; background: var(--soft); border-radius: 16px; overflow: hidden; }
+.rtw-detail-info { position: sticky; top: 18px; }
+.rtw-detail-info h1 { font-size: clamp(28px, 4vw, 42px); margin: 6px 0; }
+.rtw-size-list { display: flex; gap: 8px; flex-wrap: wrap; margin: 9px 0 14px; }
+.rtw-size-list span { border: 1px solid var(--line); border-radius: 8px; padding: 8px 11px; min-width: 42px; text-align: center; }
+.home-rtw-grid { margin-top: 8px; }
+
+/* Ready-to-wear business management */
+.rtw-shop-stats { grid-template-columns: repeat(4, minmax(0,1fr)); }
+.rtw-admin-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 15px; }
+.rtw-admin-card { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: #fff; }
+.rtw-admin-photo { position: relative; aspect-ratio: 4 / 3; background: var(--soft); }
+.rtw-admin-body { padding: 12px; }
+.rtw-stock-row { padding: 9px 0; margin-top: 7px; border-top: 1px solid var(--line); }
+.rtw-product-editor { display: grid; grid-template-columns: 260px minmax(0,1fr); gap: 20px; align-items: start; }
+.rtw-editor-photo { aspect-ratio: 4 / 5; border: 1px dashed var(--line); border-radius: 12px; overflow: hidden; position: relative; background: var(--soft); }
+.rtw-editor-photo .file-button { position: absolute; left: 10px; right: 10px; bottom: 10px; justify-content: center; background: rgba(255,255,255,.95); }
+.rtw-product-form textarea { resize: vertical; }
+
+@media (max-width: 900px) {
+  .rtw-product-grid { grid-template-columns: repeat(3, minmax(0,1fr)); }
+  .rtw-admin-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .rtw-shop-stats { grid-template-columns: repeat(2, minmax(0,1fr)); }
+}
+@media (max-width: 680px) {
+  .rtw-store-hero { display: block; padding: 18px; }
+  .rtw-trust { margin-top: 12px; }
+  .rtw-product-grid { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
+  .rtw-product-info { padding: 10px; }
+  .rtw-detail-grid, .rtw-product-editor { grid-template-columns: 1fr; }
+  .rtw-detail-info { position: static; }
+  .rtw-admin-grid { grid-template-columns: 1fr; }
+  .rtw-editor-photo { max-width: 360px; width: 100%; margin: 0 auto; }
+}
