@@ -136,6 +136,11 @@ function screenHome() {
   const fabrics = (db.fabrics || [])
     .filter(f => f.status === "approved" && !f.deleted_at && !f.sold_out && Number(f.yards_available || 0) > 0)
     .slice(0, 6);
+  const readyToWear = (db.ready_to_wear || [])
+    .filter(i => i.active !== false)
+    .slice()
+    .sort((a, b) => Number(!!b.featured) - Number(!!a.featured))
+    .slice(0, 6);
   const home = db.homepage || {};
   const categoryPhotos = {
     Agbada: home.category_agbada || "https://images.unsplash.com/photo-1782566208081-6b5135fddf23?auto=format&fit=crop&w=700&q=82",
@@ -161,6 +166,7 @@ function screenHome() {
         <button class="desktop-home-link active" onclick="go('home')">Home</button>
         <button class="desktop-home-link" onclick="go('outfit')">Outfits</button>
         <button class="desktop-home-link" onclick="go('market')">Fabrics</button>
+        <button class="desktop-home-link" onclick="go('rtw')">Ready to Wear</button>
         <button class="desktop-home-link" onclick="go('tailors')">Tailors</button>
         <span class="desktop-market-spacer"></span>
         <a class="desktop-home-link" href="${escapeHtml(appUrl("seller", "welcome"))}">Sell fabric</a>
@@ -184,6 +190,7 @@ function screenHome() {
           </div>
           <div class="market-mobile-links">
             <button onclick="go('market')">Browse Fabric Marketplace</button>
+            <button onclick="go('rtw')">Shop Ready to Wear</button>
             <a href="${escapeHtml(appUrl("seller", "welcome"))}">Sell your fabric</a>
             <a href="${escapeHtml(appUrl("business", "welcome"))}">Join as tailor or designer</a>
           </div>
@@ -220,6 +227,15 @@ function screenHome() {
             </button>`;
           }).join("")}
         </div>
+      </section>
+
+      <section class="market-section">
+        <div class="market-section-head">
+          <div><span class="market-kicker">Shop now</span><h2>Ready to Wear</h2></div>
+          <button class="market-text-link" onclick="go('rtw')">Browse the shop →</button>
+        </div>
+        ${readyToWear.length ? `<div class="rtw-product-grid home-rtw-grid">${readyToWear.map(rtwProductCard).join("")}</div>`
+          : `<div class="market-empty-card"><b>Ready-to-wear shops are opening.</b><span>Approved designers can publish finished products here.</span><button onclick="go('tailors')">Browse designers</button></div>`}
       </section>
 
       <section class="market-section">
