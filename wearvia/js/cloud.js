@@ -185,7 +185,7 @@ const Cloud = (() => {
   const num = value => value == null || value === "" ? null : Number(value);
 
   const STYLE = "style-photos", FABRIC_PHOTOS = "fabric-photos", LOGOS = "seller-logos", CHAT = "chat-photos", DESIGNER_PHOTOS = "designer-photos",
-        SELLER_FILES = "seller-files", HOMEPAGE_IMAGES = "homepage-images";
+        SELLER_FILES = "seller-files", HOMEPAGE_IMAGES = "homepage-images", VERIFICATION_FILES = "verification-files";
   // The tailor columns everyone may read. The exact address, postcode and map
   // position are private: owners read their own through wearvia_my_designers().
   // (public_address is always empty now: the address is only shared with a
@@ -201,7 +201,7 @@ const Cloud = (() => {
   // seller and the admin read them with wearvia_my_suppliers().
   const SUPPLIER_PUBLIC = "id, name, location, city, delivery_estimate, rating, created_at, updated_at, owner_user_id, logo_url, "
     + "country_code, currency_code, admin_status";
-  const PRIVATE_BUCKETS = [STYLE, CHAT, SELLER_FILES];
+  const PRIVATE_BUCKETS = [STYLE, CHAT, SELLER_FILES, VERIFICATION_FILES];
 
   async function fetchAll(table, order, columns, filter) {
     let query = state.client.from(table).select(columns || "*");
@@ -245,7 +245,7 @@ const Cloud = (() => {
     const rows = {};
     const results = await Promise.all(tables.map(t => fetchAll(t, sortBy[t] || "created_at"))
       .concat([fetchAll("customers", "created_at", CUSTOMER_COLUMNS),
-               state.me && state.me.is_team ? rpcRows("wearvia_my_designers") : Promise.resolve([]),
+               state.me && (state.me.is_team || state.me.is_admin) ? rpcRows("wearvia_my_designers") : Promise.resolve([]),
                rpcRows("wearvia_customer_contacts"),
                rpcRows("wearvia_delivery_details"),
                state.me && state.me.is_admin ? fetchAll("hidden_contact_details", "created_at", "source, source_id, original", q => q.eq("source", "chat")) : Promise.resolve([]),
@@ -308,7 +308,11 @@ const Cloud = (() => {
       // Private: only filled in for the owner, their team and the admin
       postcode: full ? full.postcode || "" : undefined, address_line: full ? full.address_line || "" : undefined,
       latitude: full ? num(full.latitude) : undefined, longitude: full ? num(full.longitude) : undefined,
-      phone: full ? full.phone || "" : undefined, is_mine: !!full,
+      phone: full ? full.phone || "" : undefined, owner_name: full ? full.owner_name || "" : undefined, is_mine: !!full,
+      verification_id: full && full.verification_id_path ? `sb:${VERIFICATION_FILES}/${full.verification_id_path}` : null,
+      verification_address: full && full.verification_address_path ? `sb:${VERIFICATION_FILES}/${full.verification_address_path}` : null,
+      business_registration: full && full.business_registration_path ? `sb:${VERIFICATION_FILES}/${full.business_registration_path}` : null,
+      verification_submitted_at: full ? iso(full.verification_submitted_at) : undefined,
       tailor_terms_accepted_at: full ? iso(full.tailor_terms_accepted_at) : undefined,
       portfolio: (portfolio || []).filter(p => p.designer_id === d.id).map(p => ({ id: p.id, image: p.image_url, title: p.title || p.caption || "" }))
     };
@@ -341,7 +345,12 @@ const Cloud = (() => {
         // The application (only filled in for the seller themselves and the admin)
         admin_status: s.admin_status || "approved", admin_note: s.admin_note || "", submitted_at: iso(s.submitted_at),
         reviewed_at: iso(s.reviewed_at), contact_name: s.contact_name || "", email: s.email || "", address_line: s.address_line || "",
-        postcode: s.postcode || "", sells: s.sells || "", sample_photos: (s.sample_photos || []).map(p => `sb:${SELLER_FILES}/${p}`),
+        postcode: s.postcode || "", sells: s.sells || "", business_description: s.business_description || "", delivery_areas: s.delivery_areas || "",
+        sample_photos: (s.sample_photos || []).map(p => `sb:${SELLER_FILES}/${p}`),
+        verification_id: s.verification_id_path ? `sb:${VERIFICATION_FILES}/${s.verification_id_path}` : null,
+        verification_address: s.verification_address_path ? `sb:${VERIFICATION_FILES}/${s.verification_address_path}` : null,
+        business_registration: s.business_registration_path ? `sb:${VERIFICATION_FILES}/${s.business_registration_path}` : null,
+        verification_submitted_at: iso(s.verification_submitted_at),
         seller_terms_accepted_at: iso(s.seller_terms_accepted_at), is_mine: !!s.is_mine
       })),
 
@@ -725,7 +734,12 @@ const Cloud = (() => {
         id: s.id, name: s.name, location: s.location, city: s.city || "", phone: s.phone, delivery_estimate: s.delivery_estimate,
         logo_url: s.logo || null, owner_user_id: s.owner_user_id || null, country_code: s.country_code || null, currency_code: s.currency_code || null,
         contact_name: s.contact_name || "", email: s.email || "", address_line: s.address_line || "", postcode: s.postcode || "",
-        sells: s.sells || "", sample_photos: (s.sample_photos || []).map(ref => photoPath(ref, SELLER_FILES)).filter(Boolean),
+        sells: s.sells || "", business_description: s.business_description || "", delivery_areas: s.delivery_areas || "",
+        sample_photos: (s.sample_photos || []).map(ref => photoPath(ref, SELLER_FILES)).filter(Boolean),
+        verification_id_path: photoPath(s.verification_id, VERIFICATION_FILES),
+        verification_address_path: photoPath(s.verification_address, VERIFICATION_FILES),
+        business_registration_path: photoPath(s.business_registration, VERIFICATION_FILES),
+        verification_submitted_at: s.verification_submitted_at || null,
         seller_terms_accepted_at: s.seller_terms_accepted_at || null })) },
     { table: "fabrics", rows: d => d.fabrics.map(f => ({
         id: f.id, supplier_id: f.supplier_id, name: f.name, category: f.category, colour_name: f.colour_name || null,
@@ -1002,6 +1016,19 @@ const Cloud = (() => {
     return ref;
   }
 
+  async function uploadVerificationFile(file, purpose) {
+    if (!state.me || !file) throw new Error("Please sign in and choose a verification file.");
+    const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+    if (!allowed.includes(file.type)) throw new Error("Verification documents must be JPG, PNG, WebP or PDF.");
+    if (file.size > 10 * 1024 * 1024) throw new Error("Each verification document must be 10 MB or smaller.");
+    const ext = file.type === "application/pdf" ? "pdf" : file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
+    const safePurpose = String(purpose || "document").toLowerCase().replace(/[^a-z0-9_-]+/g, "-").slice(0, 30);
+    const path = `${state.me.user_id}/${safePurpose}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}.${ext}`;
+    const { error } = await state.client.storage.from(VERIFICATION_FILES).upload(path, file, { contentType: file.type, upsert: false });
+    if (error) throw new Error(friendly(error));
+    return `sb:${VERIFICATION_FILES}/${path}`;
+  }
+
   function splitRef(ref) {
     const text = String(ref || "");
     if (text.startsWith("sb:")) {
@@ -1092,6 +1119,37 @@ const Cloud = (() => {
     if (error) throw new Error(friendly(error));
     if (details.acceptTerms) await acceptTailorTerms(data, true);
     state.teamLogins = null;
+    await afterSignIn();
+    const verificationPath = ref => {
+      const where = splitRef(ref);
+      return where && where.bucket === VERIFICATION_FILES ? where.path : null;
+    };
+    const profileImageUrl = details.profileImageData ? await uploadPhoto(details.profileImageData, "designer") : null;
+    const portfolioUrls = details.portfolioData && details.portfolioData.length
+      ? await Promise.all(details.portfolioData.map(url => uploadPhoto(url, "designer")))
+      : [];
+    const profile = {
+      owner_name: details.ownerName || "",
+      address_line: details.address || null,
+      postcode: details.postcode || null,
+      description: details.description || "",
+      speciality_tags: details.specialities || [],
+      delivery_estimate: details.deliveryEstimate || "7–14 days",
+      currency_code: details.currency || countryCurrency(details.country) || "GBP",
+      delivery_available: !!details.deliveryAvailable,
+      profile_image_url: profileImageUrl,
+      verification_id_path: verificationPath(details.verificationId),
+      verification_address_path: verificationPath(details.verificationAddress),
+      business_registration_path: verificationPath(details.businessRegistration),
+      verification_submitted_at: new Date().toISOString()
+    };
+    const update = await state.client.from("designers").update(profile).eq("id", data).select("id");
+    if (update.error) throw new Error(friendly(update.error));
+    if (portfolioUrls.length) {
+      const rows = portfolioUrls.map((url, i) => ({ designer_id: data, image_url: url, title: "Work sample " + (i + 1), sort_order: i + 1 }));
+      const inserted = await state.client.from("designer_portfolio_items").insert(rows);
+      if (inserted.error) throw new Error(friendly(inserted.error));
+    }
     await afterSignIn();
     if (db) db.session.designerId = data;
     return data;
@@ -1264,7 +1322,7 @@ const Cloud = (() => {
     newId, isTeam, isOwner, homeRoute, becomeCustomer,
     save, flush, refresh, refreshIfStale, placeOrder, deleteOrder,
     requestQuote, sendQuote, acceptQuote, recommendFabrics, chooseRecommendedFabric, generateStyleVariations, sendMessage, markChatRead, refreshChat,
-    uploadPhoto, removePhoto, photoUrl,
+    uploadPhoto, uploadVerificationFile, removePhoto, photoUrl,
     loadTeamLogins, addTeamLogin, removeTeamLogin,
     registerDesigner, acceptTailorTerms, setDeliveryAddress, saveDesignerProfile, addPortfolioItem, removePortfolioItem, setDesignerStatus, reviewSeller, resubmitSeller, addSpeciality,
     saveCustomerNotes, searchTailors, tailorPage, ensurePrices, loadPublicLists, convertPriceList, saveHomepageSettings

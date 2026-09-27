@@ -116,6 +116,14 @@ function adminSellersTable() {
 
 let sellerAppFilter = "pending";
 
+function adminVerificationLink(ref, label) {
+  if (!ref) return `<span class="owed">${escapeHtml(label)} missing</span>`;
+  const url = photoUrl(ref);
+  return url
+    ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener">✓ ${escapeHtml(label)}</a>`
+    : `<span class="paid">✓ ${escapeHtml(label)} uploaded</span>`;
+}
+
 function renderSellerApplications() {
   const groups = { pending: "Waiting", approved: "Approved", declined: "Changes asked", hidden: "Suspended" };
   const all = db.suppliers;
@@ -132,8 +140,15 @@ function renderSellerApplications() {
         <div class="muted small-text">${country ? country.flag + " " + escapeHtml(country.name) : "No country"}${s.city ? " · " + escapeHtml(s.city) : ""} · shown as “${escapeHtml(s.location || "—")}” · ${escapeHtml(s.currency_code || "GBP")}</div>
         <div class="small-text">${escapeHtml(s.contact_name || "No contact name")}${s.phone ? ` · 📞 ${escapeHtml(s.phone)}` : ""}${s.email ? ` · ✉ ${escapeHtml(s.email)}` : ""}</div>
         <div class="small-text">${escapeHtml([s.address_line, s.city, s.postcode].filter(Boolean).join(", ") || "No address")}</div>
+        ${s.business_description ? `<div class="small-text"><span class="muted">Business:</span> ${escapeHtml(s.business_description)}</div>` : `<div class="small-text owed">Business description missing</div>`}
         ${s.sells ? `<div class="small-text"><span class="muted">Sells:</span> ${escapeHtml(s.sells)}</div>` : ""}
+        ${s.delivery_areas ? `<div class="small-text"><span class="muted">Delivery areas:</span> ${escapeHtml(s.delivery_areas)}</div>` : `<div class="small-text owed">Delivery areas missing</div>`}
         ${(s.sample_photos || []).length ? `<div class="application-photos">${s.sample_photos.map((ref, i) => `<img src="${escapeHtml(photoUrl(ref))}" alt="Sample photo ${i + 1}" loading="lazy">`).join("")}</div>` : ""}
+        <div class="small-text verification-links">
+          ${adminVerificationLink(s.verification_id, "Government ID")} ·
+          ${adminVerificationLink(s.verification_address, "Proof of address")}
+          ${s.business_registration ? ` · ${adminVerificationLink(s.business_registration, "Business registration")}` : " · business registration not supplied"}
+        </div>
         <div class="small-text">${fabrics.length} fabric${fabrics.length === 1 ? "" : "s"} added${s.submitted_at ? ` · applied ${formatDate(String(s.submitted_at).slice(0, 10))}` : ""}
           ${s.seller_terms_accepted_at ? ` · <span class="paid">✓ accepted the seller terms</span>` : s.submitted_at ? ` · <span class="owed">hasn't accepted the seller terms</span>` : ""}</div>
         ${s.admin_note ? `<div class="small-text owed">Your note: ${escapeHtml(s.admin_note)}</div>` : ""}
