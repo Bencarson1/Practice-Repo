@@ -641,14 +641,111 @@ function chatButton(order, primary) {
   return `<button class="${primary ? "cta" : "btn-outline"} chat-open" onclick="go('chat/${order.id}')">💬 Chat with ${escapeHtml(designerName(order.designer_id))}${unread ? ` <span class="chat-badge">${unread} new</span>` : ""}</button>`;
 }
 
+function openRecommendedFabricPhotos(fabricId, index) {
+  const fabric = findFabric(fabricId);
+  const photos = fabric ? fabricPhotoRefs(fabric) : [];
+  if (!photos.length) return;
+  styleViewer = {
+    photos: photos.slice(),
+    index: Math.min(index || 0, photos.length - 1),
+    title: fabric.name,
+    returnFocus: document.activeElement
+  };
+  document.addEventListener("keydown", styleViewerKeys);
+  drawStyleViewer();
+}
+
+function customerFabricRecommendationsHtml(order) {
+  const pending = fabricRecommendations(order, ["pending"]);
+  const selectedRec = fabricRecommendations(order, ["selected"])[0] || null;
+  const selectedFabric = selectedRec ? findFabric(selectedRec.fabric_id) : (order.fabric_id ? findFabric(order.fabric_id) : null);
+
+  if (!pending.length) {
+    if (!selectedFabric || quoteStatus(order) !== "requested") return "";
+    const seller = findSupplier(selectedFabric.supplier_id);
+    return `<div class="card fabric-choice-card">
+      <div class="row-between"><h3>Your fabric</h3><span class="badge stage-quote">Selected</span></div>
+      <div class="recommended-choice">
+        <button type="button" class="recommended-photo" onclick="openRecommendedFabricPhotos('${selectedFabric.id}',0)" aria-label="View photos of ${escapeHtml(selectedFabric.name)}">
+          <img src="${fabricCoverUrl(selectedFabric)}" alt="">
+        </button>
+        <div>
+          <b>${escapeHtml(selectedFabric.name)}</b>
+          <div class="meta">${escapeHtml(seller ? seller.name : "Fabric seller")} · ${escapeHtml(fabricPriceText(selectedFabric, designerFabricUnit(designerById(order.designer_id))))}</div>
+          <div class="meta">Your tailor will confirm how much you need and include it in the quote.</div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  const batch = pending[0].batch_id;
+  const recs = pending.filter(r => r.batch_id === batch);
+  const note = recs[0] && recs[0].note ? recs[0].note : "";
+
+  return `<div class="card fabric-choice-card">
+    <h3>Your tailor recommends these fabrics</h3>
+    <p class="meta">Choose the one you prefer. Nothing is bought yet. Your tailor will confirm the amount needed before sending the final quote.</p>
+    ${note ? `<div class="notice soft"><b>Tailor's note:</b> ${escapeHtml(note)}</div>` : ""}
+    <div class="customer-recommend-grid">
+      ${recs.map(rec => {
+        const fabric = findFabric(rec.fabric_id);
+        if (!fabric) return "";
+        const seller = findSupplier(fabric.supplier_id);
+        const available = isBuyable(fabric);
+        const unit = designerFabricUnit(designerById(order.designer_id));
+        return `<div class="customer-recommend ${available ? "" : "unavailable"}">
+          <button type="button" class="recommended-photo" onclick="openRecommendedFabricPhotos('${fabric.id}',0)" aria-label="View photos of ${escapeHtml(fabric.name)}">
+            <img src="${fabricCoverUrl(fabric)}" alt="">
+            <span class="pcount">▣ ${fabricPhotoRefs(fabric).length}</span>
+          </button>
+          <div class="recommend-info">
+            <b>${escapeHtml(fabric.name)}</b>
+            <small>${escapeHtml(seller ? seller.name : "Fabric seller")}</small>
+            <small>${escapeHtml(fabricPriceText(fabric, unit))} · ${available ? lengthText(fabric.yards_available, unit) + " in stock" : "Unavailable"}</small>
+          </div>
+          <button type="button" class="optbtn sel" onclick="chooseTailorRecommendedFabric('${order.id}','${rec.id}')" ${available ? "" : "disabled"}>
+            ${available ? "Choose this fabric" : "Unavailable"}
+          </button>
+        </div>`;
+      }).join("")}
+    </div>
+  </div>`;
+}
+
+let choosingRecommendedFabric = false;
+function chooseTailorRecommendedFabric(orderId, recommendationId) {
+  const order = findOrder(orderId);
+  if (!order || choosingRecommendedFabric) return;
+  const rec = (db.fabric_recommendations || []).find(r => r.id === recommendationId && r.order_id === order.id);
+  const fabric = rec ? findFabric(rec.fabric_id) : null;
+  if (!rec || !fabric) { toast("That recommendation is no longer available."); return; }
+  if (!confirm(`Choose ${fabric.name} for this order? Nothing will be charged yet.`)) return;
+  choosingRecommendedFabric = true;
+  let result;
+  try {
+    result = chooseRecommendedFabricForOrder(order, recommendationId);
+  } catch (error) {
+    result = Promise.reject(error);
+  }
+  Promise.resolve(result)
+    .then(() => {
+      if (!Cloud.live) saveData();
+      flashMessage = `${fabric.name} selected. Your tailor can now confirm the amount needed and send your quote.`;
+      renderAll();
+    })
+    .catch(error => toast(error.message || "Could not choose that fabric."))
+    .finally(() => { choosingRecommendedFabric = false; });
+}
+
 // What the customer can do now on an order that's still a request or a quote
 function quoteBlock(order) {
   const status = quoteStatus(order);
   if (status === "requested") {
-    return `<div class="quote-card waiting">
+    const recs = customerFabricRecommendationsHtml(order);
+    return `${recs}<div class="quote-card waiting">
       <b>${escapeHtml(QUOTE_STATUS_LABELS.requested)}</b>
       ${order.fabric_problem ? `<div class="notice warn">${escapeHtml(order.fabric_problem)}. ${escapeHtml(designerName(order.designer_id))} will suggest another fabric in the chat.</div>` : ""}
-      <div class="meta">${escapeHtml(designerName(order.designer_id))} will chat with you to agree how many yards of fabric you need, then send your quote here. Nothing is bought or charged until you accept it.</div>
+      <div class="meta">${recs ? "Once you choose a recommended fabric, your tailor confirms the amount needed and sends the quote." : escapeHtml(designerName(order.designer_id)) + " will chat with you about the fabric, confirm how much is needed, then send your quote here."} Nothing is bought or charged until you accept the quote.</div>
       ${chatButton(order, true)}
     </div>`;
   }
