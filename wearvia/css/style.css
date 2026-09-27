@@ -742,6 +742,117 @@ td select { width: auto !important; }
 .viewer-nav.prev { left: 12px; }
 .viewer-nav.next { right: 12px; }
 
+/* ---------- Tailor fabric recommendations ---------- */
+
+.recommend-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+.recommend-fabric {
+  position: relative;
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 9px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 8px;
+  background: #fff;
+  cursor: pointer;
+}
+.recommend-fabric.selected {
+  border: 2px solid var(--gold);
+  background: #fffaf0;
+}
+.recommend-fabric input {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+}
+.recommend-fabric img {
+  width: 58px;
+  height: 74px;
+  object-fit: cover;
+  border-radius: 8px;
+  background: var(--soft);
+}
+.recommend-info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.recommend-info b,
+.recommend-info small {
+  overflow-wrap: anywhere;
+}
+.recommend-info small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.customer-recommend-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+.customer-recommend {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+}
+.customer-recommend.unavailable {
+  opacity: .6;
+}
+.recommended-photo {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border: 0;
+  padding: 0;
+  background: var(--soft);
+  cursor: zoom-in;
+  overflow: hidden;
+}
+.recommended-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.recommended-photo .pcount {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  background: rgba(8,11,20,.72);
+  color: #fff;
+  border-radius: 999px;
+  padding: 3px 7px;
+  font-size: 10px;
+}
+.customer-recommend .recommend-info {
+  padding: 9px 10px 4px;
+  flex: 1;
+}
+.customer-recommend > .optbtn {
+  margin: 7px 9px 9px;
+}
+.recommended-choice {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+.recommended-choice .recommended-photo {
+  aspect-ratio: 1 / 1;
+  border-radius: 10px;
+}
+
 /* ---------- Small screens ---------- */
 
 @media (max-width: 820px) {

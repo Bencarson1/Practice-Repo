@@ -265,7 +265,7 @@ const Cloud = (() => {
   }
 
   async function load() {
-    const tables = ["fabrics", "measurement_profiles", "orders", "payments",
+    const tables = ["fabrics", "measurement_profiles", "orders", "fabric_recommendations", "payments",
       "invoices", "deliveries", "fabric_order_lines", "tailors", "wedding_orders", "wedding_order_members",
       "ready_to_wear_sales", "order_messages", "order_chat_reads", "countries", "specialities", "designer_customer_notes",
       "currencies", "exchange_rates"];
@@ -406,6 +406,7 @@ const Cloud = (() => {
           concept_variation: o.concept_variation || 1, concept_image_url: o.concept_image_url || "",
           inspiration: photos.length ? { photos: photos.map(p => `sb:${STYLE}/${p}`), link: o.inspiration_link || "", note: o.inspiration_note || "" } : null,
           measurement_profile_id: o.measurement_profile_id, fabric_id: o.fabric_id, fabric_supplier_id: o.fabric_supplier_id,
+          fabric_plan: o.fabric_plan || (o.fabric_id ? "marketplace" : "later"),
           fabric_yards: num(o.fabric_yards) || 0, fabric_cost: num(o.fabric_cost) || 0,
           line_items: o.line_items || (invoice && invoice.line_items) || [
             { label: "Fabric", amount: num(o.fabric_cost) || 0 }, { label: "Tailoring", amount: num(o.tailoring_cost) || 0 },
@@ -430,6 +431,19 @@ const Cloud = (() => {
           created_at: day(o.created_at) || today(), updated_at: day(o.updated_at) || today()
         };
       }),
+
+
+      fabric_recommendations: (r.fabric_recommendations || []).filter(x => numberOf.has(x.order_id)).map(x => ({
+        id: x.id,
+        batch_id: x.batch_id,
+        order_id: numberOf.get(x.order_id),
+        fabric_id: x.fabric_id,
+        designer_id: x.designer_id,
+        note: x.note || "",
+        status: x.status || "pending",
+        created_at: iso(x.created_at),
+        selected_at: iso(x.selected_at)
+      })),
 
       payments: r.payments.map(p => ({
         id: p.id, order_id: numberOf.get(p.order_id), amount: num(p.amount), method: p.method, kind: p.kind,
@@ -629,6 +643,7 @@ const Cloud = (() => {
         outfit_type: details.outfit, colour: details.colour, embroidery: details.embroidery,
         sleeve_style: details.sleeve, neck_style: details.neck, concept_variation: details.variation || 1,
         measurement_profile_id: details.profileId || null, fabric_id: details.fabric ? details.fabric.id : null,
+        fabric_plan: details.fabricPlan || (details.fabric ? "marketplace" : "recommend"),
         inspiration_photos: insp ? (insp.aiSelected ? [insp.aiSelected].concat(insp.photos || []) : (insp.photos || []))
           .map(ref => photoPath(ref, STYLE)).filter(Boolean) : [],
         inspiration_link: insp ? insp.link || null : null,
@@ -645,6 +660,37 @@ const Cloud = (() => {
       }
       await load();
       return db.orders.find(o => o._uuid === id);
+    });
+  }
+
+  function recommendFabrics(order, fabricIds, note) {
+    return run(async () => {
+      const { error } = await state.client.rpc("wearvia_recommend_fabrics", {
+        p_order_id: order._uuid,
+        p_fabric_ids: fabricIds,
+        p_note: note || null
+      });
+      if (error) {
+        await load().catch(() => {});
+        throw new Error(friendly(error));
+      }
+      await load();
+      return db.fabric_recommendations.filter(r => r.order_id === order.id && r.status === "pending");
+    });
+  }
+
+  function chooseRecommendedFabric(order, recommendationId) {
+    return run(async () => {
+      const { data, error } = await state.client.rpc("wearvia_choose_recommended_fabric", {
+        p_order_id: order._uuid,
+        p_recommendation_id: recommendationId
+      });
+      if (error) {
+        await load().catch(() => {});
+        throw new Error(friendly(error));
+      }
+      await load();
+      return data || { ok: true };
     });
   }
 
@@ -1237,7 +1283,7 @@ const Cloud = (() => {
     start, afterSignIn, signIn, signUp, signOut, sendPasswordReset, setNewPassword,
     enterDemo, leaveDemo, newId, isTeam, isOwner, homeRoute, becomeCustomer,
     save, flush, refresh, refreshIfStale, placeOrder, deleteOrder,
-    requestQuote, sendQuote, acceptQuote, generateStyleVariations, sendMessage, markChatRead, refreshChat,
+    requestQuote, sendQuote, acceptQuote, recommendFabrics, chooseRecommendedFabric, generateStyleVariations, sendMessage, markChatRead, refreshChat,
     uploadPhoto, removePhoto, photoUrl,
     loadTeamLogins, addTeamLogin, removeTeamLogin,
     registerDesigner, acceptTailorTerms, setDeliveryAddress, saveDesignerProfile, addPortfolioItem, removePortfolioItem, setDesignerStatus, reviewSeller, resubmitSeller, addSpeciality,

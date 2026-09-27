@@ -96,6 +96,98 @@ function designCard(order, extraRows) {
   </div>`;
 }
 
+function fabricRecommendationCard(order) {
+  const current = fabricRecommendations(order, ["pending"]);
+  const selected = fabricRecommendations(order, ["selected"])[0] || null;
+  const selectedFabric = selected ? findFabric(selected.fabric_id) : null;
+  const fabrics = quotableFabrics(order);
+  const currentIds = new Set(current.map(r => r.fabric_id));
+  const currentNote = current.length ? current[0].note || "" : "";
+  const unit = designerFabricUnit(designerById(order.designer_id));
+
+  if (!fabrics.length) {
+    return `<div class="card">
+      <h2>Recommend marketplace fabric</h2>
+      <p class="empty">There are no approved marketplace fabrics in stock yet. You can still chat with the customer and arrange fabric later.</p>
+    </div>`;
+  }
+
+  return `<div class="card fabric-recommend-card">
+    <div class="row-between">
+      <h2>Recommend marketplace fabric</h2>
+      <span class="meta">Choose up to 3</span>
+    </div>
+    <p class="hint">${order.fabric_plan === "recommend" ? "<b>The customer asked you to help choose fabric.</b> " : ""}Send suitable NebedaHub marketplace fabrics to the customer. They choose one before you prepare the fabric-inclusive quote.</p>
+    ${selectedFabric ? `<div class="notice"><b>Customer selected:</b> ${escapeHtml(selectedFabric.name)}. You can use it in the quote below.</div>` : ""}
+    ${current.length ? `<div class="notice soft"><b>Waiting for customer:</b> ${current.length} recommendation${current.length === 1 ? "" : "s"} sent.</div>` : ""}
+    <form id="fabric-rec-form-${order.id}" class="stack" onsubmit="return sendFabricRecommendations(event, '${order.id}')">
+      <div class="recommend-grid">
+        ${fabrics.map(f => {
+          const seller = findSupplier(f.supplier_id);
+          const checked = currentIds.has(f.id);
+          return `<label class="recommend-fabric ${checked ? "selected" : ""}">
+            <input type="checkbox" name="fabricRecommendation" value="${f.id}" ${checked ? "checked" : ""}
+              onchange="limitFabricRecommendations(this, '${order.id}')">
+            <img src="${fabricCoverUrl(f)}" alt="">
+            <span class="recommend-info">
+              <b>${escapeHtml(f.name)}</b>
+              <small>${escapeHtml(seller ? seller.name : "Seller")}</small>
+              <small>${escapeHtml(fabricPriceText(f, unit))} · ${lengthText(f.yards_available, unit)} left</small>
+            </span>
+          </label>`;
+        }).join("")}
+      </div>
+      <label>Recommendation note <small class="muted">(optional)</small>
+        <textarea name="recommendationNote" rows="2" maxlength="500" placeholder="e.g. These two fabrics will hold the embroidery well.">${escapeHtml(currentNote)}</textarea>
+      </label>
+      <div class="form-actions"><button type="submit">${current.length ? "Update recommendations" : "Recommend selected fabrics"}</button></div>
+    </form>
+  </div>`;
+}
+
+function limitFabricRecommendations(input, orderId) {
+  const form = document.getElementById("fabric-rec-form-" + orderId);
+  if (!form) return;
+  const checked = Array.from(form.querySelectorAll('input[name="fabricRecommendation"]:checked'));
+  if (checked.length > 3) {
+    input.checked = false;
+    toast("Choose up to 3 fabrics.");
+  }
+  input.closest(".recommend-fabric").classList.toggle("selected", input.checked);
+}
+
+let sendingFabricRecommendations = false;
+function sendFabricRecommendations(event, orderId) {
+  event.preventDefault();
+  if (sendingFabricRecommendations) return false;
+  const form = event.target;
+  const order = findOrder(orderId);
+  const ids = Array.from(form.querySelectorAll('input[name="fabricRecommendation"]:checked')).map(x => x.value);
+  if (!ids.length) { toast("Choose at least one fabric to recommend."); return false; }
+  if (ids.length > 3) { toast("Choose no more than 3 fabrics."); return false; }
+  const button = form.querySelector('button[type="submit"]');
+  sendingFabricRecommendations = true;
+  if (button) { button.disabled = true; button.textContent = "Sending…"; }
+  let result;
+  try {
+    result = recommendFabricsForOrder(order, ids, form.recommendationNote.value);
+  } catch (error) {
+    result = Promise.reject(error);
+  }
+  Promise.resolve(result)
+    .then(() => {
+      if (!Cloud.live) saveData();
+      toast("Fabric recommendations sent to the customer.");
+      renderAll();
+    })
+    .catch(error => {
+      alert(error.message || "Could not send the recommendations.");
+      if (button) { button.disabled = false; button.textContent = "Recommend selected fabrics"; }
+    })
+    .finally(() => { sendingFabricRecommendations = false; });
+  return false;
+}
+
 function renderQuoteDetail(orderId) {
   const order = findOrder(orderId);
   if (!order) return `${bizHeader("Quote request not found")}<p><a href="#/quotes">← Quote requests</a></p>`;
@@ -139,6 +231,7 @@ function renderQuoteDetail(orderId) {
       </div>
 
       <div class="stack">
+        ${fabricRecommendationCard(order)}
         <div class="card quote-form-card">
           <h2>${quoted ? "Quote sent" : "Send the quote"}</h2>
           ${quoted ? `<p class="hint">Sent ${formatDate(order.quoted_at)}: <b>${lengthText(order.fabric_yards, orderFabricUnit(order))}</b> · total <b>${money(order.quote_total, orderCurrency(order))}</b> — waiting for the customer to accept. You can send a new one until they do.</p>` : ""}
@@ -241,6 +334,11 @@ function sendQuoteFromForm(event, orderId) {
   if (sendingQuote) return false;
   const form = event.target;
   const order = findOrder(orderId);
+  const waitingRecommendations = fabricRecommendations(order, ["pending"]);
+  if (waitingRecommendations.length) {
+    alert("The customer still needs to choose one of your recommended fabrics before you send the quote.");
+    return false;
+  }
   const fabric = findFabric(form.fabric.value);
   const tailor = designerById(order.designer_id);
   const unit = designerFabricUnit(tailor);
