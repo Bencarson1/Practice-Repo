@@ -228,8 +228,8 @@ function saveMyProfile(event) {
           currency_code: v.currency_code, phone: v.phone || null
         });
       }
-      // Demo: a new currency converts the price list and ready-to-wear (the database does this in live mode)
-      if (v.currency_code !== designerCurrency(d)) convertDemoDesignerPrices(d, designerCurrency(d), v.currency_code);
+      // Local fallback: convert prices only when the live database path is unavailable
+      if (v.currency_code !== designerCurrency(d)) convertLocalDesignerPrices(d, designerCurrency(d), v.currency_code);
       const oldLogo = d.profile_image;
       Object.assign(d, v, { location: "" });
       refreshDesignerPublic(d);
@@ -252,7 +252,7 @@ function saveMyProfile(event) {
   return false;
 }
 
-function convertDemoDesignerPrices(d, from, to) {
+function convertLocalDesignerPrices(d, from, to) {
   pricesOf(d.id).forEach(p => {
     const converted = convertMoney(p.price, p.currency_code || from, to);
     if (converted != null) { p.price = nicePrice(converted, to); p.currency_code = to; }
@@ -411,7 +411,7 @@ function addSpecialityFromForm(event) {
     Cloud.addSpeciality(name).then(() => { toast(`${name} added.`); renderAll(); }, error => alert(error.message));
     return false;
   }
-  if (!db.specialities) db.specialities = DEMO_SPECIALITIES.map(sp => Object.assign({}, sp));
+  if (!db.specialities) db.specialities = SPECIALITIES.map(sp => Object.assign({}, sp));
   db.specialities.push({ id: "SP" + (db.specialities.length + 1), name, sort_order: 100, active: true });
   saveData();
   toast(`${name} added.`);
