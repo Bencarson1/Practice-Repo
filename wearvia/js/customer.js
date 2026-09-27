@@ -128,19 +128,151 @@ function screenHome() {
   const d = db.draft;
   const inProgress = d && d.designDone;
   const resume = inProgress ? FLOW.slice().reverse().find(f => !flowRedirect(f.screen)) : null;
+  const tailors = (db.designers || [])
+    .filter(t => (t.admin_status || "approved") === "approved" && t.custom_orders !== false)
+    .slice()
+    .sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0))
+    .slice(0, 4);
+  const fabrics = (db.fabrics || [])
+    .filter(f => f.status === "approved" && !f.deleted_at && !f.sold_out && Number(f.yards_available || 0) > 0)
+    .slice(0, 6);
+  const categories = OUTFITS.slice(0, 8);
+  const heroFabric = fabrics[0] || null;
+  const heroTailor = tailors[0] || null;
+  const heroImage = heroFabric ? fabricCoverUrl(heroFabric)
+    : heroTailor ? (photoUrl(heroTailor.profile_image) || photoUrl(`logo:${initialsOf(heroTailor.business_name)}:7a1f2b`))
+    : "";
+
   return `
-    <div class="hero">
-      <div class="brand">${APP_NAME}</div>
-      <div class="tagline">${APP_TAGLINE}</div>
-      <h2>Your Style.<br>Our Craft.<br>Timeless You.</h2>
-      <button class="btn near-btn" onclick="go('tailors')"><span aria-hidden="true">📍</span> Find tailors near me</button>
-      ${resume ? `<button class="btn2" onclick="go('${resume.screen}')">Continue your ${escapeHtml(d.outfit)} order${draftHasTailor() ? ` with ${escapeHtml(draftDesigner().business_name)}` : ""}</button>` : ""}
-      <button class="btn2" onclick="startOrder()">Start an Order</button>
-      <button class="btn2" onclick="go('market')">Fabric Marketplace</button>
-      <a class="linkish on-navy" href="${escapeHtml(appUrl("seller", "welcome"))}">Sell your fabric on ${APP_NAME} →</a>
-      <a class="linkish on-navy" href="${escapeHtml(appUrl("business", "welcome"))}">Are you a tailor or designer? Join ${APP_NAME} →</a>
+    <div class="market-home">
+      <section class="desktop-market-nav" aria-label="Marketplace navigation">
+        <button class="desktop-home-link active" onclick="go('home')">Home</button>
+        <button class="desktop-home-link" onclick="go('outfit')">Outfits</button>
+        <button class="desktop-home-link" onclick="go('market')">Fabrics</button>
+        <button class="desktop-home-link" onclick="go('tailors')">Tailors</button>
+        <span class="desktop-market-spacer"></span>
+        <a class="desktop-home-link" href="${escapeHtml(appUrl("seller", "welcome"))}">Sell fabric</a>
+        <a class="desktop-home-link" href="${escapeHtml(appUrl("business", "welcome"))}">For tailors</a>
+      </section>
+
+      <section class="market-hero">
+        <div class="market-hero-copy">
+          <span class="market-kicker">Fashion marketplace</span>
+          <h1>Design it. Find the fabric. Choose the tailor.</h1>
+          <p>${APP_NAME} brings custom fashion, trusted tailors and marketplace fabrics into one connected order.</p>
+          <div class="market-hero-actions">
+            <button class="market-primary" onclick="startOrder()">Start an order</button>
+            <button class="market-secondary" onclick="go('tailors')">Find tailors near me</button>
+          </div>
+          ${resume ? `<button class="market-resume" onclick="go('${resume.screen}')">Continue your ${escapeHtml(d.outfit)} order${draftHasTailor() ? ` with ${escapeHtml(draftDesigner().business_name)}` : ""} →</button>` : ""}
+          <div class="market-trust-row">
+            <span>✓ Verified marketplace participants</span>
+            <span>✓ Quote before payment</span>
+            <span>✓ Order chat stays in NebedaHub</span>
+          </div>
+        </div>
+        <div class="market-hero-visual">
+          ${heroImage ? `<img src="${escapeHtml(heroImage)}" alt="Fashion marketplace preview">` : `<div class="market-hero-fallback">NebedaHub</div>`}
+          <div class="market-hero-card">
+            <b>Everything Fashion, All in One Place.</b>
+            <span>Tailor + fabric + design + order tracking</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="market-search-strip">
+        <div class="market-home-search">
+          <span aria-hidden="true">⌕</span>
+          <input type="search" placeholder="Search fabrics, tailors and fashion services" aria-label="Search NebedaHub"
+            onkeydown="if(event.key==='Enter'){homeSearch(this.value)}">
+          <button onclick="homeSearch(this.previousElementSibling.value)">Search</button>
+        </div>
+      </section>
+
+      <section class="market-section">
+        <div class="market-section-head">
+          <div><span class="market-kicker">Start here</span><h2>Shop by category</h2></div>
+          <button class="market-text-link" onclick="startOrder()">View all outfits →</button>
+        </div>
+        <div class="market-category-grid">
+          ${categories.map(o => `<button class="market-category-card" onclick="startHomeOutfit('${escapeHtml(o.name)}')">
+            <span class="market-category-art">${conceptSVG({ outfit:o.name, colour:"#7a1f2b", embroidery:"None", sleeve:"Fitted", neck:"Round" },1)}</span>
+            <b>${escapeHtml(o.name)}</b>
+            <small>Request a tailor quote</small>
+          </button>`).join("")}
+        </div>
+      </section>
+
+      <section class="market-section">
+        <div class="market-section-head">
+          <div><span class="market-kicker">Marketplace</span><h2>Fabric picks</h2></div>
+          <button class="market-text-link" onclick="go('market')">Browse all fabrics →</button>
+        </div>
+        ${fabrics.length ? `
+          <div class="market-home-products">
+            ${fabrics.map(f => {
+              const seller = findSupplier(f.supplier_id);
+              const unit = screenFabricUnit();
+              return `<button class="market-home-product" onclick="go('fabricView/${f.id}')">
+                <span class="market-home-product-image"><img src="${fabricCoverUrl(f)}" alt="${escapeHtml(f.name)}"></span>
+                <b>${escapeHtml(f.name)}</b>
+                <span class="market-home-price">${escapeHtml(fabricPriceText(f, unit))}</span>
+                <small>${escapeHtml(seller ? seller.name : "Fabric seller")}</small>
+              </button>`;
+            }).join("")}
+          </div>`
+          : `<div class="market-empty-card"><b>Fabric sellers are joining NebedaHub.</b><span>You can still start an order and let your tailor help with fabric.</span><button onclick="startOrder()">Start an order</button></div>`}
+      </section>
+
+      <section class="market-section">
+        <div class="market-section-head">
+          <div><span class="market-kicker">Professionals</span><h2>Tailors and designers</h2></div>
+          <button class="market-text-link" onclick="go('tailors')">Find more tailors →</button>
+        </div>
+        ${tailors.length ? `
+          <div class="market-tailor-grid">
+            ${tailors.map(t => `<a class="market-tailor-card" href="#/tailor/${encodeURIComponent(t.slug || t.id)}">
+              <img src="${escapeHtml(photoUrl(t.profile_image) || photoUrl(`logo:${initialsOf(t.business_name)}:7a1f2b`))}" alt="">
+              <span><b>${escapeHtml(t.business_name)}</b>
+                <small>${escapeHtml(tailorAreaText(t) || t.location || "Tailor")}</small>
+                <small class="market-rating">${tailorRatingText(t)}</small>
+              </span>
+            </a>`).join("")}
+          </div>`
+          : `<div class="market-empty-card"><b>More tailors are joining.</b><span>Search your area to see who is available.</span><button onclick="go('tailors')">Find tailors</button></div>`}
+      </section>
+
+      <section class="market-service-grid">
+        <div><b>Verified participants</b><span>Approval and marketplace controls help build trust.</span></div>
+        <div><b>Tailor-led fabric choice</b><span>Your tailor can recommend marketplace fabrics inside your order.</span></div>
+        <div><b>Transparent quotes</b><span>Review the itemised quote before accepting the order.</span></div>
+        <div><b>Connected order journey</b><span>Design, measurements, fabric, chat and tracking stay together.</span></div>
+      </section>
+
+      <section class="market-join-panel">
+        <div><span class="market-kicker">Grow with NebedaHub</span><h2>Sell fashion services or fabrics</h2>
+          <p>Join the marketplace as a tailor, designer or fabric seller.</p></div>
+        <div class="market-join-actions">
+          <a href="${escapeHtml(appUrl("business", "welcome"))}">Join as tailor or designer</a>
+          <a href="${escapeHtml(appUrl("seller", "welcome"))}">Join as fabric seller</a>
+        </div>
+      </section>
     </div>
     ${cNav("home")}`;
+}
+
+function homeSearch(value) {
+  const q = String(value || "").trim();
+  if (!q) return;
+  marketFilters.search = q;
+  go("market");
+}
+
+function startHomeOutfit(outfit) {
+  const d = draft();
+  d.outfit = outfit;
+  saveData();
+  startOrder();
 }
 
 // "Start an Order": the customer picks their tailor first (Find tailors near
