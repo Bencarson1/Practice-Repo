@@ -136,17 +136,6 @@ function tabsHtml(tabs, active) {
   }).join("");
 }
 
-// The Sellers demo opens as the sample shop Lagos Wax Prints — from "Try the
-// demo", "Open the demo" or a shared link (/sellers/demo/ or /sellers/?demo=1).
-// Someone who signed out of the demo shop (the welcome page) stays signed out.
-function startSellerDemo() {
-  let started = /[?&]demo(=1|=true)?(&|$)/.test(location.search);
-  try { started = started || sessionStorage.getItem("wearvia-demo-start") === "1"; sessionStorage.removeItem("wearvia-demo-start"); } catch (e) { /* private browsing */ }
-  const route = currentRoute();
-  if (APP_KIND !== "seller" || !started || db.session.sellerId || ["welcome", "apply"].includes(route.screen) || !findSupplier(DEMO_SELLER_ID)) return;
-  db.session.sellerId = DEMO_SELLER_ID;
-  saveData();
-}
 
 // ---- NebedaHub Admin ----
 
@@ -225,13 +214,13 @@ function stageBadge(order) {
   return `<span class="badge stage-${cls}">${label === "Complete" ? "Complete" : escapeHtml(label)}</span>`;
 }
 
-// Which tailor's dashboard this is (only shown to people who work for more than one, and in the demo)
+// Which tailor's dashboard this is when someone manages more than one business
 function bizSwitcher() {
   const list = managedDesigners();
   if (list.length < 2) return "";
   return `<div class="biz-switch"><label>Dashboard for
     <select onchange="switchBizDesigner(this.value)">${list.map(d => `<option value="${d.id}" ${d.id === bizDesignerId() ? "selected" : ""}>${escapeHtml(d.business_name)}${d.admin_status !== "approved" ? " — " + TAILOR_STATUS_LABELS[d.admin_status].toLowerCase() : ""}</option>`).join("")}</select></label>
-    ${Cloud.live ? "" : `<span class="hint">Demo: switch tailor to see that each one only sees their own customers and orders.</span>`}</div>`;
+    </div>`;
 }
 
 function bizHeader(title, subtitle) {
@@ -270,15 +259,7 @@ if (!appMoving) Cloud.start()
       }
       return Auth.show("signIn");
     }
-    if (Cloud.live) return Auth.enterApp();
-    // Demo mode
-    Auth.hide();
-    Auth.drawChrome();
-    if (!location.hash || !/^#\//.test(location.hash)) history.replaceState(null, "", "#/" + APP.home);
-    startSellerDemo();
-    renderAll();
-    // Uploaded photos load from the browser's photo store a moment later; draw again when they're in
-    PhotoStore.ready.then(renderAll);
+    return Auth.enterApp();
   })
   .catch(error => {
     console.error(error);
