@@ -406,6 +406,7 @@ const Cloud = (() => {
           concept_variation: o.concept_variation || 1, concept_image_url: o.concept_image_url || "",
           inspiration: photos.length ? { photos: photos.map(p => `sb:${STYLE}/${p}`), link: o.inspiration_link || "", note: o.inspiration_note || "" } : null,
           measurement_profile_id: o.measurement_profile_id, fabric_id: o.fabric_id, fabric_supplier_id: o.fabric_supplier_id,
+          fabric_plan: o.fabric_plan || (o.fabric_id ? "marketplace" : "later"),
           fabric_yards: num(o.fabric_yards) || 0, fabric_cost: num(o.fabric_cost) || 0,
           line_items: o.line_items || (invoice && invoice.line_items) || [
             { label: "Fabric", amount: num(o.fabric_cost) || 0 }, { label: "Tailoring", amount: num(o.tailoring_cost) || 0 },
@@ -642,6 +643,7 @@ const Cloud = (() => {
         outfit_type: details.outfit, colour: details.colour, embroidery: details.embroidery,
         sleeve_style: details.sleeve, neck_style: details.neck, concept_variation: details.variation || 1,
         measurement_profile_id: details.profileId || null, fabric_id: details.fabric ? details.fabric.id : null,
+        fabric_plan: details.fabricPlan || (details.fabric ? "marketplace" : "recommend"),
         inspiration_photos: insp ? (insp.aiSelected ? [insp.aiSelected].concat(insp.photos || []) : (insp.photos || []))
           .map(ref => photoPath(ref, STYLE)).filter(Boolean) : [],
         inspiration_link: insp ? insp.link || null : null,
