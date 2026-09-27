@@ -1360,3 +1360,417 @@ details.card-lite > summary { list-style-position: inside; }
 .demo-card p { margin: 0; }
 .biz button.demo-button { font-size: 16px; padding: 13px 26px; border-radius: 10px; min-height: 48px; }
 @media (max-width: 520px) { .biz button.demo-button { width: 100%; } }
+
+
+/* ============================================================
+   Marketplace standard refresh
+   Inspired by mature global ecommerce patterns:
+   clear search, restrained colour, dense product browsing,
+   neutral cards, visible trust and strong primary actions.
+   ============================================================ */
+
+:root {
+  --navy: #7a1f2b;
+  --navy-2: #5f1721;
+  --gold: #b08d57;
+  --gold-ink: #2c2418;
+  --cream: #f5f5f5;
+  --card: #ffffff;
+  --soft: #fafafa;
+  --line: #e2e4e7;
+  --ink: #1f1f1f;
+  --muted: #6b7280;
+  --on-navy: #ffffff;
+  --owed: #b42318;
+  --paid: #1f7a4c;
+  --serif: "Inter", Arial, sans-serif;
+  --sans: "Inter", Arial, sans-serif;
+}
+
+/* Keep one recognisable brand system across customer, business, seller and admin. */
+html[data-app="business"],
+html[data-app="seller"],
+html[data-app="admin"] {
+  --navy: #7a1f2b;
+  --navy-2: #5f1721;
+}
+
+body {
+  background: #f5f5f5;
+  color: #1f1f1f;
+}
+
+h1, h2, h3, .serif {
+  font-family: var(--sans);
+  letter-spacing: -.015em;
+}
+h1 { font-size: 28px; font-weight: 700; }
+h2 { font-size: 20px; font-weight: 700; }
+h3 { font-size: 16px; font-weight: 700; }
+
+a { color: #7a1f2b; }
+
+/* Light marketplace header, closer to established ecommerce conventions. */
+.appbar {
+  background: #fff;
+  color: #1f1f1f;
+  border-bottom: 1px solid #e5e7eb;
+  box-shadow: 0 1px 4px rgba(0,0,0,.04);
+  padding: 11px 24px;
+  padding-top: max(11px, env(safe-area-inset-top));
+  gap: 18px;
+}
+.wordmark {
+  font-family: var(--sans);
+  font-size: 22px;
+  letter-spacing: -.02em;
+  color: #1f1f1f;
+  font-weight: 800;
+}
+.shop-pill {
+  color: #6b7280;
+  opacity: 1;
+  font-size: 12px;
+}
+.shop-pill b { color: #1f1f1f; }
+.account { color: #374151; }
+.account .who { opacity: 1; }
+.account .who b { color: #7a1f2b; }
+.chip-button {
+  color: #374151;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  border-radius: 8px;
+  padding: 7px 11px;
+}
+.chip-button:hover {
+  border-color: #7a1f2b;
+  color: #7a1f2b;
+}
+
+/* Desktop should use the available screen rather than looking like a phone emulator. */
+.customer-view {
+  padding: 18px 20px 0;
+}
+.capp {
+  max-width: 760px;
+  height: min(840px, calc(100vh - 120px));
+  border-radius: 16px;
+  border: 1px solid #e2e4e7;
+  box-shadow: 0 10px 28px rgba(31,31,31,.08);
+}
+.capp.is-wide {
+  max-width: 1180px;
+}
+.capp.is-wide .content {
+  padding-left: 28px;
+  padding-right: 28px;
+}
+.c-topbar {
+  font-family: var(--sans);
+  font-size: 20px;
+  font-weight: 700;
+  padding: 18px 22px 12px;
+}
+.content {
+  padding: 4px 22px 20px;
+  gap: 14px;
+}
+
+/* Navigation should be quiet, with one strong active state. */
+.bottomnav {
+  border-top: 1px solid #e5e7eb;
+  background: #fff;
+}
+.bottomnav .item {
+  color: #6b7280;
+  font-size: 10px;
+}
+.bottomnav .item.on {
+  color: #7a1f2b;
+}
+.bottomnav .plus {
+  background: #7a1f2b;
+  color: #fff;
+  box-shadow: none;
+}
+
+/* Main buttons use the brand colour. Gold is reserved for trust/premium accents. */
+.btn, .cta,
+.biz button[type=submit],
+.biz .form-actions button {
+  background: #7a1f2b;
+  color: #fff;
+  border-radius: 8px;
+  box-shadow: none;
+}
+.btn-outline {
+  border: 1px solid #7a1f2b;
+  color: #7a1f2b;
+  border-radius: 8px;
+}
+.btn2 {
+  border-radius: 8px;
+}
+.send-main-cta {
+  background: #7a1f2b;
+}
+
+.optbtn {
+  border-radius: 8px;
+  border-color: #d9dde3;
+  background: #fff;
+}
+.optbtn.sel,
+.biz .optbtn.sel {
+  background: #7a1f2b;
+  color: #fff;
+  border-color: #7a1f2b;
+}
+.chip-grid .chip {
+  border-radius: 8px;
+  background: #fff;
+}
+.chip-grid .chip.sel {
+  background: #7a1f2b;
+  color: #fff;
+  border-color: #7a1f2b;
+}
+.chip.sel .chip-sub {
+  color: #f0d7dc;
+}
+.chip-sub.gold {
+  color: #7a1f2b;
+}
+
+/* Forms and search: flatter, clearer and denser. */
+.field input,
+.field select,
+.field textarea,
+.biz input,
+.biz select,
+.biz textarea,
+.market-search input {
+  border-radius: 8px;
+  border-color: #d7dbe0;
+  background: #fff;
+}
+.market-search {
+  gap: 8px;
+}
+.market-search input {
+  min-height: 44px;
+  padding: 10px 14px;
+}
+.market-filters {
+  border-radius: 8px;
+  background: #fff;
+  border-color: #e2e4e7;
+}
+
+/* Product marketplace cards: more information, less decoration. */
+.mgrid {
+  grid-template-columns: repeat(auto-fill, minmax(165px, 1fr));
+  gap: 12px;
+}
+.mtile {
+  border-radius: 8px;
+  border-color: #e1e4e8;
+  box-shadow: 0 1px 3px rgba(0,0,0,.03);
+  transition: box-shadow .15s ease, border-color .15s ease, transform .15s ease;
+}
+.mtile:hover {
+  border-color: #cfd4da;
+  box-shadow: 0 5px 16px rgba(31,31,31,.08);
+  transform: translateY(-1px);
+}
+.mtile.sel {
+  outline: 2px solid #7a1f2b;
+}
+.mphoto {
+  margin-bottom: 7px;
+  background: #f3f4f6;
+}
+.mname {
+  font-size: 13px;
+  color: #1f1f1f;
+  font-weight: 600;
+}
+.mprice {
+  font-size: 14px;
+  color: #1f1f1f;
+  font-weight: 700;
+}
+.mseller {
+  color: #6b7280;
+}
+.mstock {
+  color: #1f7a4c;
+}
+.picked {
+  background: #7a1f2b;
+  color: #fff;
+}
+.ribbon {
+  border-radius: 4px;
+}
+
+/* Cards and dashboard panels should feel operational, not decorative. */
+.card,
+.send-summary-card,
+.send-choice-card,
+.card-lite {
+  border-radius: 10px;
+  border-color: #e2e4e7;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,.03);
+}
+.stat {
+  border-radius: 8px;
+  background: #fff;
+  border-color: #e2e4e7;
+}
+.notice {
+  border-radius: 8px;
+  background: #fff8ea;
+  border-color: #e5c98f;
+}
+.send-next.compact {
+  border-radius: 10px;
+  background: #fafafa;
+}
+.quote-card {
+  border-color: #d7a1aa;
+  background: #fff;
+  border-radius: 10px;
+}
+
+/* Business navigation now behaves more like a seller console. */
+.biz-tabs {
+  background: #fff;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 0 18px;
+}
+.biz-tabs .tab {
+  color: #555b65;
+  opacity: 1;
+  border-bottom-width: 2px;
+  padding: 12px 14px;
+}
+.biz-tabs .tab:hover {
+  color: #1f1f1f;
+}
+.biz-tabs .tab.active {
+  color: #7a1f2b;
+  border-bottom-color: #7a1f2b;
+}
+.biz {
+  max-width: 1280px;
+  padding: 24px 20px;
+}
+.biz button,
+.button {
+  background: #34383f;
+  color: #fff;
+  border-radius: 7px;
+}
+.biz button[type=submit],
+.biz .form-actions button {
+  background: #7a1f2b;
+}
+.biz button.danger {
+  background: #fff;
+  color: #b42318;
+}
+
+/* Tables use familiar admin-console density and clearer hover states. */
+table {
+  font-size: 13px;
+}
+th {
+  color: #6b7280;
+  font-size: 11px;
+  letter-spacing: .04em;
+}
+th, td {
+  border-bottom-color: #e6e8eb;
+  padding: 10px 9px;
+}
+tr.clickable:hover td {
+  background: #fafafa;
+}
+
+/* Trust and premium accents remain gold, but only in small details. */
+.gold,
+.stars button.on,
+.meta.stock {
+  color: #9a7440;
+}
+.flowbar li.done span,
+.tdot.done {
+  background: #b08d57;
+}
+.flowbar li.now span,
+.tdot.now {
+  background: #7a1f2b;
+  border-color: #7a1f2b;
+}
+:focus-visible {
+  outline-color: #7a1f2b;
+}
+
+/* Hero can retain a richer editorial treatment without turning the whole UI dark. */
+.capp.is-hero {
+  background: #231f20;
+}
+.hero {
+  background: linear-gradient(160deg, #231f20 0%, #4c151d 100%);
+  color: #fff;
+}
+.hero .brand,
+.hero .featured b {
+  color: #d0aa70;
+}
+.capp.is-hero .bottomnav {
+  background: #fff;
+  border-top-color: #e5e7eb;
+}
+.capp.is-hero .bottomnav .item {
+  color: #6b7280;
+}
+.capp.is-hero .bottomnav .item.on {
+  color: #7a1f2b;
+}
+
+/* Wider marketplace browsing on laptops. */
+@media (min-width: 900px) {
+  .capp:not(.is-hero) .market-search + .optbtns.scroll {
+    margin-top: -2px;
+  }
+  .capp.is-wide .mgrid {
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 16px;
+  }
+}
+
+/* Mobile remains full-screen and compact. */
+@media (max-width: 520px) {
+  .appbar {
+    padding: 8px 14px;
+  }
+  .wordmark {
+    font-size: 20px;
+  }
+  .capp {
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .content {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .mgrid {
+    grid-template-columns: repeat(2, minmax(0,1fr));
+    gap: 9px;
+  }
+}
