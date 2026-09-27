@@ -31,6 +31,59 @@ function extraFilterCount() {
   return [f.colour !== "All", f.price !== "any", f.seller !== "All", f.inStock].filter(Boolean).length;
 }
 
+function activeMarketFilterSummary() {
+  const f = marketFilters;
+  const parts = [];
+  if (f.type !== "All") parts.push("type: " + f.type);
+  if (f.colour !== "All") parts.push("colour: " + f.colour);
+  if (f.price !== "any") {
+    const band = priceBands().find(p => p.key === f.price);
+    parts.push("price: " + (band ? band.label : f.price));
+  }
+  if (f.seller !== "All") {
+    const seller = findSupplier(f.seller);
+    parts.push("seller: " + (seller ? seller.name : "selected seller"));
+  }
+  if (f.inStock) parts.push("in stock only");
+  if (f.search) parts.push('search: "' + f.search + '"');
+  return parts;
+}
+
+function approvedMarketplaceSellers() {
+  return (db.suppliers || [])
+    .filter(s => (s.admin_status || "approved") === "approved")
+    .slice()
+    .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+}
+
+function marketplaceSellerDirectory() {
+  const sellers = approvedMarketplaceSellers();
+  if (!sellers.length) return `
+    <div class="card">
+      <h3>Fabric sellers</h3>
+      <p class="empty">No approved fabric sellers are available yet.</p>
+    </div>`;
+
+  return `
+    <div class="card">
+      <div class="row-between"><h3>Fabric sellers</h3><span class="meta">${sellers.length} approved</span></div>
+      <p class="meta">Browse approved sellers even when their fabrics do not match your current filters.</p>
+      <div class="stack">
+        ${sellers.map(s => {
+          const listed = activeFabrics().filter(f => f.supplier_id === s.id && isOnMarket(f)).length;
+          return `<button class="seller-card clickable" type="button" onclick="setMarketFilter('seller','${s.id}')">
+            <img class="logo" src="${sellerLogoUrl(s)}" alt="">
+            <span>
+              <span class="name">${escapeHtml(s.name || "Fabric seller")}</span>
+              <span class="meta">${escapeHtml(s.location || s.city || "Location not added")} · ${escapeHtml(sellerRatingText(s))}</span>
+              <span class="meta">${listed} approved fabric${listed === 1 ? "" : "s"} listed</span>
+            </span>
+          </button>`;
+        }).join("")}
+      </div>
+    </div>`;
+}
+
 function marketFilterBar() {
   const f = marketFilters;
   const onMarket = activeFabrics().filter(isOnMarket);
@@ -83,7 +136,12 @@ function marketResults() {
   const list = marketFabrics(marketFilters);
   const selectedId = marketMode === "flow" ? draft().fabricId : null;
   if (!list.length) {
-    return `<div class="empty">No fabrics match. <button class="linkish" onclick="clearMarketFilters()">Clear filters</button></div>`;
+    const active = activeMarketFilterSummary();
+    return `<div class="empty">
+      <b>No fabrics match your current filters.</b>
+      ${active.length ? `<div class="meta">Active: ${active.map(escapeHtml).join(" · ")}</div>` : ""}
+      <button class="linkish" onclick="clearMarketFilters()">Clear all filters</button>
+    </div>`;
   }
   const foreign = list.find(f => approxMoney(1, fabricCurrency(f)));
   return `<div class="meta">${list.length} fabric${list.length === 1 ? "" : "s"} from ${new Set(list.map(f => f.supplier_id)).size} seller${new Set(list.map(f => f.supplier_id)).size === 1 ? "" : "s"}</div>
@@ -101,6 +159,7 @@ function screenMarket() {
       <div class="meta">Fabrics from independent sellers, checked by NebedaHub. Tap a fabric to see every photo.</div>
       ${marketFilterBar()}
       <div id="market-results" class="stack">${marketResults()}</div>
+      ${marketplaceSellerDirectory()}
     </div>
     ${cNav("market")}`;
 }
