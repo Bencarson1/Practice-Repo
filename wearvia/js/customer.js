@@ -430,6 +430,7 @@ function screenFabric() {
           <button class="btn-outline" onclick="setFabricPlan('own')">I already have my fabric</button>
         </div>`}
     </div>`;
+}
 
 function setFabricPlan(plan) {
   const d = draft();
@@ -437,7 +438,6 @@ function setFabricPlan(plan) {
   if (plan !== "marketplace") d.fabricId = null;
   saveData();
   go("send");
-}
 }
 
 // ---- Send to tailor (end of step 4) ----
