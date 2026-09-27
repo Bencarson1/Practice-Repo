@@ -23,9 +23,9 @@ const FLOW_REQUIRES = {
   concept: ["designDone"],
   measurements: ["designDone", "conceptApproved"],
   fabric: ["designDone", "conceptApproved", "profileId"],
-  send: ["designDone", "conceptApproved", "profileId", "fabricId"]
+  send: ["designDone", "conceptApproved", "profileId"]
 };
-const FLAG_SCREEN = { designDone: "design", conceptApproved: "concept", profileId: "measurements", fabricId: "fabric" };
+const FLAG_SCREEN = { designDone: "design", conceptApproved: "concept", profileId: "measurements" };
 
 let balanceMethod = "Card";
 let depositMethod = "Card";
@@ -36,7 +36,7 @@ function newDraft() {
   return {
     outfit: "Agbada", colour: "#1e2a44", embroidery: "Gold", sleeve: "Wide", neck: "Round",
     variation: 1, designDone: false, conceptApproved: false, profileId: null,
-    fabricId: null, fabricFilter: "All", inspiration: null, tailorNote: ""
+    fabricId: null, fabricPlan: "marketplace", fabricFilter: "All", inspiration: null, tailorNote: ""
   };
 }
 
@@ -422,28 +422,42 @@ function screenFabric() {
               <div class="meta">${escapeHtml(seller ? seller.name : "")} · ${fabricPriceText(selected, unit)}${approxMoney(pricePerUnit(selected.price_per_yard, unit), fabricCurrency(selected))} · ${lengthText(selected.yards_available, unit)} left</div></div>
           </div>
           <div class="meta">Your tailor works out how many ${unitWord(unit, true)} you need with you. Nothing is bought yet.</div>
-          <button class="cta" onclick="go('send')">Continue with this fabric →</button>
-        </div>` : `<div class="pick-bar"><button class="cta" disabled>Tap a fabric to choose it</button></div>`}
+          <button class="cta" onclick="setFabricPlan('marketplace')">Continue with this fabric →</button>
+        </div>` : `
+        <div class="pick-bar stack">
+          <div class="notice"><b>No marketplace fabric yet?</b><div class="meta">You can still send your design and measurements to the tailor and start the chat. Fabric can be agreed later.</div></div>
+          <button class="cta" onclick="setFabricPlan('later')">Decide fabric with tailor later →</button>
+          <button class="btn-outline" onclick="setFabricPlan('own')">I already have my fabric</button>
+        </div>`}
     </div>`;
+
+function setFabricPlan(plan) {
+  const d = draft();
+  d.fabricPlan = plan;
+  if (plan !== "marketplace") d.fabricId = null;
+  saveData();
+  go("send");
+}
 }
 
 // ---- Send to tailor (end of step 4) ----
 
 function screenSend() {
   const d = draft();
-  const fabric = findFabric(d.fabricId);
-  if (!fabric || !isBuyable(fabric)) {
+  let fabric = findFabric(d.fabricId);
+  if (fabric && !isBuyable(fabric)) {
     d.fabricId = null;
-    return screenFabric();
+    d.fabricPlan = "later";
+    fabric = null;
   }
-  const seller = findSupplier(fabric.supplier_id);
+  const seller = fabric ? findSupplier(fabric.supplier_id) : null;
   const profile = findProfile(d.profileId);
   const photos = hasInspiration(d.inspiration) ? d.inspiration.photos.length : 0;
   const tailor = draftDesigner();
   const currency = designerCurrency(tailor);
   const unit = designerFabricUnit(tailor);
-  const fc = fabricCurrency(fabric);
-  const perUnit = pricePerUnit(fabric.price_per_yard, unit);
+  const fc = fabric ? fabricCurrency(fabric) : currency;
+  const perUnit = fabric ? pricePerUnit(fabric.price_per_yard, unit) : 0;
   return `
     ${cTop("Send to Tailor", "fabric")}
     <div class="content">
@@ -457,24 +471,30 @@ function screenSend() {
       </div>
       <div class="mrow"><span>Style photos</span><span>${photos ? `${photos} attached` : "None"}</span></div>
       <div class="mrow"><span>Measurements</span><span>${profile ? `Saved (${escapeHtml(profile.label)})` : "Saved"}</span></div>
+      ${fabric ? `
       <div class="pick-head">
         <img src="${fabricCoverUrl(fabric)}" alt="">
         <div><div class="name">${escapeHtml(fabric.name)}</div>
           <div class="meta">${fabricPriceText(fabric, unit)}${approxMoney(perUnit, fc)} · ${escapeHtml(seller ? seller.name : "")}</div></div>
         <button class="linkish" onclick="go('fabric')">Change</button>
-      </div>
+      </div>` : `
+      <div class="notice">
+        <b>Fabric: ${d.fabricPlan === "own" ? "Customer already has fabric" : "To be decided with tailor"}</b>
+        <div class="meta">You can start the order and chat now. A marketplace fabric can be added later before the tailor sends a fabric-inclusive quote.</div>
+        <button class="linkish" onclick="go('fabric')">Choose from marketplace instead</button>
+      </div>`}
       <div class="send-next">
         <b>What happens next</b>
         <ol>
           <li>${draftHasTailor() ? escapeHtml(draftDesigner().business_name) : "Your tailor"} looks at your design, photos and measurements.</li>
-          <li>You chat here in the app to agree how many ${unitWord(unit, true)} of fabric you need.</li>
+          <li>You chat here in the app about the fabric. If you have not chosen one yet, you can agree it with the tailor later.</li>
           <li>Your tailor enters their own tailoring price and any embroidery, delivery or extra charges, then sends the full itemised quote through ${APP_NAME}.</li>
           <li>The quote is recorded in the tailor\'s currency. If your local currency is different, ${APP_NAME} also shows an approximate converted amount for you.</li>
-          ${fc !== currency ? `<li>The seller prices this fabric in ${escapeHtml(currencyInfo(fc).name)}. ${draftHasTailor() ? escapeHtml(tailor.business_name) + "'s" : "Your tailor's"} quote converts it into ${escapeHtml(currencyInfo(currency).name)} at the day's exchange rate${fxRate(fc, currency) ? ` (today ${escapeHtml(rateText(fxRate(fc, currency), fc, currency))})` : ""}, and shows the rate used.</li>` : ""}
+          ${fabric && fc !== currency ? `<li>The seller prices this fabric in ${escapeHtml(currencyInfo(fc).name)}. ${draftHasTailor() ? escapeHtml(tailor.business_name) + "'s" : "Your tailor's"} quote converts it into ${escapeHtml(currencyInfo(currency).name)} at the day's exchange rate${fxRate(fc, currency) ? ` (today ${escapeHtml(rateText(fxRate(fc, currency), fc, currency))})` : ""}, and shows the rate used.</li>` : ""}
           <li>Accept it and pay a ${Math.round(DEPOSIT_RATE * 100)}% deposit. The fabric is only bought then.</li>
         </ol>
       </div>
-      ${approxNote(currency) || approxNote(fc)}
+      ${approxNote(currency) || (fabric ? approxNote(fc) : "")}
       <label class="field"><span>Anything to tell the tailor? <small>(optional)</small></span>
         <textarea id="tailor-note" rows="3" maxlength="${CHAT_TEXT_MAX}" placeholder="e.g. It's for a wedding on 12 June. I'm 6ft 2 and like a loose fit."
           oninput="draft().tailorNote=this.value;saveData()">${escapeHtml(d.tailorNote || "")}</textarea></label>
@@ -498,9 +518,10 @@ function sendToTailor() {
     go("measurements");
     return;
   }
-  if (!fabric || !isBuyable(fabric)) {
-    toast("That fabric has just sold out. Please choose another.");
+  if (fabric && !isBuyable(fabric)) {
+    toast("That fabric has just sold out. You can choose another or continue without marketplace fabric.");
     d.fabricId = null;
+    d.fabricPlan = "later";
     go("fabric");
     return;
   }
@@ -512,7 +533,7 @@ function sendToTailor() {
   const sent = requestQuote({
     customerId: owner.id, designerId: draftDesignerId(),
     outfit: d.outfit, colour: d.colour, embroidery: d.embroidery, sleeve: d.sleeve, neck: d.neck,
-    variation: d.variation, profileId: d.profileId, fabric,
+    variation: d.variation, profileId: d.profileId, fabric: fabric || null, fabricPlan: d.fabricPlan || (fabric ? "marketplace" : "later"),
     inspiration: hasInspiration(d.inspiration)
       ? { photos: d.inspiration.photos.slice(), link: cleanStyleLink(d.inspiration.link) || "", note: d.inspiration.note || "" }
       : null,
@@ -523,7 +544,7 @@ function sendToTailor() {
       db.session.customerId = owner.id;
       db.draft = null;
       saveData();
-      flashMessage = `Sent! ${designerName(order.designer_id)} will chat with you here to agree the yards, then send your quote.`;
+      flashMessage = `Sent! ${designerName(order.designer_id)} can now chat with you about the design, fabric and quote.`;
       go("tracking/" + order.id);
     })
     .catch(error => {
