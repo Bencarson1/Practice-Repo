@@ -48,6 +48,16 @@ function renderAdminOverview() {
     </div>
 
     <div class="card">
+      <div class="row-between wrap"><div><h2>Moderation</h2><p class="hint">Temporarily suspend accounts or hide listings. Archive fabrics you no longer want in the marketplace and restore them later if needed.</p></div>
+      <div class="job-buttons"><a class="button small" href="#/tailors">Manage tailors</a><a class="button small" href="#/applications">Manage sellers</a><a class="button small" href="#/sellers">Manage fabrics</a></div></div>
+      <div class="alerts">
+        <span class="alert soft">${tailors.filter(d => d.admin_status === "hidden").length} suspended tailor${tailors.filter(d => d.admin_status === "hidden").length === 1 ? "" : "s"}</span>
+        <span class="alert soft">${db.suppliers.filter(s => s.admin_status === "hidden").length} suspended seller${db.suppliers.filter(s => s.admin_status === "hidden").length === 1 ? "" : "s"}</span>
+        <span class="alert soft">${db.fabrics.filter(f => f.deleted_at).length} archived fabric${db.fabrics.filter(f => f.deleted_at).length === 1 ? "" : "s"}</span>
+      </div>
+    </div>
+
+    <div class="card">
       <h2>Waiting for approval</h2>
       ${waitingTailors.length || waitingFabrics.length || waitingSellers.length ? `<div class="alerts">
         ${waitingSellers.length ? `<a class="alert" href="#/applications">🏪 ${waitingSellers.length} new fabric seller${waitingSellers.length > 1 ? "s" : ""}: ${waitingSellers.slice(0, 4).map(s => escapeHtml(s.name)).join(", ")}</a>` : ""}
