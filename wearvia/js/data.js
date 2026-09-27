@@ -770,7 +770,7 @@ function requestQuote(details) {
     concept_variation: details.variation || 1, concept_image_url: "",
     inspiration: details.inspiration || null,
     measurement_profile_id: details.profileId || null,
-    fabric_id: fabric.id, fabric_supplier_id: fabric.supplier_id,
+    fabric_id: fabric ? fabric.id : null, fabric_supplier_id: fabric ? fabric.supplier_id : null,
     fabric_yards: 0, fabric_cost: 0, line_items: [], quote_total: 0,
     // In the tailor's currency; the seller's fabric is converted when the quote is sent
     currency_code: designerCurrency(tailor), fabric_currency_code: fabric ? fabricCurrency(fabric) : null, fabric_unit: designerFabricUnit(tailor),
@@ -785,6 +785,52 @@ function requestQuote(details) {
   addSystemMessage(order, `Thanks — your request is with ${tailor.business_name}. We'll look at your design, style photos and measurements, and chat with you here about the fabric and quote. You do not need to choose marketplace fabric before starting the conversation.`);
   if (details.note) addChatMessage(order, "customer", details.note, []);
   return order;
+}
+
+// Tailor recommends 1-3 marketplace fabrics before sending the quote.
+// The customer picks one, which becomes the order fabric. Live mode uses secure RPCs.
+function recommendFabricsForOrder(order, fabricIds, note) {
+  if (Cloud.live) return Cloud.recommendFabrics(order, fabricIds, note);
+  if (!order || isPlaced(order) || quoteStatus(order) !== "requested") throw new Error("Recommendations can only be changed before a quote is sent.");
+  const ids = Array.from(new Set((fabricIds || []).filter(Boolean)));
+  if (!ids.length || ids.length > 3) throw new Error("Choose between 1 and 3 fabrics to recommend.");
+  const fabrics = ids.map(findFabric);
+  if (fabrics.some(f => !f || !isBuyable(f))) throw new Error("One or more selected fabrics are no longer available.");
+  db.fabric_recommendations = db.fabric_recommendations || [];
+  db.fabric_recommendations.filter(r => r.order_id === order.id && r.status === "pending").forEach(r => { r.status = "replaced"; });
+  const batch = newId("FRB", [], 3);
+  fabrics.forEach((fabric, i) => db.fabric_recommendations.push({
+    id: newId("FR", db.fabric_recommendations, 2), batch_id: batch, order_id: order.id,
+    fabric_id: fabric.id, designer_id: order.designer_id, note: String(note || "").slice(0, 500),
+    status: "pending", created_at: new Date().toISOString(), selected_at: null
+  }));
+  addSystemMessage(order, fabrics.length === 1
+    ? `Your tailor recommended ${fabrics[0].name} from the NebedaHub marketplace. Review it in your order and choose it if you like it.`
+    : `Your tailor recommended ${fabrics.length} marketplace fabrics. Review them in your order and choose the one you prefer.`);
+  return db.fabric_recommendations.filter(r => r.order_id === order.id && r.status === "pending");
+}
+
+function chooseRecommendedFabricForOrder(order, recommendationId) {
+  if (Cloud.live) return Cloud.chooseRecommendedFabric(order, recommendationId);
+  db.fabric_recommendations = db.fabric_recommendations || [];
+  const rec = db.fabric_recommendations.find(r => r.id === recommendationId && r.order_id === order.id && r.status === "pending");
+  if (!rec) throw new Error("That recommendation is no longer available.");
+  const fabric = findFabric(rec.fabric_id);
+  if (!fabric || !isBuyable(fabric)) throw new Error("That fabric is no longer available. Ask your tailor for another recommendation.");
+  db.fabric_recommendations.filter(r => r.order_id === order.id && r.batch_id === rec.batch_id && r.status === "pending")
+    .forEach(r => { r.status = r.id === rec.id ? "selected" : "dismissed"; r.selected_at = r.id === rec.id ? new Date().toISOString() : r.selected_at; });
+  order.fabric_id = fabric.id;
+  order.fabric_supplier_id = fabric.supplier_id;
+  order.fabric_problem = null;
+  addSystemMessage(order, `Fabric selected: ${fabric.name}. Your tailor can now confirm the amount needed and include it in your quote.`);
+  return { ok: true, fabric_id: fabric.id, fabric_name: fabric.name };
+}
+
+function fabricRecommendations(order, statuses) {
+  const wanted = statuses ? new Set(statuses) : null;
+  return (db.fabric_recommendations || [])
+    .filter(r => r.order_id === order.id && (!wanted || wanted.has(r.status)))
+    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
 }
 
 // Step 5: the team sends the quote — the length they agreed with the customer
