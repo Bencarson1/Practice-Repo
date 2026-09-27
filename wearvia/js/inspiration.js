@@ -253,10 +253,15 @@ function aiVariationPanel(insp) {
       ${variations.length ? `
         <div class="photo-slots style-slots">
           ${variations.map((ref, i) => `
-            <button type="button" class="photo-slot ${selected === ref ? "selected" : ""}" onclick="chooseAiStyleVariation(${i})" aria-label="Choose AI variation ${i + 1}">
-              <img src="${photoUrl(ref)}" alt="AI variation ${i + 1}">
-              <small>${selected === ref ? "✓ Selected" : "Variation " + (i + 1)}</small>
-            </button>`).join("")}
+            <div class="photo-slot ai-variation ${selected === ref ? "selected" : ""}">
+              <button type="button" class="ai-preview" onclick="openAiStyleViewer(${i})" aria-label="Enlarge AI variation ${i + 1}">
+                <img src="${photoUrl(ref)}" alt="AI variation ${i + 1}">
+                <span class="ai-zoom" aria-hidden="true">⌕</span>
+              </button>
+              <button type="button" class="ai-select" onclick="chooseAiStyleVariation(${i})">
+                ${selected === ref ? "✓ Selected" : "Select"}
+              </button>
+            </div>`).join("")}
         </div>
         <div class="optbtns two">
           <button type="button" class="optbtn" onclick="generateAiStyleVariations()" ${aiStyleGenerating ? "disabled" : ""}>↻ Generate new set</button>
@@ -269,6 +274,20 @@ function aiVariationPanel(insp) {
         <div class="meta centre">Your original reference stays attached to the order. AI does not replace it.</div>
       `}
     </div>`;
+}
+
+function openAiStyleViewer(index) {
+  const insp = draftInspiration();
+  const photos = (insp.aiVariations || []).slice();
+  if (!photos.length) return;
+  styleViewer = {
+    photos,
+    index: Math.min(index, photos.length - 1),
+    title: "AI style variations",
+    returnFocus: document.activeElement
+  };
+  document.addEventListener("keydown", styleViewerKeys);
+  drawStyleViewer();
 }
 
 function generateAiStyleVariations() {
