@@ -124,7 +124,7 @@ const NECKS = ["Round", "V-neck"];
 const PAYMENT_METHODS = ["Card", "Apple Pay", "Bank transfer", "Cash"];
 // A customer's order starts as a request for a quote (see sendQuote and acceptQuote below)
 const QUOTE_STATUS_LABELS = { requested: "Waiting for tailor's quote", quoted: "Quote sent", accepted: "Accepted" };
-// Checkout is a demo: payments made in the customer app wait until the
+// Payments made in the customer app wait until the
 // Nebeda Threads team confirms them (Business → Payments)
 const PAYMENT_STATUS_LABELS = { awaiting_confirmation: "Awaiting confirmation", confirmed: "Confirmed", rejected: "Rejected" };
 const DELIVERY_STATUSES = ["Order ready", "Picked up", "In transit", "Out for delivery", "Delivered"];
@@ -255,7 +255,7 @@ function randomDigits(count) {
   return text;
 }
 
-// A new id for a record. Demo data uses short ids ("C7", "F21");
+// A new id for a local record may use short ids ("C7", "F21");
 // live data uses the same kind of id as the database (a uuid).
 function newId(prefix, list, skip) {
   if (Cloud.live) return Cloud.newId();
@@ -498,7 +498,7 @@ function addSampleQuoteRequests(data) {
     msg("NT-1009", "customer", "Tunde Balogun", "It's for my brother's wedding in six weeks. I'm 6ft 3 — is 10 yards enough for a full agbada?", at(-1, "18:42")),
     msg("NT-1008", "team", "Mary at " + shop, "Your fitting is booked for Saturday at 11am. Please bring the shoes you'll wear on the day.", at(-2, "12:30")),
     msg("NT-1008", "customer", "David Johnson", "Perfect, see you Saturday.", at(-2, "13:05")),
-    msg("NT-1011", "system", APP_NAME, welcome.replace(shop, "Peckham Suit Studio (demo)"), at(-1, "08:10")),
+    msg("NT-1011", "system", APP_NAME, welcome.replace(shop, "Peckham Suit Studio"), at(-1, "08:10")),
     msg("NT-1011", "customer", "Grace Mensah", "Can you use this aso oke from Balogun Market? It's priced in naira — I'd like to pay you in pounds.", at(-1, "08:12"))
   ];
   data.chat_reads = [
@@ -508,8 +508,7 @@ function addSampleQuoteRequests(data) {
 }
 
 // ---- Load and save ----
-// Demo mode keeps everything in this browser's localStorage.
-// Live mode sends changes to Supabase (cloud.js).
+// Live data is sent to Supabase through cloud.js.
 
 // "db" holds all the app's data while it runs. app.js loads it once every script is ready.
 let db = null;
@@ -916,7 +915,7 @@ function acceptQuote(order) {
   return { ok: true };
 }
 
-// Demo mode: if a fabric sells out while a customer waits for (or decides on)
+// If a fabric sells out while a customer waits for (or decides on)
 // a quote, tell them in the chat and send the request back to the tailor.
 // The database does this in live mode.
 function noticeFabricProblems() {
@@ -1080,7 +1079,7 @@ function customerOrders(customerId) {
   return scopedOrders().filter(o => o.customer_id === customerId);
 }
 
-// The latest reviews of a tailor (demo mode; live pages get them from wearvia_tailor_page)
+// The latest reviews of a tailor. Live pages get them from wearvia_tailor_page.
 function recentReviews(count, designerId) {
   const id = designerId || designer().id;
   if (db.reviews) {
