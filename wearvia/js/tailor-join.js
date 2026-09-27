@@ -102,6 +102,7 @@ function tailorJoinForm() {
       <a class="button" href="#/profile">Open My profile</a></div>`;
   }
   const specs = specialityList().filter(x => x.active !== false);
+  const me = Cloud.me || {};
   return `
     ${bizHeader("Create your tailor profile", `Complete your business details and verification before the ${APP_NAME} team can approve your account.`)}
     <div class="card join-form">
@@ -109,7 +110,8 @@ function tailorJoinForm() {
       <form class="stack" onsubmit="return joinAsTailor(event)" novalidate>
         <h2>Owner and business</h2>
         <div class="form-grid">
-          <label class="field">Owner or responsible person's full name<input name="ownerName" required maxlength="100" autocomplete="name"></label>
+          <label class="field">Owner or responsible person's full name<input name="ownerName" required maxlength="100" autocomplete="name" value="${escapeHtml(me.name || "")}"></label>
+          <label class="field">Account email<input type="email" value="${escapeHtml(me.email || "")}" readonly></label>
           <label class="field">Business name<input name="business" required minlength="2" maxlength="80" placeholder="e.g. Ade's Tailoring"></label>
           <label class="field">Country<select name="country" required onchange="if (this.form.phone_cc) this.form.phone_cc.value=this.value; if(this.form.currency) this.form.currency.value=countryCurrency(this.value)||'GBP';">${countryOptions(browserCountry(), "Choose your country")}</select></label>
           <label class="field">City or town<input name="city" required maxlength="60" placeholder="e.g. Manchester"></label>
