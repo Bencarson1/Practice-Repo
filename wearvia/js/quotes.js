@@ -82,7 +82,9 @@ function designCard(order, extraRows) {
   return `<div class="card">
     <h2>Design</h2>
     <div class="design-row">
-      <div class="thumb big">${conceptSVG({ outfit: order.outfit_type, colour: order.colour, embroidery: order.embroidery, sleeve: order.sleeve_style, neck: order.neck_style }, order.concept_variation)}</div>
+      ${orderPrimaryStyleRef(order)
+        ? stylePreviewThumb(orderPrimaryStyleRef(order), "Customer's selected style", "quote-style-thumb")
+        : `<div class="thumb big">${conceptSVG({ outfit: order.outfit_type, colour: order.colour, embroidery: order.embroidery, sleeve: order.sleeve_style, neck: order.neck_style }, order.concept_variation)}</div>`}
       <div>
         <div class="kv"><span>Outfit</span><b>${escapeHtml(order.outfit_type)}</b></div>
         ${hasInspiration(order.inspiration) ? `<div class="kv"><span>Style</span><b>Copy the customer's photos</b></div>` : ""}
