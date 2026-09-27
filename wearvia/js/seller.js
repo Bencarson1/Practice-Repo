@@ -675,7 +675,7 @@ function logoRow(name) {
     <img class="logo big" src="${sellerForm.logo ? sellerForm.logo.url : fallback}" alt="Shop logo">
     <div class="stack">
       <label class="button small file-button">${sellerForm.logo ? "Change logo" : "Upload logo"}<input type="file" accept="image/*" onchange="setFormLogo(this)"></label>
-      ${sellerForm.logo ? `<button type="button" class="small ghost" onclick="removeFormLogo()">Remove logo</button>` : `<small class="muted">Optional — we'll use your initials until you add one.</small>`}
+      ${sellerForm.logo ? `<button type="button" class="small ghost" onclick="removeFormLogo()">Remove logo</button>` : `<small class="muted">Required before approval. Upload your shop logo or a clear business profile photo.</small>`}
     </div>`;
 }
 
@@ -742,6 +742,7 @@ function saveSellerProfileForm(event) {
   if (!values.business_description) return formError("profile-form-error", "Tell us about your business.");
   if (!values.delivery_areas) return formError("profile-form-error", "Tell us where you can deliver.");
   if (!values.sells) return formError("profile-form-error", "Tell us what fabrics you sell.");
+  if (!sellerForm.logo) return formError("profile-form-error", "Upload your shop logo or a clear business profile photo.");
   if ((sellerForm.samples || []).length < 2) return formError("profile-form-error", "Add at least 2 clear sample photos of your fabrics or shop.");
   if (!seller && !form.identityDocument.files[0]) return formError("profile-form-error", "Add a government-issued ID.");
   if (!seller && !form.addressDocument.files[0]) return formError("profile-form-error", "Add proof of address.");
