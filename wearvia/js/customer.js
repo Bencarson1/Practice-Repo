@@ -1297,21 +1297,91 @@ function screenDesigner(id) {
 
 // ---- Screen 18: Ready-to-wear shop (customer side) ----
 
+let rtwShopSearch = "";
+let rtwShopCategory = "All";
+
+function rtwPublished(items) {
+  return (items || []).filter(i => i.active !== false);
+}
+
+function rtwProductCard(item) {
+  const designer = designerById(item.designer_id);
+  const image = item.photo ? photoUrl(item.photo) : "";
+  return `<article class="rtw-product-card">
+    <button class="rtw-product-photo" onclick="go('rtwItem/${item.id}')">
+      ${image ? `<img src="${escapeHtml(image)}" alt="${escapeHtml(item.name)}">` : `<div class="rtw-photo-empty">Product photo coming soon</div>`}
+      ${item.featured ? '<span class="rtw-featured-badge">Featured</span>' : ""}
+      ${item.stock <= 0 ? '<span class="rtw-soldout-badge">Sold out</span>' : ""}
+    </button>
+    <div class="rtw-product-info">
+      <button class="rtw-product-name" onclick="go('rtwItem/${item.id}')">${escapeHtml(item.name)}</button>
+      <div class="muted small-text">${escapeHtml(item.category || "Ready to wear")}${designer ? " · " + escapeHtml(designer.business_name) : ""}</div>
+      <div class="rtw-product-price">${money(item.price, rtwCurrency(item))}${approxMoney(item.price, rtwCurrency(item))}</div>
+      <div class="small-text">${item.stock > 0 ? item.stock + " in stock" : "Currently unavailable"}${(item.sizes || []).length ? " · " + escapeHtml(item.sizes.join(", ")) : ""}</div>
+    </div>
+  </article>`;
+}
+
 function screenRtw(designerId) {
-  const d = designerById(designerId) || mainDesigner();
-  const items = rtwOf(d.id);
+  const allPublished = rtwPublished(db.ready_to_wear);
+  const d = designerId ? designerById(designerId) : null;
+  let items = d ? allPublished.filter(i => i.designer_id === d.id) : allPublished;
+  const categories = ["All"].concat(Array.from(new Set(items.map(i => i.category || "Other"))).sort());
+
+  if (!categories.includes(rtwShopCategory)) rtwShopCategory = "All";
+  const q = String(rtwShopSearch || "").trim().toLowerCase();
+  items = items.filter(i =>
+    (rtwShopCategory === "All" || (i.category || "Other") === rtwShopCategory)
+    && (!q || [i.name, i.category, i.description, (i.sizes || []).join(" "), (designerById(i.designer_id) || {}).business_name].join(" ").toLowerCase().includes(q))
+  ).sort((a,b) => Number(!!b.featured)-Number(!!a.featured) || Number(b.stock>0)-Number(a.stock>0) || String(a.name).localeCompare(String(b.name)));
+
+  const title = d ? d.business_name + " · Ready to Wear" : "Ready to Wear";
+  const subtitle = d
+    ? `Shop finished pieces from ${escapeHtml(d.business_name)}. These are ready-made products, not custom tailoring orders.`
+    : "Shop ready-made fashion from approved NebedaHub designers.";
+
   return `
-    ${cTop("Ready to Wear · " + escapeHtml(d.business_name), d.slug ? "tailor/" + d.slug : "tailors")}
-    <div class="content">
+    ${cTop(title, d && d.slug ? "tailor/" + d.slug : "home")}
+    <div class="content rtw-storefront">
       ${flash()}
-      ${items.length ? "" : `<div class="empty">${escapeHtml(d.business_name)} has no ready-to-wear pieces right now.</div>`}
-      <div class="chip-grid">
-        ${items.map(item => `<div class="chip rtw">
-          <div class="rtw-swatch" style="background:${item.color}"></div>
-          ${escapeHtml(item.name)}<span class="chip-sub gold">${money(item.price, rtwCurrency(item))}${approxMoney(item.price, rtwCurrency(item))}</span>
-          <span class="chip-sub">${item.stock > 0 ? item.stock + " in stock" : "Sold out"}</span>
-          <button class="optbtn sel" onclick="buyRtw('${item.id}')" ${item.stock > 0 ? "" : "disabled"}>Buy</button>
-        </div>`).join("")}
+      <section class="rtw-store-hero">
+        <div><span class="eyebrow">NebedaHub Ready to Wear</span><h1>${escapeHtml(title)}</h1><p>${subtitle}</p></div>
+        <div class="rtw-trust">Real products · Designer listed · Protected checkout when payments open</div>
+      </section>
+
+      <div class="rtw-shop-toolbar">
+        <input aria-label="Search ready to wear" placeholder="Search products, sizes or designers" value="${escapeHtml(rtwShopSearch)}" oninput="rtwShopSearch=this.value;renderAll()">
+        <div class="chips">${categories.map(cat => `<button class="chip ${rtwShopCategory===cat?"active":""}" onclick="rtwShopCategory='${escapeHtml(cat)}';renderAll()">${escapeHtml(cat)}</button>`).join("")}</div>
+      </div>
+
+      ${!items.length ? `<div class="empty">${d ? escapeHtml(d.business_name) + " has no matching ready-to-wear products right now." : "No ready-to-wear products are available yet."}</div>` : ""}
+      <div class="rtw-product-grid">${items.map(rtwProductCard).join("")}</div>
+    </div>
+    ${cNav("tailors")}`;
+}
+
+function screenRtwItem(itemId) {
+  const item = (db.ready_to_wear || []).find(i => i.id === itemId && i.active !== false);
+  if (!item) return `${cTop("Product not found", "rtw")}<div class="content"><div class="empty">This product is no longer available.</div></div>${cNav("tailors")}`;
+  const d = designerById(item.designer_id);
+  const image = item.photo ? photoUrl(item.photo) : "";
+  const sizes = item.sizes || [];
+  return `
+    ${cTop(item.name, d ? "rtw/" + d.id : "rtw")}
+    <div class="content rtw-product-page">
+      <div class="rtw-detail-grid">
+        <div class="rtw-detail-photo">${image ? `<img src="${escapeHtml(image)}" alt="${escapeHtml(item.name)}">` : '<div class="rtw-photo-empty">Product photo coming soon</div>'}</div>
+        <div class="rtw-detail-info">
+          <div class="muted">${escapeHtml(item.category || "Ready to wear")}</div>
+          <h1>${escapeHtml(item.name)}</h1>
+          <div class="rtw-detail-price">${money(item.price, rtwCurrency(item))}${approxMoney(item.price, rtwCurrency(item))}</div>
+          ${d ? `<p>Sold by <a href="#/tailor/${escapeHtml(d.slug)}"><b>${escapeHtml(d.business_name)}</b></a></p>` : ""}
+          <p>${escapeHtml(item.description || "Ready-to-wear piece from a NebedaHub designer.")}</p>
+          ${sizes.length ? `<div><b>Available sizes</b><div class="rtw-size-list">${sizes.map(s => `<span>${escapeHtml(s)}</span>`).join("")}</div></div>` : ""}
+          <div class="notice ${item.stock <= 2 ? "attention" : ""}">${item.stock > 0 ? item.stock + " available" : "Sold out"}</div>
+          <button class="cta" onclick="buyRtw('${item.id}')" ${item.stock > 0 ? "" : "disabled"}>${item.stock > 0 ? "Buy this item" : "Sold out"}</button>
+          <p class="meta">NebedaHub protected checkout is being connected. Do not send money directly outside the platform.</p>
+        </div>
       </div>
     </div>
     ${cNav("tailors")}`;
@@ -1463,6 +1533,7 @@ const CUSTOMER_SCREENS = {
   tailors: screenTailors,
   tailor: screenTailorPage,
   rtw: screenRtw,
+  rtwItem: screenRtwItem,
   profile: screenProfile,
   myMeasurements: screenMyMeasurements
 };
