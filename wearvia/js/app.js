@@ -29,6 +29,7 @@ const BIZ_TABS = [
 // The platform's own tools: only in NebedaHub Admin (admin.js)
 const ADMIN_TABS = [
   { key: "overview", label: "Overview", render: renderAdminOverview },
+  { key: "homepage", label: "Homepage", render: renderHomepageManager },
   { key: "tailors", label: "Tailors", render: renderTailorAdmin, badge: () => db.designers.filter(d => d.admin_status === "pending").length },
   { key: "applications", label: "Seller applications", render: renderSellerApplications, badge: () => db.suppliers.filter(s => s.admin_status === "pending").length },
   { key: "sellers", label: "Seller fabrics", render: renderSellerFabrics, badge: () => activeFabrics().filter(f => f.status === "pending").length },
