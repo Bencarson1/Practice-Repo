@@ -101,19 +101,47 @@ function tailorJoinForm() {
       <p class="hint"><b>${escapeHtml(mine.business_name)}</b> is yours on ${APP_NAME}.</p>
       <a class="button" href="#/profile">Open My profile</a></div>`;
   }
+  const specs = specialityList().filter(x => x.active !== false);
   return `
-    ${bizHeader("Create your tailor profile", `Get found by customers near you. Your ${APP.name} dashboard handles quote requests, the chat with each customer, orders, payments and your team.`)}
+    ${bizHeader("Create your tailor profile", `Complete your business details and verification before the ${APP_NAME} team can approve your account.`)}
     <div class="card join-form">
-      <ol class="join-steps"><li>Tell us your business name and where you are.</li><li>Add your photo, specialities and portfolio in <b>My profile</b>.</li><li>The ${APP_NAME} team checks and approves you — then customers can find you.</li></ol>
-      <form class="stack" onsubmit="return joinAsTailor(event)">
-        <label class="field">Business name<input name="business" required minlength="2" maxlength="80" placeholder="e.g. Ade's Tailoring"></label>
-        <label class="field">Country <small>(your prices are in its currency — you can change that later)</small><select name="country" required onchange="if (this.form.phone_cc) this.form.phone_cc.value = this.value">${countryOptions(browserCountry(), "Choose your country")}</select></label>
-        <label class="field">City or town<input name="city" required maxlength="60" placeholder="e.g. Manchester"></label>
-        <label class="field">Phone <small>(only the ${APP_NAME} team sees it)</small>${phoneFieldHtml("phone", "", browserCountry())}</label>
+      <p class="hint">Your verification documents are private. Customers never see your ID, proof of address, phone number or exact business address.</p>
+      <form class="stack" onsubmit="return joinAsTailor(event)" novalidate>
+        <h2>Owner and business</h2>
+        <div class="form-grid">
+          <label class="field">Owner or responsible person's full name<input name="ownerName" required maxlength="100" autocomplete="name"></label>
+          <label class="field">Business name<input name="business" required minlength="2" maxlength="80" placeholder="e.g. Ade's Tailoring"></label>
+          <label class="field">Country<select name="country" required onchange="if (this.form.phone_cc) this.form.phone_cc.value=this.value; if(this.form.currency) this.form.currency.value=countryCurrency(this.value)||'GBP';">${countryOptions(browserCountry(), "Choose your country")}</select></label>
+          <label class="field">City or town<input name="city" required maxlength="60" placeholder="e.g. Manchester"></label>
+          <label class="field">Business address<input name="address" required maxlength="140" autocomplete="street-address"></label>
+          <label class="field">Postcode <small>(if applicable)</small><input name="postcode" maxlength="20" autocomplete="postal-code"></label>
+          <label class="field">Phone <small>(private)</small>${phoneFieldHtml("phone", "", browserCountry())}</label>
+          <label class="field">Preferred currency<select name="currency" required>${currencyOptions(countryCurrency(browserCountry()) || "GBP")}</select></label>
+          <label class="field">Estimated production time<select name="deliveryEstimate" required>${DELIVERY_TIMES.map(t => `<option>${escapeHtml(t)}</option>`).join("")}</select></label>
+          <label class="check"><input type="checkbox" name="deliveryAvailable"> I can arrange delivery to customers</label>
+        </div>
+
+        <label class="field">About your business<textarea name="description" rows="4" maxlength="700" required placeholder="Tell customers about your experience, the kind of work you do and what makes your business different."></textarea></label>
+
+        <fieldset class="card soft">
+          <legend><b>Specialities</b></legend>
+          <p class="hint">Choose at least one.</p>
+          <div class="spec-tags">${specs.map(sp => `<label class="check"><input type="checkbox" name="speciality" value="${escapeHtml(sp.name)}"> ${escapeHtml(sp.name)}</label>`).join("")}</div>
+        </fieldset>
+
+        <h2>Photos of your work</h2>
+        <label class="field">Profile or business photo<input name="profilePhoto" type="file" accept="image/*" required></label>
+        <label class="field">Portfolio photos <small>(at least 2 clear photos of work you made)</small><input name="portfolioPhotos" type="file" accept="image/*" multiple required></label>
+
+        <h2>Private verification</h2>
+        <label class="field">Government-issued ID <small>(passport, driving licence or national ID)</small><input name="identityDocument" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" required></label>
+        <label class="field">Proof of business/home address <small>(utility bill, bank statement or official letter)</small><input name="addressDocument" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" required></label>
+        <label class="field">Business registration document <small>(optional if you are not formally registered)</small><input name="businessDocument" type="file" accept="image/jpeg,image/png,image/webp,application/pdf"></label>
+
         ${tailorTermsHtml(false)}
         ${tailorTermsCheckbox()}
         <p id="join-error" class="form-error" role="alert"></p>
-        <button class="cta" type="submit">Create my tailor profile</button>
+        <button class="cta" type="submit">Submit my tailor application</button>
       </form>
     </div>`;
 }
@@ -121,35 +149,69 @@ function tailorJoinForm() {
 function joinAsTailor(event) {
   event.preventDefault();
   const form = event.target;
-  const details = { businessName: form.business.value.trim(), country: form.country.value, city: form.city.value.trim(), phone: readPhone(form, "phone"),
-                    acceptTerms: form.acceptTerms.checked };
+  const specialities = Array.from(form.querySelectorAll('input[name="speciality"]:checked')).map(x => x.value);
+  const portfolioFiles = Array.from(form.portfolioPhotos.files || []);
+  const details = {
+    ownerName: form.ownerName.value.trim(),
+    businessName: form.business.value.trim(),
+    country: form.country.value,
+    city: form.city.value.trim(),
+    address: form.address.value.trim(),
+    postcode: form.postcode.value.trim(),
+    phone: readPhone(form, "phone"),
+    currency: form.currency.value,
+    deliveryEstimate: form.deliveryEstimate.value,
+    deliveryAvailable: form.deliveryAvailable.checked,
+    description: form.description.value.trim(),
+    specialities,
+    acceptTerms: form.acceptTerms.checked
+  };
+  if (!details.ownerName) return formError("join-error", "Enter the owner's full name.");
   if (details.businessName.length < 2) return formError("join-error", "Enter your business name.");
   if (hideContactDetails(details.businessName).hidden) return formError("join-error", "Your business name can't include a phone number, email, website or social handle.");
-  if (!details.acceptTerms) return formError("join-error", "Please tick the box to agree to the tailor terms.");
   if (!details.country) return formError("join-error", "Choose your country.");
+  if (!details.city) return formError("join-error", "Enter your city or town.");
+  if (!details.address) return formError("join-error", "Enter your business address.");
+  if (!phoneLooksRight(details.phone)) return formError("join-error", "Enter a valid phone number.");
+  if (!details.description) return formError("join-error", "Tell us about your business.");
+  if (!details.specialities.length) return formError("join-error", "Choose at least one speciality.");
+  if (!form.profilePhoto.files[0]) return formError("join-error", "Add a profile or business photo.");
+  if (portfolioFiles.length < 2) return formError("join-error", "Add at least 2 portfolio photos of work you made.");
+  if (!form.identityDocument.files[0]) return formError("join-error", "Add a government-issued ID.");
+  if (!form.addressDocument.files[0]) return formError("join-error", "Add proof of address.");
+  if (!details.acceptTerms) return formError("join-error", "Please tick the box to agree to the tailor terms.");
+
   const button = form.querySelector("button[type=submit]");
   button.disabled = true;
-  button.textContent = "Creating…";
-  if (Cloud.live) {
-    Cloud.registerDesigner(details)
-      .then(() => { Auth.drawChrome(); toast("Your tailor profile is made. Add your photo and details, then wait for approval."); go("profile"); })
-      .catch(error => { button.disabled = false; button.textContent = "Create my tailor profile"; formError("join-error", error.message); });
-    return false;
-  }
-  // Demo: a new tailor, waiting for the admin (you) to approve it in NebedaHub Admin → Tailors
-  const id = "D" + (db.designers.reduce((max, d) => Math.max(max, Number(String(d.id).slice(1)) || 0), 0) + 1);
-  const d = refreshDesignerPublic({
-    id, business_name: details.businessName, country_code: details.country, city: details.city, postcode: "", address_line: "",
-    latitude: null, longitude: null, show_exact_address: false, speciality_tags: [], delivery_available: false, custom_orders: true,
-    rating: null, review_count: 0, profile_image: null, description: "", delivery_time: "7–14 days", admin_status: "pending",
-    admin_note: "", portfolio: [], phone: details.phone, location: "", demo: true, tailor_terms_accepted_at: new Date().toISOString()
-  });
-  db.designers.push(d);
-  d.currency_code = countryCurrency(details.country) || "GBP";   // their country's currency; they can change it in My profile
-  db.prices = db.prices.concat(newPriceListFor(id, null, d.currency_code));
-  db.session.designerId = id;
-  saveData();
-  toast(`${d.business_name} created. It waits for approval in ${APPS.admin.name} → Tailors.`);
-  go("profile");
+  button.textContent = "Uploading and submitting…";
+
+  const profileFile = form.profilePhoto.files[0];
+  const idFile = form.identityDocument.files[0];
+  const addressFile = form.addressDocument.files[0];
+  const businessFile = form.businessDocument.files[0] || null;
+
+  Promise.all([
+    resizeImage(profileFile, LOGO_MAX_SIZE, 0.85).then(url => Cloud.uploadPhoto(url, "designer")),
+    Cloud.uploadVerificationFile(idFile, "tailor-id"),
+    Cloud.uploadVerificationFile(addressFile, "tailor-address"),
+    businessFile ? Cloud.uploadVerificationFile(businessFile, "tailor-business-registration") : Promise.resolve(null),
+    Promise.all(portfolioFiles.slice(0, 8).map(file =>
+      resizeImage(file, PHOTO_MAX_SIZE, 0.82).then(url => Cloud.uploadPhoto(url, "designer"))
+    ))
+  ])
+    .then(([profileImageUrl, verificationId, verificationAddress, businessRegistration, portfolioUrls]) => {
+      Object.assign(details, { profileImageUrl, verificationId, verificationAddress, businessRegistration, portfolioUrls });
+      return Cloud.registerDesigner(details);
+    })
+    .then(() => {
+      Auth.drawChrome();
+      toast("Your tailor application has been submitted for verification.");
+      go("profile");
+    })
+    .catch(error => {
+      button.disabled = false;
+      button.textContent = "Submit my tailor application";
+      formError("join-error", error.message || "Couldn't submit your application.");
+    });
   return false;
 }
