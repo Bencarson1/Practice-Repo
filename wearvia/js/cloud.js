@@ -179,6 +179,9 @@ const Cloud = (() => {
     const text = (error && (error.message || error.details || error.hint)) || String(error);
     if (/Invalid login credentials/i.test(text)) return "That email and password don't match. Check them and try again.";
     if (/Email not confirmed/i.test(text)) return "Please confirm your email first — open the link we sent you, then sign in.";
+    if (/email rate limit exceeded|over_email_send_rate_limit|rate limit|too many requests|429/i.test(text)) {
+      return "Too many verification emails have been requested. Check your inbox and spam folder for the first NebedaHub confirmation email. If you already have it, open that link instead of registering again. Otherwise, wait a while before trying again.";
+    }
     if (/row-level security|permission denied|42501/i.test(text)) return "You don't have permission to do that.";
     if (/Failed to fetch|NetworkError|Load failed/i.test(text)) return "Couldn't reach the server. Check your internet connection and try again.";
     if (/wearvia_bootstrap|function .* does not exist|PGRST202/i.test(text)) return "The database isn't set up yet. Run supabase/setup.sql in Supabase first.";
