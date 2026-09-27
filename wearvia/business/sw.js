@@ -7,9 +7,9 @@
 self.NH_APP = {
   name: "business",
   root: "../",
-  version: "nebedahub-business-shell-v9",
+  version: "nebedahub-business-shell-v10",
   oldCaches: /^nebedahub-business-shell-/,
   shell: ["./", "./index.html", "./manifest.webmanifest", "../css/style.css",
-          "../icons/icon-192.png", "../icons/icon-512.png", "../icons/apple-touch-icon.png"]
+          "../icons/business-192.png", "../icons/business-512.png", "../icons/business-apple-touch-icon.png"]
 };
 importScripts("../js/sw-core.js");
