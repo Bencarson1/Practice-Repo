@@ -758,7 +758,7 @@ function payProtectionLine() {
 
 // The tailor's business address and the customer's delivery address. The
 // database only hands them over once the deposit is CONFIRMED (supabase/
-// no-leakage.sql: wearvia_delivery_details); the demo follows the same rule.
+// no-leakage.sql: wearvia_delivery_details); the customer app follows the same rule.
 function deliveryDetails(order) {
   if (Cloud.live) {
     return (db.delivery_details || []).find(x => x.order_id === order.id)
@@ -1007,15 +1007,12 @@ function screenPay(orderId) {
       <div class="qline"><span>Balance (after quality control)</span><span>${money(order.quote_total - deposit, cur)}</span></div>
       <div class="meta">You pay in ${escapeHtml(currencyInfo(cur).name)} (${escapeHtml(cur)}), ${escapeHtml(designerName(order.designer_id))}'s currency.</div>
       ${approxNote(cur)}
-      ${Cloud.live && ONLINE_PAYMENTS_ENABLED ? `<div class="meta"><b>Payment methods:</b> Secure payment methods will be shown at checkout.</div>` : !Cloud.live ? `<div class="selopt"><span class="fl">Method</span>
-        <span class="optbtns">${["Card", "Apple Pay", "Bank transfer"].map(m =>
-          `<button class="optbtn ${depositMethod === m ? "sel" : ""}" onclick="depositMethod='${m}';renderAll()">${m}</button>`).join("")}</span>
-      </div>` : `<div class="card attention"><b>Online payments are not open yet.</b><p class="hint">You can prepare and accept your quote, but do not send money directly to a tailor or fabric seller. NebedaHub will enable protected in-app payments before public transactions open.</p></div>`}
+      ${ONLINE_PAYMENTS_ENABLED ? `<div class="meta"><b>Payment methods:</b> Secure payment methods will be shown at checkout.</div>` : `<div class="card attention"><b>Online payments are not open yet.</b><p class="hint">You can prepare and accept your quote, but do not send money directly to a tailor or fabric seller. NebedaHub will enable protected in-app payments before public transactions open.</p></div>`}
       <label class="field">Delivery address <small>(optional — shared with ${escapeHtml(designerName(order.designer_id))} once your deposit is confirmed)</small>
         <input id="pay-address" maxlength="300" value="${escapeHtml(deliveryDetails(order).delivery_address)}" placeholder="House number, street, town, postcode" autocomplete="street-address"></label>
       ${payProtectionLine()}
-      <div class="meta">${Cloud.live ? (ONLINE_PAYMENTS_ENABLED ? `Secure checkout is handled by the approved payment provider. ${APP_NAME} records payment from a verified server notification, not from your browser.` : `Payments are currently disabled while NebedaHub completes payment setup.`) : `Demo mode — no real money is taken.`}</div>
-      ${Cloud.live && !ONLINE_PAYMENTS_ENABLED ? "" : `<button id="pay-deposit" class="cta" onclick="payDeposit('${order.id}')">${Cloud.live ? "Continue to secure payment" : `Pay ${money(deposit, cur)} Deposit`}</button>`}
+      <div class="meta">${ONLINE_PAYMENTS_ENABLED ? `Secure checkout is handled by the approved payment provider. ${APP_NAME} records payment from a verified server notification, not from your browser.` : `Payments are currently disabled while NebedaHub completes payment setup.`}</div>
+      ${!ONLINE_PAYMENTS_ENABLED ? "" : `<button id="pay-deposit" class="cta" onclick="payDeposit('${order.id}')">Continue to secure payment</button>`}
     </div>`;
 }
 
@@ -1025,19 +1022,6 @@ function payDeposit(orderId) {
   if (!order || !isPlaced(order) || depositStarted(order)) return;
   const addressBox = document.getElementById("pay-address");
   const address = addressBox ? addressBox.value.trim() : "";
-  if (!Cloud.live) {
-    if (address) order.delivery_address = hideContactDetails(address).text;
-    db.payments.push({
-      id: nextPaymentId(), order_id: order.id, amount: order.deposit_amount, method: depositMethod, kind: "Deposit",
-      date: today(), status: "awaiting_confirmation", currency_code: orderCurrency(order)
-    });
-    refreshOrderPayments(order);
-    saveData();
-    flashMessage = `Demo payment recorded for ${money(order.deposit_amount, orderCurrency(order))}.`;
-    go("tracking/" + order.id);
-    return;
-  }
-
   if (!ONLINE_PAYMENTS_ENABLED) { toast("Online payments are not open yet. Please do not pay a seller outside NebedaHub."); return; }
 
   toast("Protected checkout will be enabled after the payment provider is connected.");
@@ -1173,13 +1157,6 @@ function payBalance(orderId) {
   const order = findOrder(orderId);
   const due = Math.round((balanceOwed(order) - amountAwaiting(order.id)) * 100) / 100;
   if (due <= 0) return;
-  if (!Cloud.live) {
-    recordOrderPayment(order, due, balanceMethod, today(), false);
-    saveData();
-    flashMessage = `Demo balance payment of ${money(due, orderCurrency(order))} recorded.`;
-    renderAll();
-    return;
-  }
   if (!ONLINE_PAYMENTS_ENABLED) { toast("Online payments are not open yet. Please do not pay outside NebedaHub."); return; }
   toast("Protected checkout will be enabled after the payment provider is connected.");
 }
@@ -1343,28 +1320,20 @@ function screenRtw(designerId) {
 function buyRtw(itemId) {
   const item = db.ready_to_wear.find(i => i.id === itemId);
   if (!item || item.stock <= 0) return;
-  if (!confirm(`Buy ${item.name} for ${money(item.price, rtwCurrency(item))}? (Demo checkout — no real money is taken.)`)) return;
-  if (!Cloud.live) item.stock -= 1; // live mode: the database takes it out of stock
-  db.rtw_sales.push({ id: newId("RS", db.rtw_sales), item_id: item.id, customer_id: db.session.customerId, price: item.price, cost: item.cost,
-    date: today(), status: "awaiting_confirmation", currency_code: rtwCurrency(item) });
-  saveData();
-  flashMessage = `${item.name} ordered — your payment is awaiting confirmation. ${designerName(item.designer_id || (mainDesigner() || {}).id)} will post it to you once it's confirmed.`;
-  renderAll();
+  if (!ONLINE_PAYMENTS_ENABLED) {
+    toast("Ready-to-wear checkout is not open yet. Please do not pay outside NebedaHub.");
+    return;
+  }
+  toast("Protected ready-to-wear checkout will be enabled after the payment provider is connected.");
 }
 
 // ---- Profile ----
 
 function screenProfile() {
   const customer = currentCustomer();
-  const signIn = Cloud.live ? `
+  const signIn = `
     ${Cloud.me ? `<div class="meta">Signed in as ${escapeHtml(Cloud.me.email)}</div>` : ""}
-    <button class="btn-outline" onclick="Auth.signOut()">Sign out</button>` : `
-    <label class="field">${customer ? "Switch customer (demo)" : "Sign in as an existing customer (demo)"}
-      <select onchange="signInAs(this.value)">
-        <option value="">— choose —</option>
-        ${db.customers.map(c => `<option value="${c.id}" ${customer && customer.id === c.id ? "selected" : ""}>${escapeHtml(c.name)}</option>`).join("")}
-      </select>
-    </label>`;
+    <button class="btn-outline" onclick="Auth.signOut()">Sign out</button>`;
   if (!customer) {
     return `
       ${cTop("Profile")}
