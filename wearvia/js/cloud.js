@@ -157,18 +157,26 @@ const Cloud = (() => {
   // ---- Browsing tailors without an account ----
   // Anyone can find tailors and open their pages. Everything else needs signing in.
 
-  const GUEST_SCREENS = ["home", "tailors", "tailor"];
+  const GUEST_SCREENS = ["home", "tailors", "tailor", "rtw", "rtwItem"];
 
   function isGuest() { return state.live && !state.me; }
 
   async function startGuest() {
     const lists = await loadPublicLists().catch(() => ({ countries: [], specialities: [] }));
-    const homepage = await publicClient().from("homepage_settings").select("*").order("key").then(r => r.data || []).catch(() => []);
+    const client = publicClient();
+    const homepage = await client.from("homepage_settings").select("*").order("key").then(r => r.data || []).catch(() => []);
+    const rtwItems = await client.from("ready_to_wear_items").select("*").eq("active", true).order("created_at", { ascending: false }).then(r => r.data || []).catch(() => []);
+    const rtwDesignerIds = Array.from(new Set(rtwItems.map(x => x.designer_id).filter(Boolean)));
+    const rtwDesigners = rtwDesignerIds.length
+      ? await client.from("designers").select(DESIGNER_PUBLIC).in("id", rtwDesignerIds).then(r => r.data || []).catch(() => [])
+      : [];
     const empty = {};
     ["suppliers", "fabrics", "customers", "measurement_profiles", "orders", "payments", "invoices", "deliveries", "fabric_order_lines",
      "tailors", "wedding_orders", "wedding_order_members", "ready_to_wear_items", "ready_to_wear_sales", "reviews", "price_list",
      "order_messages", "order_chat_reads", "designers", "my_designers", "designer_portfolio_items", "designer_customer_notes", "homepage_settings"].forEach(t => { empty[t] = []; });
     empty.homepage_settings = homepage;
+    empty.ready_to_wear_items = rtwItems;
+    empty.designers = rtwDesigners;
     empty.countries = lists.countries;
     empty.specialities = lists.specialities;
     empty.currencies = lists.currencies;
@@ -461,8 +469,10 @@ const Cloud = (() => {
         }))
       })),
 
-      ready_to_wear: r.ready_to_wear_items.filter(i => i.active !== false).map(i => ({
-        id: i.id, designer_id: i.designer_id, name: i.name, price: num(i.price), cost: num(i.cost) || 0, stock: i.stock || 0, color: i.colour_hex || "#1e2a44",
+      ready_to_wear: r.ready_to_wear_items.map(i => ({
+        id: i.id, designer_id: i.designer_id, name: i.name, price: num(i.price), cost: num(i.cost) || 0, stock: i.stock || 0,
+        color: i.colour_hex || "#1e2a44", photo: i.photo_url || null, active: i.active !== false,
+        category: i.category || "Other", description: i.description || "", sizes: i.sizes || [], sku: i.sku || "", featured: !!i.featured,
         currency_code: i.currency_code || "GBP"
       })),
       rtw_sales: r.ready_to_wear_sales.map(s => ({
@@ -775,7 +785,9 @@ const Cloud = (() => {
         tracking_number: l.tracking_number || "", dispatch_photo: l.dispatch_photo ? photoPath(l.dispatch_photo, SELLER_FILES) : null,
         dispatch_note: l.dispatch_note || "", ship_to: l.ship_to || "tailor" })) },
     { table: "ready_to_wear_items", rows: d => d.ready_to_wear.map(i => ({
-        id: i.id, designer_id: i.designer_id || bizDesignerId(), name: i.name, price: i.price, cost: i.cost, stock: i.stock, colour_hex: i.color })) },
+        id: i.id, designer_id: i.designer_id || bizDesignerId(), name: i.name, price: i.price, cost: i.cost, stock: i.stock,
+        colour_hex: i.color, photo_url: i.photo || null, active: i.active !== false, category: i.category || "Other",
+        description: i.description || "", sizes: i.sizes || [], sku: i.sku || "", featured: !!i.featured })) },
     { table: "price_list", rows: d => (d.prices || []).map(p => ({
         id: p.id, price: p.price, yards: p.kind === "outfit" ? p.yards : null })) },
     { table: "ready_to_wear_sales", rows: d => d.rtw_sales.map(s => ({
