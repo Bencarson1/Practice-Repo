@@ -232,7 +232,9 @@ function renderOrderDetail(orderId) {
 
     <div class="two-col">
       <div class="card chat-card">
-        <h2>Chat with ${escapeHtml(customer ? customer.name.split(" ")[0] : "the customer")} <small class="muted">questions, fittings, updates</small></h2>
+        <h2>${supplier && isPlaced(order) ? "Shared order chat" : "Chat with " + escapeHtml(customer ? customer.name.split(" ")[0] : "the customer")}
+          <small class="muted">${supplier && isPlaced(order) ? "customer · tailor · fabric seller" : "questions, fittings, updates"}</small></h2>
+        ${supplier && isPlaced(order) ? `<p class="hint">${escapeHtml(supplier.name)} can join this chat for fabric availability, quantity, dispatch and delivery questions.</p>` : ""}
         ${chatPanel(order, "team")}
       </div>
       <div class="stack">
