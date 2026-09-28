@@ -2603,3 +2603,184 @@ tr.clickable:hover td {
     display: none;
   }
 }
+
+
+/* Customer marketplace mobile restore, show the full marketplace instead of hero-only mode */
+@media (max-width: 899px) {
+  .marketplace-restored {
+    display: flex !important;
+    height: auto !important;
+    gap: 12px !important;
+  }
+
+  .marketplace-restored .marketplace-main-header {
+    display: grid !important;
+    grid-template-columns: 1fr auto !important;
+    gap: 10px !important;
+    padding: 12px !important;
+    border-radius: 0 !important;
+    border-left: 0 !important;
+    border-right: 0 !important;
+  }
+
+  .marketplace-restored .marketplace-logo {
+    display: block !important;
+  }
+
+  .marketplace-restored .marketplace-logo img {
+    width: 150px !important;
+  }
+
+  .marketplace-restored .marketplace-header-search {
+    grid-column: 1 / -1 !important;
+    grid-row: 2 !important;
+    display: grid !important;
+  }
+
+  .marketplace-restored .marketplace-header-actions {
+    display: flex !important;
+    justify-content: flex-end !important;
+  }
+
+  .marketplace-restored .marketplace-header-actions button {
+    padding: 8px 9px !important;
+    font-size: 11px !important;
+  }
+
+  .marketplace-restored .marketplace-category-nav {
+    display: flex !important;
+    overflow-x: auto !important;
+    white-space: nowrap !important;
+    border-radius: 0 !important;
+    border-left: 0 !important;
+    border-right: 0 !important;
+    padding: 4px 8px !important;
+    scrollbar-width: none !important;
+  }
+
+  .marketplace-restored .marketplace-category-nav::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .marketplace-restored .marketplace-category-nav > span {
+    display: none !important;
+  }
+
+  .marketplace-restored .market-hero {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    min-height: auto !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: #fff !important;
+    color: #1f1f1f !important;
+  }
+
+  .marketplace-restored .market-hero-copy {
+    min-height: auto !important;
+    padding: 24px 18px !important;
+    justify-content: flex-start !important;
+  }
+
+  .marketplace-restored .market-hero h1 {
+    color: #1f1f1f !important;
+    font-size: 34px !important;
+    line-height: 1.02 !important;
+  }
+
+  .marketplace-restored .market-hero p {
+    color: #5f6670 !important;
+  }
+
+  .marketplace-restored .market-primary,
+  .marketplace-restored .market-secondary {
+    width: auto !important;
+    flex: 1 1 150px !important;
+  }
+
+  .marketplace-restored .market-secondary {
+    background: #fff !important;
+    color: #272b31 !important;
+    border-color: #cfd4da !important;
+  }
+
+  .marketplace-restored .market-hero-visual {
+    display: block !important;
+    min-height: 260px !important;
+  }
+
+  .marketplace-restored .market-trust-strip {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0,1fr)) !important;
+    border-radius: 0 !important;
+    border-left: 0 !important;
+    border-right: 0 !important;
+  }
+
+  .marketplace-restored .market-trust-strip > div {
+    border-bottom: 1px solid #ece9e5 !important;
+  }
+
+  .marketplace-restored .market-section,
+  .marketplace-restored .market-service-grid,
+  .marketplace-restored .market-join-panel {
+    display: block !important;
+  }
+
+  .marketplace-restored .market-section {
+    border-radius: 0 !important;
+    border-left: 0 !important;
+    border-right: 0 !important;
+    padding: 16px 14px !important;
+  }
+
+  .marketplace-restored .market-category-grid {
+    grid-template-columns: repeat(2, minmax(0,1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .marketplace-restored .market-category-art {
+    height: 180px !important;
+  }
+
+  .marketplace-restored .market-tailor-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .marketplace-restored .market-home-products {
+    grid-template-columns: repeat(2, minmax(0,1fr)) !important;
+  }
+
+  .marketplace-restored .market-service-grid {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    border-radius: 0 !important;
+    border-left: 0 !important;
+    border-right: 0 !important;
+  }
+
+  .marketplace-restored .market-join-panel {
+    border-radius: 0 !important;
+    padding: 22px 16px !important;
+  }
+
+  .marketplace-restored .market-join-actions {
+    margin-top: 14px !important;
+  }
+
+  .marketplace-restored .market-mobile-links {
+    display: none !important;
+  }
+
+  #customer-app:has(.marketplace-restored) {
+    height: auto !important;
+    min-height: 100vh !important;
+    overflow: visible !important;
+  }
+
+  #customer-app:has(.marketplace-restored) .bottomnav {
+    position: sticky !important;
+    bottom: 0 !important;
+    z-index: 20 !important;
+  }
+}
