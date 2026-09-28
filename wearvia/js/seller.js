@@ -22,6 +22,7 @@ let stallFilter = "All";
 let sellerForm = null;   // photos (or logo) being edited, kept while the form is open
 let sellerSaving = false;
 let dispatchOpen = null; // the order whose "Dispatch" form is open
+let sellerChatOpen = null; // the order whose shared customer + tailor + seller chat is open
 
 function renderSellerArea(screen, id) {
   const seller = currentSeller();
@@ -421,6 +422,8 @@ function sellerOrdersScreen(seller) {
     const unlocked = fabricOrderUnlocked(o);
     const open = o.status !== "sent" && o.status !== "cancelled";
     const statusText = o.status === "sent" ? `Dispatched ${formatDate(o.sent_at)}` : FABRIC_ORDER_LABELS[o.status];
+    const chatOrder = findOrder(o.order_id);
+    const chatUnread = chatOrder ? unreadCount(chatOrder.id, "seller") : 0;
     return `
       <div class="sorder ${o.status}">
         <img src="${fabric ? fabricCoverUrl(fabric) : ""}" alt="">
@@ -438,6 +441,14 @@ function sellerOrdersScreen(seller) {
               : `<span class="muted small-text">You can dispatch it once the customer's deposit is confirmed.</span>`}
           </div>` : ""}
           ${open && unlocked && dispatchOpen === o.id ? dispatchForm(o) : ""}
+          ${chatOrder ? `<div class="seller-chat-actions">
+            <button class="small ghost" onclick="toggleSellerOrderChat('${o.order_id}')">💬 ${sellerChatOpen === o.order_id ? "Close order chat" : "Open order chat"}${chatUnread ? ` (${chatUnread} new)` : ""}</button>
+            <span class="muted small-text">Customer + tailor + fabric seller</span>
+          </div>
+          ${sellerChatOpen === o.order_id ? `<div class="card chat-card seller-group-chat">
+            <h3>Order chat <small class="muted">Customer · ${escapeHtml(designerName(chatOrder.designer_id))} · You</small></h3>
+            ${chatPanel(chatOrder, "seller")}
+          </div>` : ""}` : ""}
         </div>
       </div>`;
   }).join("");
@@ -493,6 +504,11 @@ function setDispatchPhoto(input) {
 function toggleDispatch(lineId) {
   dispatchOpen = dispatchOpen === lineId ? null : lineId;
   sellerForm = null;
+  renderAll();
+}
+
+function toggleSellerOrderChat(orderId) {
+  sellerChatOpen = sellerChatOpen === orderId ? null : orderId;
   renderAll();
 }
 
