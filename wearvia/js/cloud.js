@@ -589,7 +589,7 @@ const Cloud = (() => {
       photoRefs.forEach(ref => state.localPhotos.delete(ref));
       await refreshChat();
       if (state.me && state.me.is_admin) await loadHiddenOriginals();
-      const side = isTeam() ? "team" : "customer";
+      const side = APP_KIND === "seller" ? "seller" : isTeam() ? "team" : "customer";
       if (!db.chat_reads.some(r => r.order_id === order.id && r.side === side)) db.chat_reads.push({ order_id: order.id, side, last_read_at: "" });
       db.chat_reads.find(r => r.order_id === order.id && r.side === side).last_read_at = new Date().toISOString();
     });
