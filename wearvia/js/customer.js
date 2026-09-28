@@ -162,15 +162,24 @@ function screenHome() {
 
   return `
     <div class="market-home">
-      <section class="desktop-market-nav" aria-label="Marketplace navigation">
-        <button class="desktop-home-link active" onclick="go('home')">Home</button>
-        <button class="desktop-home-link" onclick="go('outfit')">Outfits</button>
-        <button class="desktop-home-link" onclick="go('market')">Fabrics</button>
-        <button class="desktop-home-link" onclick="go('rtw')">Ready to Wear</button>
-        <button class="desktop-home-link" onclick="go('tailors')">Tailors</button>
-        <span class="desktop-market-spacer"></span>
-        <a class="desktop-home-link" href="${escapeHtml(appUrl("seller", "welcome"))}">Sell fabric</a>
-        <a class="desktop-home-link" href="${escapeHtml(appUrl("business", "welcome"))}">For tailors</a>
+      <section class="customer-marketplace-top" aria-label="Customer marketplace navigation">
+        <div class="desktop-market-nav">
+          <button class="desktop-home-link active" onclick="go('home')">Home</button>
+          <button class="desktop-home-link" onclick="go('outfit')">Outfits</button>
+          <button class="desktop-home-link" onclick="go('market')">Fabrics</button>
+          <button class="desktop-home-link" onclick="go('rtw')">Ready to Wear</button>
+          <button class="desktop-home-link" onclick="go('tailors')">Tailors</button>
+          <a class="desktop-home-link" href="#market-how-it-works">How it works</a>
+          <span class="desktop-market-spacer"></span>
+          <button class="desktop-home-link customer-top-action" onclick="go('orders')">Orders</button>
+          <button class="desktop-home-link customer-top-action" onclick="go('account')">Account</button>
+        </div>
+        <div class="market-home-search customer-top-search">
+          <span aria-hidden="true">⌕</span>
+          <input type="search" placeholder="Search outfits, fabrics, tailors and ready to wear" aria-label="Search NebedaHub"
+            onkeydown="if(event.key==='Enter'){homeSearch(this.value)}">
+          <button onclick="homeSearch(this.previousElementSibling.value)">Search</button>
+        </div>
       </section>
 
       <section class="market-hero">
@@ -201,15 +210,6 @@ function screenHome() {
             <b>Everything Fashion, All in One Place.</b>
             <span>Tailor + fabric + design + order tracking</span>
           </div>
-        </div>
-      </section>
-
-      <section class="market-search-strip">
-        <div class="market-home-search">
-          <span aria-hidden="true">⌕</span>
-          <input type="search" placeholder="Search fabrics, tailors and fashion services" aria-label="Search NebedaHub"
-            onkeydown="if(event.key==='Enter'){homeSearch(this.value)}">
-          <button onclick="homeSearch(this.previousElementSibling.value)">Search</button>
         </div>
       </section>
 
@@ -277,7 +277,7 @@ function screenHome() {
           : `<div class="market-empty-card"><b>More tailors are joining.</b><span>Search your area to see who is available.</span><button onclick="go('tailors')">Find tailors</button></div>`}
       </section>
 
-      <section class="market-service-grid">
+      <section class="market-service-grid" id="market-how-it-works">
         <div><b>Verified participants</b><span>Approval and marketplace controls help build trust.</span></div>
         <div><b>Tailor-led fabric choice</b><span>Your tailor can recommend marketplace fabrics inside your order.</span></div>
         <div><b>Transparent quotes</b><span>Review the itemised quote before accepting the order.</span></div>
