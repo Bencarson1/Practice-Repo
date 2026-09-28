@@ -872,7 +872,9 @@ function exchangeRateHtml(order) {
 
 function chatButton(order, primary) {
   const unread = unreadCount(order.id, "customer");
-  return `<button class="${primary ? "cta" : "btn-outline"} chat-open" onclick="go('chat/${order.id}')">💬 Chat with ${escapeHtml(designerName(order.designer_id))}${unread ? ` <span class="chat-badge">${unread} new</span>` : ""}</button>`;
+  const seller = order.fabric_supplier_id && isPlaced(order) ? findSupplier(order.fabric_supplier_id) : null;
+  const label = seller ? "Order chat" : "Chat with " + designerName(order.designer_id);
+  return `<button class="${primary ? "cta" : "btn-outline"} chat-open" onclick="go('chat/${order.id}')">💬 ${escapeHtml(label)}${unread ? ` <span class="chat-badge">${unread} new</span>` : ""}</button>`;
 }
 
 function openRecommendedFabricPhotos(fabricId, index) {
@@ -1076,9 +1078,11 @@ function screenChat(orderId) {
   const unit = orderFabricUnit(order);
   const cur = orderCurrency(order);
   const customer = findCustomer(order.customer_id);
+  const seller = order.fabric_supplier_id && isPlaced(order) ? findSupplier(order.fabric_supplier_id) : null;
   return `
-    ${cTop("Chat · " + order.id, "tracking/" + order.id)}
+    ${cTop((seller ? "Order Chat · " : "Chat · ") + order.id, "tracking/" + order.id)}
     <div class="content chat-content" data-chat-scroll="${order.id}" onscroll="chatScrolled(this)">
+      ${seller ? `<div class="notice soft"><b>Shared order chat</b><br>You, ${escapeHtml(designerName(order.designer_id))} and ${escapeHtml(seller.name)} can all message here about this fabric order.</div>` : ""}
       <details class="chat-brief">
         <summary>Your order: ${escapeHtml(order.outfit_type)}${hasInspiration(order.inspiration) ? " · style photos" : ""} · measurements</summary>
         ${inspirationBlock(order.id, order.inspiration)}
