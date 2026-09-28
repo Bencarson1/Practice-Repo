@@ -7,7 +7,7 @@
 //
 //   db.messages:   { id, order_id, sender_kind, sender_name, body, photos, created_at,
 //                    contact_hidden, original_body }
-//                  sender_kind is "customer", "team" or "system" (NebedaHub's own
+//                  sender_kind is "customer", "team", "seller" or "system" (NebedaHub's own
 //                  notes, e.g. "Your quote is ready"). Phone numbers, emails,
 //                  links and social handles are hidden (contact_hidden); only
 //                  the NebedaHub admin gets original_body, for safety.
@@ -66,7 +66,11 @@ function unreadBadge(count, label) {
 function addChatMessage(order, kind, body, photos) {
   if (!db.messages) db.messages = [];
   const customer = findCustomer(order.customer_id);
-  const name = kind === "team" ? designerName(order.designer_id) : kind === "system" ? APP_NAME : (customer ? customer.name : "Customer");
+  const seller = order.fabric_supplier_id ? findSupplier(order.fabric_supplier_id) : null;
+  const name = kind === "team" ? designerName(order.designer_id)
+    : kind === "seller" ? (seller ? seller.name : "Fabric seller")
+    : kind === "system" ? APP_NAME
+    : (customer ? customer.name : order.customer_first_name || "Customer");
   const text = String(body || "").trim().slice(0, CHAT_TEXT_MAX);
   const filtered = kind === "system" ? { text, hidden: false } : hideContactDetails(text);
   const message = { id: newId("MSG", db.messages, 3), order_id: order.id, sender_kind: kind, sender_name: name,
@@ -133,7 +137,13 @@ function chatLogInner(order, side) {
   const all = orderMessages(order.id);
   const shown = chatShowAll[order.id] ? all : all.slice(-CHAT_SHOWN);
   const hidden = all.length - shown.length;
-  const other = side === "customer" ? designerName(order.designer_id) : (findCustomer(order.customer_id) || { name: "the customer" }).name.split(" ")[0];
+  const customer = findCustomer(order.customer_id);
+  const customerFirst = customer ? customer.name.split(" ")[0] : (order.customer_first_name || "customer");
+  const seller = order.fabric_supplier_id ? findSupplier(order.fabric_supplier_id) : null;
+  const other = side === "customer"
+    ? (seller && isPlaced(order) ? designerName(order.designer_id) + " and " + seller.name : designerName(order.designer_id))
+    : side === "seller" ? customerFirst + " and " + designerName(order.designer_id)
+    : (seller && isPlaced(order) ? customerFirst + " and " + seller.name : customerFirst);
   if (!all.length) {
     return `<div class="chat-empty">No messages yet. ${side === "customer"
       ? `Ask ${escapeHtml(other)} anything about your outfit — the fit, the fabric, fittings or delivery.`
@@ -168,7 +178,13 @@ function chatPhotoStrip(orderId) {
 function chatComposerHtml(order, side) {
   const draftMsg = chatDraftFor(order.id);
   const room = CHAT_MAX_PHOTOS - draftMsg.photos.length - draftMsg.adding;
-  const to = side === "customer" ? designerName(order.designer_id) : (findCustomer(order.customer_id) || { name: "customer" }).name.split(" ")[0];
+  const customer = findCustomer(order.customer_id);
+  const customerFirst = customer ? customer.name.split(" ")[0] : (order.customer_first_name || "customer");
+  const seller = order.fabric_supplier_id ? findSupplier(order.fabric_supplier_id) : null;
+  const to = side === "customer"
+    ? (seller && isPlaced(order) ? "order chat" : designerName(order.designer_id))
+    : side === "seller" ? "order chat"
+    : (seller && isPlaced(order) ? "order chat" : customerFirst);
   return `<form class="chat-composer" onsubmit="return sendChat(event, '${order.id}', '${side}')">
     <div class="chat-pending-row" id="chat-photos-${order.id}">${chatPhotoStrip(order.id)}</div>
     <div class="chat-compose-row">
