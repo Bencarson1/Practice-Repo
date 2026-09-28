@@ -259,7 +259,8 @@ const Cloud = (() => {
                state.me && state.me.is_admin ? fetchAll("hidden_contact_details", "created_at", "source, source_id, original", q => q.eq("source", "chat")) : Promise.resolve([]),
                fetchSuppliers(),
                state.me ? rpcRows("wearvia_my_suppliers") : Promise.resolve([]),
-               APP_KIND === "seller" && state.me ? rpcRows("wearvia_seller_deliveries") : Promise.resolve([])]));
+               APP_KIND === "seller" && state.me ? rpcRows("wearvia_seller_deliveries") : Promise.resolve([]),
+               APP_KIND === "seller" && state.me ? rpcRows("wearvia_seller_chat_orders") : Promise.resolve([])]));
     tables.forEach((t, i) => { rows[t] = results[i]; });
     rows.customers = results[tables.length];
     rows.my_designers = results[tables.length + 1];
@@ -272,6 +273,22 @@ const Cloud = (() => {
     rows.suppliers = results[tables.length + 5].map(x => Object.assign({}, x, mine.get(x.id) || {}, { is_mine: mine.has(x.id) }));
     mine.forEach((x, id) => { if (!rows.suppliers.some(y => y.id === id)) rows.suppliers.push(Object.assign({}, x, { is_mine: true })); });
     rows.seller_deliveries = results[tables.length + 7];
+    rows.seller_chat_orders = results[tables.length + 8] || [];
+    // Sellers are deliberately not granted full access to customer orders.
+    // The RPC above returns only the small amount of order data needed for
+    // the shared customer + tailor + fabric seller chat.
+    if (APP_KIND === "seller" && rows.seller_chat_orders.length) {
+      const have = new Set(rows.orders.map(o => o.id));
+      rows.seller_chat_orders.forEach(o => {
+        if (!have.has(o.id)) rows.orders.push({
+          id: o.id, order_number: o.order_number, designer_id: o.designer_id,
+          customer_id: null, customer_first_name: o.customer_first_name || "Customer",
+          fabric_id: o.fabric_id, fabric_supplier_id: o.fabric_supplier_id,
+          quote_status: o.quote_status || "accepted", stage: o.stage || "tailor_assigned",
+          created_at: o.created_at, updated_at: o.updated_at
+        });
+      });
+    }
 
     // Only the tailors this person needs: their own, their orders' tailors,
     // Nebeda Threads, and the one they're ordering from now
@@ -388,7 +405,7 @@ const Cloud = (() => {
         const invoice = r.invoices.find(i => i.order_id === o.id);
         const photos = o.inspiration_photos || [];
         return {
-          id: numberOf.get(o.id), _uuid: o.id, customer_id: o.customer_id, designer_id: o.designer_id,
+          id: numberOf.get(o.id), _uuid: o.id, customer_id: o.customer_id, customer_first_name: o.customer_first_name || "", designer_id: o.designer_id,
           outfit_type: o.outfit_type || "Custom", colour: o.colour || "#1e2a44", embroidery: o.embroidery || "None",
           sleeve_style: o.sleeve_style || "", neck_style: o.neck_style || "",
           concept_variation: o.concept_variation || 1, concept_image_url: o.concept_image_url || "",
