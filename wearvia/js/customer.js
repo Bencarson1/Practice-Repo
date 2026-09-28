@@ -128,19 +128,23 @@ function screenHome() {
   const d = db.draft;
   const inProgress = d && d.designDone;
   const resume = inProgress ? FLOW.slice().reverse().find(f => !flowRedirect(f.screen)) : null;
+
   const tailors = (db.designers || [])
     .filter(t => (t.admin_status || "approved") === "approved" && t.custom_orders !== false)
     .slice()
     .sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0))
     .slice(0, 6);
+
   const fabrics = (db.fabrics || [])
     .filter(f => f.status === "approved" && !f.deleted_at && !f.sold_out && Number(f.yards_available || 0) > 0)
     .slice(0, 8);
+
   const readyToWear = (db.ready_to_wear || [])
     .filter(i => i.active !== false)
     .slice()
     .sort((a, b) => Number(!!b.featured) - Number(!!a.featured))
     .slice(0, 6);
+
   const home = db.homepage || {};
   const categoryPhotos = {
     Agbada: home.category_agbada || "https://images.unsplash.com/photo-1782566208081-6b5135fddf23?auto=format&fit=crop&w=700&q=82",
@@ -156,93 +160,74 @@ function screenHome() {
   const orderNames = String(home.category_order || "Agbada,Kaftan,Senator,Bubu,Two Piece,Dress,Wedding,Suit").split(",").map(x => x.trim()).filter(Boolean);
   const outfitByName = new Map(OUTFITS.map(o => [o.name, o]));
   const categories = orderNames.map(name => outfitByName.get(name)).filter(Boolean).filter(o => !hiddenCategories.has(o.name)).slice(0, 8);
+
   const heroImage = home.hero_image || "https://images.unsplash.com/photo-1648328414427-fc902f51808c?auto=format&fit=crop&w=1600&q=88";
-  const heroTitle = home.hero_title || "Your fashion marketplace, all in one place.";
-  const heroText = home.hero_text || "Discover outfits, shop fabrics, choose trusted tailors and manage your order from one place.";
+  const heroTitle = home.hero_title || "Everything Fashion, All in One Place.";
+  const heroText = home.hero_text || "Discover trusted tailors, shop fabrics, explore ready-to-wear and manage your custom order in one marketplace.";
 
   return `
-    <div class="market-home marketplace-restored">
-      <header class="marketplace-main-header">
-        <a class="marketplace-logo" href="#/" aria-label="NebedaHub home">
+    <div class="market-home customer-home-vintage">
+
+      <header class="customer-shop-header">
+        <a class="customer-shop-logo" href="#/" aria-label="NebedaHub home">
           <img src="assets/nebedahub-logo.svg" alt="NebedaHub">
         </a>
-        <div class="market-home-search marketplace-header-search">
+
+        <div class="market-home-search customer-shop-search">
           <span aria-hidden="true">⌕</span>
-          <input type="search" placeholder="Search outfits, fabrics, tailors and ready to wear" aria-label="Search NebedaHub"
+          <input
+            type="search"
+            placeholder="Search outfits, fabrics, tailors and fashion"
+            aria-label="Search NebedaHub"
             onkeydown="if(event.key==='Enter'){homeSearch(this.value)}">
           <button onclick="homeSearch(this.previousElementSibling.value)">Search</button>
         </div>
-        <div class="marketplace-header-actions">
+
+        <div class="customer-shop-actions">
           <button onclick="go('orders')">Orders</button>
           <button onclick="go('account')">Account</button>
         </div>
       </header>
 
-      <nav class="marketplace-category-nav" aria-label="Marketplace navigation">
-        <button class="active" onclick="go('home')">Home</button>
+      <nav class="customer-shop-nav" aria-label="Customer marketplace navigation">
         <button onclick="go('outfit')">Outfits</button>
         <button onclick="go('market')">Fabrics</button>
-        <button onclick="go('rtw')">Ready to Wear</button>
         <button onclick="go('tailors')">Tailors</button>
-        <a href="#market-how-it-works">How it works</a>
-        <span></span>
-        <a href="${escapeHtml(appUrl("seller", "welcome"))}">Sell fabric</a>
-        <a href="${escapeHtml(appUrl("business", "welcome"))}">For tailors</a>
+        <a href="#customer-how-it-works">How it works</a>
       </nav>
 
-      <section class="market-hero restored-hero">
-        <div class="market-hero-copy">
-          <span class="market-kicker">NebedaHub marketplace</span>
+      <section class="customer-hero-banner" style="--customer-hero:url('${escapeHtml(heroImage)}')">
+        <div class="customer-hero-overlay"></div>
+        <div class="customer-hero-content">
+          <span class="market-kicker">NEBEDAHUB MARKETPLACE</span>
           <h1>${escapeHtml(heroTitle)}</h1>
           <p>${escapeHtml(heroText)}</p>
-          <div class="market-hero-actions">
+          <div class="customer-hero-actions">
             <button class="market-primary" onclick="startOrder()">Start an order</button>
             <button class="market-secondary" onclick="go('tailors')">Find tailors near me</button>
           </div>
-          ${resume ? `<button class="market-resume" onclick="go('${resume.screen}')">Continue your ${escapeHtml(d.outfit)} order${draftHasTailor() ? ` with ${escapeHtml(draftDesigner().business_name)}` : ""} →</button>` : ""}
-        </div>
-        <div class="market-hero-visual">
-          <img src="${escapeHtml(heroImage)}" alt="Fashion marketplace">
-          <div class="market-hero-card">
-            <b>Everything Fashion, All in One Place.</b>
-            <span>Outfits · Fabrics · Tailors · Ready to Wear</span>
-          </div>
+          ${resume ? `<button class="market-resume customer-resume" onclick="go('${resume.screen}')">Continue your ${escapeHtml(d.outfit)} order${draftHasTailor() ? ` with ${escapeHtml(draftDesigner().business_name)}` : ""} →</button>` : ""}
         </div>
       </section>
 
-      <section class="market-trust-strip">
-        <div><b>Verified marketplace</b><span>Approved tailors and sellers</span></div>
-        <div><b>Quote before payment</b><span>See your price before you accept</span></div>
-        <div><b>Order protection</b><span>Keep your order journey on NebedaHub</span></div>
-        <div><b>Worldwide marketplace</b><span>Discover fashion beyond one location</span></div>
+      <section class="customer-quick-row" aria-label="Shop categories">
+        <button onclick="startOrder()"><b>Custom outfits</b><span>Design and order</span></button>
+        <button onclick="go('rtw')"><b>Ready to Wear</b><span>Shop finished pieces</span></button>
+        <button onclick="go('market')"><b>Fabrics</b><span>Browse marketplace fabrics</span></button>
+        <button onclick="go('tailors')"><b>Tailors</b><span>Find a professional</span></button>
       </section>
 
-      <section class="market-section">
-        <div class="market-section-head">
-          <div><span class="market-kicker">Discover</span><h2>Popular Outfit Categories</h2></div>
-          <button class="market-text-link" onclick="startOrder()">View all outfits →</button>
-        </div>
-        <div class="market-category-grid">
-          ${categories.map(o => {
-            const photo = categoryPhotos[o.name] || categoryPhotos.Dress;
-            return `<button class="market-category-card" onclick="startHomeOutfit('${escapeHtml(o.name)}')">
-              <span class="market-category-art"><img src="${escapeHtml(photo)}" alt="${escapeHtml(o.name)} fashion" loading="lazy"></span>
-              <span class="market-category-copy"><b>${escapeHtml(o.name)}</b><small>Request a tailor quote</small></span>
-            </button>`;
-          }).join("")}
-        </div>
-      </section>
-
-      <section class="market-section">
+      <section class="market-section customer-popular-tailors">
         <div class="market-section-head">
           <div><span class="market-kicker">Professionals</span><h2>Popular Tailors</h2></div>
-          <button class="market-text-link" onclick="go('tailors')">Browse all tailors →</button>
+          <button class="market-text-link" onclick="go('tailors')">See all tailors →</button>
         </div>
         ${tailors.length ? `
           <div class="market-tailor-grid">
             ${tailors.map(t => `<a class="market-tailor-card" href="#/tailor/${encodeURIComponent(t.slug || t.id)}">
               <img src="${escapeHtml(photoUrl(t.profile_image) || photoUrl(`logo:${initialsOf(t.business_name)}:7a1f2b`))}" alt="">
-              <span><b>${escapeHtml(t.business_name)}</b>
+              <span>
+                <b>${escapeHtml(t.business_name)}</b>
                 <small>${escapeHtml(tailorAreaText(t) || t.location || "Tailor")}</small>
                 <small class="market-rating">${tailorRatingText(t)}</small>
               </span>
@@ -274,28 +259,61 @@ function screenHome() {
 
       <section class="market-section">
         <div class="market-section-head">
+          <div><span class="market-kicker">Explore styles</span><h2>Popular Outfit Categories</h2></div>
+          <button class="market-text-link" onclick="startOrder()">View all outfits →</button>
+        </div>
+        <div class="market-category-grid">
+          ${categories.map(o => {
+            const photo = categoryPhotos[o.name] || categoryPhotos.Dress;
+            return `<button class="market-category-card" onclick="startHomeOutfit('${escapeHtml(o.name)}')">
+              <span class="market-category-art"><img src="${escapeHtml(photo)}" alt="${escapeHtml(o.name)} fashion" loading="lazy"></span>
+              <span class="market-category-copy"><b>${escapeHtml(o.name)}</b><small>Request a tailor quote</small></span>
+            </button>`;
+          }).join("")}
+        </div>
+      </section>
+
+      <section class="market-section">
+        <div class="market-section-head">
           <div><span class="market-kicker">Shop now</span><h2>Ready to Wear</h2></div>
-          <button class="market-text-link" onclick="go('rtw')">Open Ready to Wear →</button>
+          <button class="market-text-link" onclick="go('rtw')">Open the shop →</button>
         </div>
         ${readyToWear.length ? `<div class="rtw-product-grid home-rtw-grid">${readyToWear.map(rtwProductCard).join("")}</div>`
           : `<div class="market-empty-card"><b>Ready-to-wear shops are opening.</b><span>Approved designers can publish finished products here.</span><button onclick="go('tailors')">Browse designers</button></div>`}
       </section>
 
-      <section class="market-service-grid" id="market-how-it-works">
-        <div><b>1. Choose what you want</b><span>Start with an outfit, fabric or ready-to-wear item.</span></div>
-        <div><b>2. Choose your professional</b><span>Find a tailor or designer that fits your order.</span></div>
-        <div><b>3. Review the quote</b><span>Check the itemised price before accepting.</span></div>
-        <div><b>4. Track everything</b><span>Keep design, chat and order progress together.</span></div>
+      <section class="customer-trust-strip">
+        <div><b>Verified marketplace</b><span>Approved tailors and fabric sellers</span></div>
+        <div><b>Quote before payment</b><span>Review the full quote first</span></div>
+        <div><b>Order protection</b><span>Keep your order journey on NebedaHub</span></div>
+        <div><b>Connected support</b><span>Design, chat and tracking stay together</span></div>
+      </section>
+
+      <section class="market-service-grid" id="customer-how-it-works">
+        <div><b>1. Choose a style</b><span>Start with an outfit or upload your inspiration.</span></div>
+        <div><b>2. Choose a tailor</b><span>Find a professional that suits your order.</span></div>
+        <div><b>3. Add fabric</b><span>Choose marketplace fabric or ask your tailor to recommend one.</span></div>
+        <div><b>4. Review and track</b><span>See your quote and follow production from one place.</span></div>
       </section>
 
       <section class="market-join-panel">
-        <div><span class="market-kicker">Sell on NebedaHub</span><h2>Grow your fashion business</h2>
-          <p>Join the marketplace as a tailor, designer or fabric seller.</p></div>
+        <div>
+          <span class="market-kicker">Join the marketplace</span>
+          <h2>Sell fashion services or fabrics</h2>
+          <p>Build your business on NebedaHub.</p>
+        </div>
         <div class="market-join-actions">
           <a href="${escapeHtml(appUrl("business", "welcome"))}">Join as tailor or designer</a>
           <a href="${escapeHtml(appUrl("seller", "welcome"))}">Join as fabric seller</a>
         </div>
       </section>
+
+      <footer class="customer-market-footer">
+        <span>© NebedaHub</span>
+        <a href="#customer-how-it-works">How it works</a>
+        <a href="${escapeHtml(appUrl("business", "welcome"))}">For tailors</a>
+        <a href="${escapeHtml(appUrl("seller", "welcome"))}">For fabric sellers</a>
+      </footer>
     </div>
     ${cNav("home")}`;
 }
