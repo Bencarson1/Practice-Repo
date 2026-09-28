@@ -1830,6 +1830,23 @@ tr.clickable:hover td {
 }
 .desktop-market-spacer { flex: 1; }
 
+.customer-marketplace-top {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0 2px 4px;
+}
+.customer-marketplace-top .desktop-market-nav {
+  padding-bottom: 8px;
+}
+.customer-top-search {
+  width: 100%;
+}
+.customer-top-action {
+  font-weight: 700;
+  color: #272b31;
+}
+
 .market-hero {
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(320px, .95fr);
@@ -2287,6 +2304,7 @@ tr.clickable:hover td {
 }
 
 @media (max-width: 699px) {
+  .customer-marketplace-top,
   .desktop-market-nav,
   .market-search-strip,
   .market-service-grid,
