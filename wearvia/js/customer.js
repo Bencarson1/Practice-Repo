@@ -1038,6 +1038,7 @@ function screenPay(orderId) {
   if (!isPlaced(order) || depositStarted(order)) return screenTracking(orderId);
   const deposit = order.deposit_amount;
   const cur = orderCurrency(order);
+  const testMode = typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE;
   return `
     ${cTop("Pay Deposit", "tracking/" + order.id)}
     <div class="content">
@@ -1045,28 +1046,43 @@ function screenPay(orderId) {
       <div class="qline"><span>Order Total</span><span>${money(order.quote_total, cur)}</span></div>
       <div class="qline"><span>Deposit Required (${Math.round(DEPOSIT_RATE * 100)}%)</span><span>${money(deposit, cur)}${approxMoney(deposit, cur)}</span></div>
       <div class="qline"><span>Balance (after quality control)</span><span>${money(order.quote_total - deposit, cur)}</span></div>
-      <div class="meta">You pay in ${escapeHtml(currencyInfo(cur).name)} (${escapeHtml(cur)}), ${escapeHtml(designerName(order.designer_id))}'s currency.</div>
+      <div class="meta">You pay in ${escapeHtml(currencyInfo(cur).name)} (${escapeHtml(cur)}), ${escapeHtml(designerName(order.designer_id))}\'s currency.</div>
       ${approxNote(cur)}
-      ${ONLINE_PAYMENTS_ENABLED ? `<div class="meta"><b>Payment methods:</b> Secure payment methods will be shown at checkout.</div>` : `<div class="card attention"><b>Online payments are not open yet.</b><p class="hint">You can prepare and accept your quote, but do not send money directly to a tailor or fabric seller. NebedaHub will enable protected in-app payments before public transactions open.</p></div>`}
-      <label class="field">Delivery address <small>(optional — shared with ${escapeHtml(designerName(order.designer_id))} once your deposit is confirmed)</small>
+      ${testMode ? `<div class="card attention"><b>🧪 TRANSACTION TEST MODE</b><p class="hint">No real money will move. This simulates a successful payment and shows what is secured for the fabric seller and tailor.</p></div>` : ONLINE_PAYMENTS_ENABLED ? `<div class="meta"><b>Payment methods:</b> Secure payment methods will be shown at checkout.</div>` : `<div class="card attention"><b>Online payments are not open yet.</b><p class="hint">Do not send money directly to a tailor or fabric seller.</p></div>`}
+      <label class="field">Delivery address <small>(optional)</small>
         <input id="pay-address" maxlength="300" value="${escapeHtml(deliveryDetails(order).delivery_address)}" placeholder="House number, street, town, postcode" autocomplete="street-address"></label>
       ${payProtectionLine()}
-      <div class="meta">${ONLINE_PAYMENTS_ENABLED ? `Secure checkout is handled by the approved payment provider. ${APP_NAME} records payment from a verified server notification, not from your browser.` : `Payments are currently disabled while NebedaHub completes payment setup.`}</div>
-      ${!ONLINE_PAYMENTS_ENABLED ? "" : `<button id="pay-deposit" class="cta" onclick="payDeposit('${order.id}')">Continue to secure payment</button>`}
+      <div class="meta">${testMode ? "Test only. No card will be charged and no payout will be sent." : ONLINE_PAYMENTS_ENABLED ? `Secure checkout is handled by the approved payment provider.` : `Payments are currently disabled while NebedaHub completes payment setup.`}</div>
+      ${testMode ? `<button id="pay-deposit" class="cta" onclick="payDeposit(\'${order.id}\')">🧪 Test Pay ${money(deposit, cur)} Deposit</button>` : !ONLINE_PAYMENTS_ENABLED ? "" : `<button id="pay-deposit" class="cta" onclick="payDeposit(\'${order.id}\')">Continue to secure payment</button>`}
     </div>`;
 }
 
-// Step 7: the deposit waits for Nebeda Threads to confirm it before production starts
 function payDeposit(orderId) {
   const order = findOrder(orderId);
   if (!order || !isPlaced(order) || depositStarted(order)) return;
   const addressBox = document.getElementById("pay-address");
   const address = addressBox ? addressBox.value.trim() : "";
-  if (!ONLINE_PAYMENTS_ENABLED) { toast("Online payments are not open yet. Please do not pay a seller outside NebedaHub."); return; }
-
+  const testMode = typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE;
+  if (testMode && Cloud.live) {
+    if (!confirm("Run a TEST deposit payment? No real money will move.")) return;
+    const button = document.getElementById("pay-deposit");
+    if (button) { button.disabled = true; button.textContent = "Running test payment…"; }
+    const saveAddress = address ? Cloud.setDeliveryAddress(order, address) : Promise.resolve();
+    Promise.resolve(saveAddress)
+      .then(() => Cloud.testPayment(order, "Deposit"))
+      .then(result => {
+        flashMessage = `TEST payment successful. ${money(result.amount, result.currency)} simulated. Fabric seller secured ${money(result.seller_secured, result.currency)}, tailor secured ${money(result.tailor_secured, result.currency)}. No real money moved.`;
+        go("tracking/" + order.id);
+      })
+      .catch(error => {
+        toast(error.message || "The test payment could not be completed.");
+        if (button) { button.disabled = false; button.textContent = "Test Pay Deposit"; }
+      });
+    return;
+  }
+  if (!ONLINE_PAYMENTS_ENABLED) { toast("Online payments are not open yet. Please do not pay outside NebedaHub."); return; }
   toast("Protected checkout will be enabled after the payment provider is connected.");
 }
-
 // ---- Chat with Nebeda Threads (every order) ----
 
 function screenChat(orderId) {
