@@ -246,7 +246,7 @@ const Cloud = (() => {
   async function load() {
     const tables = ["fabrics", "measurement_profiles", "orders", "fabric_recommendations", "payments",
       "invoices", "deliveries", "fabric_order_lines", "tailors", "wedding_orders", "wedding_order_members",
-      "ready_to_wear_items", "ready_to_wear_sales", "order_messages", "order_chat_reads", "countries", "specialities", "designer_customer_notes",
+      "ready_to_wear_items", "ready_to_wear_sales", "order_messages", "order_chat_reads", "test_payment_allocations", "countries", "specialities", "designer_customer_notes",
       "currencies", "exchange_rates", "homepage_settings"];
     const sortBy = { order_chat_reads: "last_read_at", countries: "sort_order", specialities: "sort_order", designer_customer_notes: "updated_at",
       currencies: "sort_order", exchange_rates: "currency_code", homepage_settings: "key" };
@@ -452,8 +452,17 @@ const Cloud = (() => {
 
       payments: r.payments.map(p => ({
         id: p.id, order_id: numberOf.get(p.order_id), amount: num(p.amount), method: p.method, kind: p.kind,
-        status: p.status, date: day(p.paid_on || p.created_at), confirmed_at: day(p.confirmed_at), currency_code: p.currency_code || "GBP"
+        status: p.status, date: day(p.paid_on || p.created_at), confirmed_at: day(p.confirmed_at), currency_code: p.currency_code || "GBP",
+        is_test: !!p.is_test, test_reference: p.test_reference || ""
       })).filter(p => p.order_id),
+
+      test_allocations: (r.test_payment_allocations || []).filter(a => numberOf.has(a.order_id)).map(a => ({
+        id: a.id, payment_id: a.payment_id, order_id: numberOf.get(a.order_id),
+        recipient_type: a.recipient_type, recipient_id: a.recipient_id, amount: num(a.amount),
+        currency_code: a.currency_code || "GBP", recipient_amount: num(a.recipient_amount),
+        recipient_currency_code: a.recipient_currency_code || a.currency_code || "GBP",
+        status: a.status || "secured", created_at: iso(a.created_at)
+      })),
 
       invoices: r.invoices.filter(i => numberOf.has(i.order_id)).map(i => ({
         id: i.invoice_number || "INV-" + String(numberOf.get(i.order_id)).replace(/^\D+/, ""), order_id: numberOf.get(i.order_id),
@@ -606,6 +615,22 @@ const Cloud = (() => {
     if (!order || !order._uuid) return;
     state.client.rpc("wearvia_mark_chat_read", { p_order_id: order._uuid }).then(({ error }) => {
       if (error) console.warn("Couldn't mark the chat as read:", error.message);
+    });
+  }
+
+  // Safe transaction simulation. This calls a database RPC that records a
+  // confirmed TEST payment and splits it between fabric seller and tailor.
+  // No real payment provider or payout is contacted.
+  function testPayment(order, kind) {
+    return run(async () => {
+      if (!order || !order._uuid) throw new Error("Order not found.");
+      const { data, error } = await state.client.rpc("wearvia_test_pay_order", {
+        p_order_id: order._uuid,
+        p_kind: kind
+      });
+      if (error) throw new Error(friendly(error));
+      await load();
+      return data;
     });
   }
 
@@ -1349,7 +1374,7 @@ const Cloud = (() => {
     start, afterSignIn, signIn, signUp, signOut, sendPasswordReset, setNewPassword,
     newId, isTeam, isOwner, homeRoute, becomeCustomer,
     save, flush, refresh, refreshIfStale, placeOrder, deleteOrder,
-    requestQuote, sendQuote, acceptQuote, recommendFabrics, chooseRecommendedFabric, generateStyleVariations, sendMessage, markChatRead, refreshChat,
+    requestQuote, sendQuote, acceptQuote, recommendFabrics, chooseRecommendedFabric, generateStyleVariations, sendMessage, markChatRead, refreshChat, testPayment,
     uploadPhoto, uploadVerificationFile, removePhoto, photoUrl,
     loadTeamLogins, addTeamLogin, removeTeamLogin,
     registerDesigner, acceptTailorTerms, setDeliveryAddress, saveDesignerProfile, addPortfolioItem, removePortfolioItem, setDesignerStatus, reviewSeller, resubmitSeller, addSpeciality,
