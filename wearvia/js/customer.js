@@ -1002,7 +1002,11 @@ let acceptingQuote = false;
 function acceptQuoteFromApp(orderId) {
   const order = findOrder(orderId);
   if (!order || acceptingQuote) return;
-  if (!confirm(`Accept the quote of ${money(order.quote_total, orderCurrency(order))}? The fabric is bought for your outfit and you'll pay a deposit of ${money(order.deposit_amount, orderCurrency(order))}.`)) return;
+  const testMode = typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE;
+  const confirmText = testMode
+    ? `Accept the quote of ${money(order.quote_total, orderCurrency(order))}? In transaction test mode you will test-pay the full amount upfront. No real money will move.`
+    : `Accept the quote of ${money(order.quote_total, orderCurrency(order))}? The fabric is bought for your outfit and you\'ll pay a deposit of ${money(order.deposit_amount, orderCurrency(order))}.`;
+  if (!confirm(confirmText)) return;
   acceptingQuote = true;
   const button = document.getElementById("accept-quote");
   if (button) { button.disabled = true; button.textContent = "Accepting…"; }
@@ -1016,7 +1020,7 @@ function acceptQuoteFromApp(orderId) {
     .then(outcome => {
       if (!Cloud.live) saveData();
       if (outcome && outcome.ok) {
-        flashMessage = "Quote accepted — your fabric is bought. Now pay your deposit and we'll start making your outfit.";
+        flashMessage = typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE ? "Quote accepted. Now test-pay the full order amount upfront." : "Quote accepted. Now pay your deposit and we will start making your outfit.";
         go("pay/" + orderId);
       } else {
         flashMessage = (outcome && outcome.message) || "That quote can't be accepted any more.";
