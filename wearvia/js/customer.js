@@ -858,7 +858,7 @@ function quoteLinesHtml(order) {
   return `${order.line_items.map(l => `<div class="qline"><span>${escapeHtml(l.label)}</span><span>${money(l.amount, cur)}</span></div>`).join("")}
     <div class="qtotal"><span>Total</span><span>${money(order.quote_total, cur)}${approxMoney(order.quote_total, cur)}</span></div>
     ${exchangeRateHtml(order)}
-    <div class="meta">Deposit ${money(deposit, cur)} (${Math.round(DEPOSIT_RATE * 100)}%) · balance ${money(order.quote_total - deposit, cur)} after quality control.</div>
+    <div class="meta">${typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE ? `Customer pays the full ${money(order.quote_total, cur)} upfront in transaction test mode.` : `Deposit ${money(deposit, cur)} (${Math.round(DEPOSIT_RATE * 100)}%) · balance ${money(order.quote_total - deposit, cur)} after quality control.`}</div>
     ${approxNote(cur)}`;
 }
 
@@ -991,7 +991,7 @@ function quoteBlock(order) {
       ${quoteLinesHtml(order)}
       <button id="accept-quote" class="cta" onclick="acceptQuoteFromApp('${order.id}')">Accept quote</button>
       <button class="btn-outline" onclick="go('chat/${order.id}')">Ask a question</button>
-      <div class="meta">When you accept, the fabric is bought for your outfit and you pay the ${Math.round(DEPOSIT_RATE * 100)}% deposit.</div>
+      <div class="meta">${typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE ? "When you accept, you will test-pay the full order amount upfront. No real money moves." : `When you accept, the fabric is bought for your outfit and you pay the ${Math.round(DEPOSIT_RATE * 100)}% deposit.`}</div>
       ${payProtectionLine()}
     </div>`;
   }
@@ -1124,7 +1124,7 @@ function screenChat(orderId) {
         ${fabric ? `<div class="meta">Fabric: <b>${escapeHtml(fabric.name)}</b> · ${fabricPriceText(fabric, unit)}${isPlaced(order) || status === "quoted" ? ` · ${lengthText(order.fabric_yards, unit)}` : ""}</div>` : ""}
         ${profile ? `<div class="chat-measure">${MEASUREMENT_FIELDS.filter(f => profile[f.key] != null).map(f => `<span>${f.label} <b>${bodyText(profile[f.key], customerBodyUnit(customer))}</b></span>`).join("")}</div>` : ""}
       </details>
-      ${status === "quoted" ? `<div class="chat-quote-bar"><span>Quote: <b>${money(order.quote_total, cur)}</b> · deposit ${money(order.deposit_amount, cur)}</span>
+      ${status === "quoted" ? `<div class="chat-quote-bar"><span>Quote: <b>${money(order.quote_total, cur)}</b>${typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE ? " · full payment upfront" : " · deposit " + money(order.deposit_amount, cur)}</span>
         <button class="optbtn sel" onclick="go('tracking/${order.id}')">View &amp; accept</button></div>` : ""}
       ${chatLogHtml(order, "customer", false)}
     </div>
