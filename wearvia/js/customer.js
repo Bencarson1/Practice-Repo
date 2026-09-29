@@ -1165,12 +1165,12 @@ function screenTracking(orderId) {
   } else if (!depositStarted(order)) {
     action = Cloud.live && !ONLINE_PAYMENTS_ENABLED && !(typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE)
       ? `<div class="card attention"><b>Payment not open yet</b><p class="hint">Your quote is accepted. NebedaHub will notify you when protected in-app payment is enabled. Do not pay the seller outside NebedaHub.</p></div>`
-      : `<button class="cta" onclick="go('pay/${order.id}')">Pay ${money(order.deposit_amount, cur)} Deposit →</button>`;
+      : `<button class="cta" onclick="go('pay/${order.id}')">${typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE ? "🧪 Test Pay " : "Pay "}${money(order.deposit_amount, cur)} Deposit →</button>`;
   } else if (order.stage === "delivered" && !order.review_rating) {
     action = `<button class="cta" onclick="go('review/${order.id}')">Leave a Review →</button>`;
   } else if (due > 0 && qcPassed) {
     action = `
-      ${Cloud.live && ONLINE_PAYMENTS_ENABLED ? `<div class="meta"><b>Secure payment:</b> Continue through NebedaHub's protected checkout.</div>` : !Cloud.live ? `<div class="selopt"><span class="fl">Pay by</span><span class="optbtns">${["Card", "Apple Pay", "Bank transfer"].map(m =>
+      ${Cloud.live && typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE ? `<div class="card attention"><b>🧪 Transaction test mode</b><p class="hint">No real money will move.</p></div>` : Cloud.live && ONLINE_PAYMENTS_ENABLED ? `<div class="meta"><b>Secure payment:</b> Continue through NebedaHub's protected checkout.</div>` : !Cloud.live ? `<div class="selopt"><span class="fl">Pay by</span><span class="optbtns">${["Card", "Apple Pay", "Bank transfer"].map(m =>
         `<button class="optbtn ${balanceMethod === m ? "sel" : ""}" onclick="balanceMethod='${m}';renderAll()">${m}</button>`).join("")}</span></div>` : `<div class="card attention"><b>Balance payment is not open yet.</b><p class="hint">Do not pay outside NebedaHub. Protected in-app payment will be enabled before live transactions open.</p></div>`}
       ${Cloud.live && !ONLINE_PAYMENTS_ENABLED && !(typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE) ? "" : `<button id="pay-balance" class="cta" onclick="payBalance('${order.id}')">${typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE ? "🧪 Test Pay " : "Pay "}${money(due, cur)} Balance</button>`}
       ${payProtectionLine()}`;
