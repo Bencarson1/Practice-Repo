@@ -1036,24 +1036,36 @@ function screenPay(orderId) {
   const order = findOrder(orderId);
   if (!order) return screenNotFound();
   if (!isPlaced(order) || depositStarted(order)) return screenTracking(orderId);
-  const deposit = order.deposit_amount;
   const cur = orderCurrency(order);
+  const fullAmount = order.quote_total;
   const testMode = typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE;
   return `
-    ${cTop("Pay Deposit", "tracking/" + order.id)}
+    ${cTop(testMode ? "Pay in Full · Test Mode" : "Pay", "tracking/" + order.id)}
     <div class="content">
       ${flash()}
-      <div class="qline"><span>Order Total</span><span>${money(order.quote_total, cur)}</span></div>
-      <div class="qline"><span>Deposit Required (${Math.round(DEPOSIT_RATE * 100)}%)</span><span>${money(deposit, cur)}${approxMoney(deposit, cur)}</span></div>
-      <div class="qline"><span>Balance (after quality control)</span><span>${money(order.quote_total - deposit, cur)}</span></div>
-      <div class="meta">You pay in ${escapeHtml(currencyInfo(cur).name)} (${escapeHtml(cur)}), ${escapeHtml(designerName(order.designer_id))}\'s currency.</div>
-      ${approxNote(cur)}
-      ${testMode ? `<div class="card attention"><b>🧪 TRANSACTION TEST MODE</b><p class="hint">No real money will move. This simulates a successful payment and shows what is secured for the fabric seller and tailor.</p></div>` : ONLINE_PAYMENTS_ENABLED ? `<div class="meta"><b>Payment methods:</b> Secure payment methods will be shown at checkout.</div>` : `<div class="card attention"><b>Online payments are not open yet.</b><p class="hint">Do not send money directly to a tailor or fabric seller.</p></div>`}
+      <div class="qline"><span>Order Total</span><span>${money(fullAmount, cur)}</span></div>
+      ${testMode ? `
+        <div class="card attention">
+          <b>🧪 TRANSACTION TEST MODE</b>
+          <p class="hint">The customer pays 100% upfront. No real card is charged and no real payout is sent.</p>
+        </div>
+        <div class="card">
+          <h3>Protected payout rules</h3>
+          <div class="qline"><span>NebedaHub commission</span><span>10%</span></div>
+          <div class="qline"><span>Tailor payout</span><span>70% released · 30% protected</span></div>
+          <div class="qline"><span>Fabric seller payout</span><span>70% after dispatch · 30% after tailor quality approval</span></div>
+          <p class="hint">Commission is calculated separately from each seller's or tailor's portion.</p>
+        </div>`
+        : ONLINE_PAYMENTS_ENABLED
+          ? `<div class="meta"><b>Payment methods:</b> Secure payment methods will be shown at checkout.</div>`
+          : `<div class="card attention"><b>Online payments are not open yet.</b><p class="hint">Do not send money directly to a tailor or fabric seller.</p></div>`}
       <label class="field">Delivery address <small>(optional)</small>
         <input id="pay-address" maxlength="300" value="${escapeHtml(deliveryDetails(order).delivery_address)}" placeholder="House number, street, town, postcode" autocomplete="street-address"></label>
       ${payProtectionLine()}
-      <div class="meta">${testMode ? "Test only. No card will be charged and no payout will be sent." : ONLINE_PAYMENTS_ENABLED ? `Secure checkout is handled by the approved payment provider.` : `Payments are currently disabled while NebedaHub completes payment setup.`}</div>
-      ${testMode ? `<button id="pay-deposit" class="cta" onclick="payDeposit(\'${order.id}\')">🧪 Test Pay ${money(deposit, cur)} Deposit</button>` : !ONLINE_PAYMENTS_ENABLED ? "" : `<button id="pay-deposit" class="cta" onclick="payDeposit(\'${order.id}\')">Continue to secure payment</button>`}
+      <div class="meta">${testMode ? "Test only. No money moves." : ONLINE_PAYMENTS_ENABLED ? "Secure checkout is handled by the approved payment provider." : "Payments are currently disabled while NebedaHub completes payment setup."}</div>
+      ${testMode
+        ? `<button id="pay-deposit" class="cta" onclick="payDeposit('${order.id}')">🧪 Test Pay ${money(fullAmount, cur)} in Full</button>`
+        : !ONLINE_PAYMENTS_ENABLED ? "" : `<button id="pay-deposit" class="cta" onclick="payDeposit('${order.id}')">Continue to secure payment</button>`}
     </div>`;
 }
 
@@ -1064,25 +1076,31 @@ function payDeposit(orderId) {
   const address = addressBox ? addressBox.value.trim() : "";
   const testMode = typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE;
   if (testMode && Cloud.live) {
-    if (!confirm("Run a TEST deposit payment? No real money will move.")) return;
+    if (!confirm("Run a TEST full payment? No real money will move.")) return;
     const button = document.getElementById("pay-deposit");
     if (button) { button.disabled = true; button.textContent = "Running test payment…"; }
     const saveAddress = address ? Cloud.setDeliveryAddress(order, address) : Promise.resolve();
     Promise.resolve(saveAddress)
-      .then(() => Cloud.testPayment(order, "Deposit"))
+      .then(() => Cloud.testPayment(order, "Full"))
       .then(result => {
-        flashMessage = `TEST payment successful. ${money(result.amount, result.currency)} simulated. Fabric seller secured ${money(result.seller_secured, result.currency)}, tailor secured ${money(result.tailor_secured, result.currency)}. No real money moved.`;
+        flashMessage = "TEST full payment successful. " + money(result.amount, result.currency) +
+          " simulated. NebedaHub commission " + money(result.platform_commission, result.currency) +
+          ". Tailor 70% release " + money(result.tailor_initial, result.currency) +
+          ", tailor protected 30% " + money(result.tailor_held, result.currency) +
+          (result.seller_net > 0 ? ". Fabric seller 70% waits for dispatch and 30% waits for tailor quality approval." : ".") +
+          " No real money moved.";
         go("tracking/" + order.id);
       })
       .catch(error => {
         toast(error.message || "The test payment could not be completed.");
-        if (button) { button.disabled = false; button.textContent = "Test Pay Deposit"; }
+        if (button) { button.disabled = false; button.textContent = "Test Pay in Full"; }
       });
     return;
   }
   if (!ONLINE_PAYMENTS_ENABLED) { toast("Online payments are not open yet. Please do not pay outside NebedaHub."); return; }
   toast("Protected checkout will be enabled after the payment provider is connected.");
 }
+
 // ---- Chat with Nebeda Threads (every order) ----
 
 function screenChat(orderId) {
@@ -1165,9 +1183,14 @@ function screenTracking(orderId) {
   } else if (!depositStarted(order)) {
     action = Cloud.live && !ONLINE_PAYMENTS_ENABLED && !(typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE)
       ? `<div class="card attention"><b>Payment not open yet</b><p class="hint">Your quote is accepted. NebedaHub will notify you when protected in-app payment is enabled. Do not pay the seller outside NebedaHub.</p></div>`
-      : `<button class="cta" onclick="go('pay/${order.id}')">${typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE ? "🧪 Test Pay " : "Pay "}${money(order.deposit_amount, cur)} Deposit →</button>`;
+      : `<button class="cta" onclick="go('pay/${order.id}')">${typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE ? "🧪 Test Pay " + money(order.quote_total, cur) + " in Full" : "Pay " + money(order.deposit_amount, cur) + " Deposit"} →</button>`;
   } else if (order.stage === "delivered" && !order.review_rating) {
-    action = `<button class="cta" onclick="go('review/${order.id}')">Leave a Review →</button>`;
+    const heldTailor = (db.test_allocations || []).filter(a => a.order_id === order.id && a.recipient_type === "tailor" && a.release_stage === "tailor_customer_acceptance" && a.status === "secured").reduce((n,a) => n + (a.amount || 0), 0);
+    action = heldTailor > 0 && typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE
+      ? `<div class="card attention"><b>Final tailor payment is protected</b><p class="hint">The tailor has confirmed delivery. Please confirm whether you received the outfit and are happy with it.</p></div>
+         <button class="cta" onclick="confirmCustomerOutfit('${order.id}', true)">I received it and I am happy</button>
+         <button class="btn-outline" onclick="confirmCustomerOutfit('${order.id}', false)">I have a problem with the outfit</button>`
+      : `<button class="cta" onclick="go('review/${order.id}')">Leave a Review →</button>`;
   } else if (due > 0 && qcPassed) {
     action = `
       ${Cloud.live && typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE ? `<div class="card attention"><b>🧪 Transaction test mode</b><p class="hint">No real money will move.</p></div>` : Cloud.live && ONLINE_PAYMENTS_ENABLED ? `<div class="meta"><b>Secure payment:</b> Continue through NebedaHub's protected checkout.</div>` : !Cloud.live ? `<div class="selopt"><span class="fl">Pay by</span><span class="optbtns">${["Card", "Apple Pay", "Bank transfer"].map(m =>
@@ -1233,6 +1256,23 @@ function payBalance(orderId) {
   }
   if (!ONLINE_PAYMENTS_ENABLED) { toast("Online payments are not open yet. Please do not pay outside NebedaHub."); return; }
   toast("Protected checkout will be enabled after the payment provider is connected.");
+}
+
+function confirmCustomerOutfit(orderId, happy) {
+  const order = findOrder(orderId);
+  if (!order) return;
+  const message = happy
+    ? "Confirm you received the outfit and are happy? This releases the protected 30% to the tailor in TEST mode."
+    : "Report a problem with the outfit? In TEST mode, the protected 30% is split using the current rule: 20% refund to you and 10% to the tailor.";
+  if (!confirm(message)) return;
+  Cloud.customerOutfitResult(order, happy)
+    .then(result => {
+      flashMessage = happy
+        ? "TEST mode: final tailor balance released. No real money moved."
+        : "TEST mode: " + money(result.customer_refund, result.currency) + " simulated refund to customer and " + money(result.tailor_release, result.currency) + " released to tailor. No real money moved.";
+      renderAll();
+    })
+    .catch(error => toast(error.message || "Could not complete the protected payment step."));
 }
 
 // ---- Screen 20: Delivery tracking (step 15) ----
