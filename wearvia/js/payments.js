@@ -90,8 +90,8 @@ function renderPayments() {
   }).join("");
 
   return `
-    ${bizHeader("Payments", (typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE) ? "🧪 Transaction test mode. No real money moves." : `Deposit (${Math.round(DEPOSIT_RATE * 100)}%) when the order is placed; balance after quality control.`)}
-    ${(typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE) ? `<div class="card attention"><h2>🧪 TEST MODE</h2><p class="hint">Customer test payments are simulated inside NebedaHub. No card is charged and no payout is sent to a tailor or fabric seller.</p></div>` : ""}
+    ${bizHeader("Payments", (typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE) ? "🧪 Customer pays 100% upfront in test mode. No real money moves." : `Deposit (${Math.round(DEPOSIT_RATE * 100)}%) when the order is placed; balance after quality control.`)}
+    ${(typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE) ? `<div class="card attention"><h2>🧪 TEST MODE</h2><p class="hint">Customer test payments are 100% upfront. NebedaHub deducts 10% commission from each tailor and fabric seller portion. The remaining net payout follows the 70% release and 30% protected balance rules. No card is charged and no real payout is sent.</p></div>` : ""}
 
     <div class="card ${waiting.length ? "attention" : ""}">
       <h2>Awaiting confirmation <span class="total">${waiting.length}</span></h2>
