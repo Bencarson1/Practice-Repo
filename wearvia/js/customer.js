@@ -1130,6 +1130,13 @@ function screenChat(orderId) {
       </details>
       ${status === "quoted" ? `<div class="chat-quote-bar"><span>Quote: <b>${money(order.quote_total, cur)}</b>${typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE ? " · full payment upfront" : " · deposit " + money(order.deposit_amount, cur)}</span>
         <button class="optbtn sel" onclick="go('tracking/${order.id}')">View &amp; accept</button></div>` : ""}
+      ${isPlaced(order) && !depositStarted(order) ? (
+        Cloud.live && !ONLINE_PAYMENTS_ENABLED && !(typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE)
+          ? `<div class="chat-quote-bar"><span><b>Quote accepted.</b> Protected payment is not open yet.</span>
+              <button class="optbtn sel" onclick="go('tracking/${order.id}')">View order</button></div>`
+          : `<div class="chat-quote-bar"><span><b>Payment due:</b> ${typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE ? money(order.quote_total, cur) + " test payment in full" : money(order.deposit_amount, cur) + " deposit"}</span>
+              <button class="optbtn sel" onclick="go('pay/${order.id}')">${typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE ? "Test payment" : "Pay deposit"}</button></div>`
+      ) : ""}
       ${chatLogHtml(order, "customer", false)}
     </div>
     ${chatComposerHtml(order, "customer")}`;
