@@ -634,6 +634,29 @@ const Cloud = (() => {
     });
   }
 
+  function confirmFabricQuality(order) {
+    return run(async () => {
+      if (!order || !order._uuid) throw new Error("Order not found.");
+      const { data, error } = await state.client.rpc("wearvia_test_confirm_fabric_quality", { p_order_id: order._uuid });
+      if (error) throw new Error(friendly(error));
+      await load();
+      return data;
+    });
+  }
+
+  function customerOutfitResult(order, happy) {
+    return run(async () => {
+      if (!order || !order._uuid) throw new Error("Order not found.");
+      const { data, error } = await state.client.rpc("wearvia_test_customer_outfit_result", {
+        p_order_id: order._uuid,
+        p_happy: !!happy
+      });
+      if (error) throw new Error(friendly(error));
+      await load();
+      return data;
+    });
+  }
+
   // ---- AI style variations ----
   async function generateStyleVariations(details) {
     if (!state.live || !state.client) throw new Error("AI style variations are only available when you are signed in.");
@@ -1374,7 +1397,7 @@ const Cloud = (() => {
     start, afterSignIn, signIn, signUp, signOut, sendPasswordReset, setNewPassword,
     newId, isTeam, isOwner, homeRoute, becomeCustomer,
     save, flush, refresh, refreshIfStale, placeOrder, deleteOrder,
-    requestQuote, sendQuote, acceptQuote, recommendFabrics, chooseRecommendedFabric, generateStyleVariations, sendMessage, markChatRead, refreshChat, testPayment,
+    requestQuote, sendQuote, acceptQuote, recommendFabrics, chooseRecommendedFabric, generateStyleVariations, sendMessage, markChatRead, refreshChat, testPayment, confirmFabricQuality, customerOutfitResult,
     uploadPhoto, uploadVerificationFile, removePhoto, photoUrl,
     loadTeamLogins, addTeamLogin, removeTeamLogin,
     registerDesigner, acceptTailorTerms, setDeliveryAddress, saveDesignerProfile, addPortfolioItem, removePortfolioItem, setDesignerStatus, reviewSeller, resubmitSeller, addSpeciality,
