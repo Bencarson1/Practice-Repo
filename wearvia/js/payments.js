@@ -6,6 +6,7 @@
 
 // Status of a payment, with Confirm / Reject buttons while it's waiting
 function paymentStatusCell(p) {
+  if (p.is_test) return `<span class="badge status-approved">🧪 TEST · Confirmed</span>`;
   if (p.status === "awaiting_confirmation") {
     return `<span class="badge status-pending">Awaiting confirmation</span>
       <span class="nowrap"><button class="small gold" onclick="confirmPaymentFromList('${p.id}', true)">✓ Confirm</button>
@@ -28,7 +29,7 @@ function confirmPaymentFromList(paymentId, accept) {
 function renderPayments() {
   // Real payments are intentionally closed until NebedaHub finishes its payment-provider setup.
   // Do not let a live tailor manually confirm or record off-platform customer payments.
-  if (Cloud.live && typeof ONLINE_PAYMENTS_ENABLED !== "undefined" && !ONLINE_PAYMENTS_ENABLED) {
+  if (Cloud.live && typeof ONLINE_PAYMENTS_ENABLED !== "undefined" && !ONLINE_PAYMENTS_ENABLED && !(typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE)) {
     return `
       ${bizHeader("Payments", "Protected in-app payments are being prepared.")}
       <div class="card attention">
@@ -84,12 +85,13 @@ function renderPayments() {
       <td>${escapeHtml(p.kind)}</td>
       <td>${escapeHtml(p.method)}</td>
       <td>${money(p.amount, paymentCurrency(p))}</td>
-      <td>${escapeHtml(PAYMENT_STATUS_LABELS[p.status] || "Confirmed")}</td>
+      <td>${p.is_test ? "🧪 TEST · Confirmed" : escapeHtml(PAYMENT_STATUS_LABELS[p.status] || "Confirmed")}</td>
     </tr>`;
   }).join("");
 
   return `
-    ${bizHeader("Payments", `Deposit (${Math.round(DEPOSIT_RATE * 100)}%) when the order is placed; balance after quality control.`)}
+    ${bizHeader("Payments", (typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE) ? "🧪 Transaction test mode. No real money moves." : `Deposit (${Math.round(DEPOSIT_RATE * 100)}%) when the order is placed; balance after quality control.`)}
+    ${(typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE) ? `<div class="card attention"><h2>🧪 TEST MODE</h2><p class="hint">Customer test payments are simulated inside NebedaHub. No card is charged and no payout is sent to a tailor or fabric seller.</p></div>` : ""}
 
     <div class="card ${waiting.length ? "attention" : ""}">
       <h2>Awaiting confirmation <span class="total">${waiting.length}</span></h2>
