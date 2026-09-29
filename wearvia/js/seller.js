@@ -422,6 +422,9 @@ function sellerOrdersScreen(seller) {
     const unlocked = fabricOrderUnlocked(o);
     const open = o.status !== "sent" && o.status !== "cancelled";
     const statusText = o.status === "sent" ? `Dispatched ${formatDate(o.sent_at)}` : FABRIC_ORDER_LABELS[o.status];
+    const sellerTestAlloc = (db.test_allocations || []).filter(a => a.order_id === o.order_id && a.recipient_type === "seller" && a.status !== "cancelled");
+    const sellerTestSecured = sellerTestAlloc.reduce((n, a) => n + (a.recipient_amount || 0), 0);
+    const sellerTestCurrency = sellerTestAlloc.length ? sellerTestAlloc[0].recipient_currency_code : (o.currency_code || sellerCurrency(seller));
     const chatOrder = findOrder(o.order_id);
     const chatUnread = chatOrder ? unreadCount(chatOrder.id, "seller") : 0;
     return `
@@ -431,6 +434,7 @@ function sellerOrdersScreen(seller) {
           <div class="row-between"><b>${escapeHtml(o.fabric_name)}</b><span class="badge sstatus-${o.status}">${escapeHtml(statusText)}</span></div>
           <div class="muted small-text">${escapeHtml(o.ref || o.id)} · ordered ${formatDate(o.created_at)}${first ? ` · for ${escapeHtml(first)}'s outfit` : ""}</div>
           <div>${lengthText(o.yards, unit)} × ${money(pricePerUnit(o.price_per_yard, unit), o.currency_code || sellerCurrency(seller))} = <b>${money(o.total, o.currency_code || sellerCurrency(seller))}</b></div>
+          ${sellerTestSecured > 0 ? `<div class="notice soft"><b>🧪 TEST payment secured:</b> ${money(sellerTestSecured, sellerTestCurrency)}<br><small>No real payout has been sent.</small></div>` : ""}
           <div class="small-text"><span class="muted">Send to the tailor:</span> <b>${escapeHtml(sendTo.name || "—")}</b>${sendTo.address ? ` — ${escapeHtml(sendTo.address)}`
             : open ? ` <span class="muted">(their address appears once the customer's deposit is confirmed)</span>` : ""}</div>
           ${o.status === "sent" ? `<div class="small-text">🚚 ${escapeHtml(o.courier || "Courier")} · tracking <b>${escapeHtml(o.tracking_number)}</b>${o.dispatch_note ? ` · ${escapeHtml(o.dispatch_note)}` : ""}</div>
