@@ -15,3 +15,8 @@ const ONLINE_PAYMENTS_ENABLED = false;
 
 // Safe transaction simulation. No real money moves while this is true.
 const TRANSACTION_TEST_MODE = true;
+
+// Protected transaction rules used by transaction test mode.
+const NEBEDAHUB_COMMISSION_RATE = 0.10;
+const PAYOUT_INITIAL_RATE = 0.70;
+const PAYOUT_HELD_RATE = 0.30;
