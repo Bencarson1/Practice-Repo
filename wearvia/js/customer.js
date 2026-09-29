@@ -1163,7 +1163,7 @@ function screenTracking(orderId) {
   if (!placed) {
     action = quoteBlock(order);
   } else if (!depositStarted(order)) {
-    action = Cloud.live && !ONLINE_PAYMENTS_ENABLED
+    action = Cloud.live && !ONLINE_PAYMENTS_ENABLED && !(typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE)
       ? `<div class="card attention"><b>Payment not open yet</b><p class="hint">Your quote is accepted. NebedaHub will notify you when protected in-app payment is enabled. Do not pay the seller outside NebedaHub.</p></div>`
       : `<button class="cta" onclick="go('pay/${order.id}')">Pay ${money(order.deposit_amount, cur)} Deposit →</button>`;
   } else if (order.stage === "delivered" && !order.review_rating) {
@@ -1172,7 +1172,7 @@ function screenTracking(orderId) {
     action = `
       ${Cloud.live && ONLINE_PAYMENTS_ENABLED ? `<div class="meta"><b>Secure payment:</b> Continue through NebedaHub's protected checkout.</div>` : !Cloud.live ? `<div class="selopt"><span class="fl">Pay by</span><span class="optbtns">${["Card", "Apple Pay", "Bank transfer"].map(m =>
         `<button class="optbtn ${balanceMethod === m ? "sel" : ""}" onclick="balanceMethod='${m}';renderAll()">${m}</button>`).join("")}</span></div>` : `<div class="card attention"><b>Balance payment is not open yet.</b><p class="hint">Do not pay outside NebedaHub. Protected in-app payment will be enabled before live transactions open.</p></div>`}
-      ${Cloud.live && !ONLINE_PAYMENTS_ENABLED ? "" : `<button id="pay-balance" class="cta" onclick="payBalance('${order.id}')">Pay ${money(due, cur)} Balance</button>`}
+      ${Cloud.live && !ONLINE_PAYMENTS_ENABLED && !(typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE) ? "" : `<button id="pay-balance" class="cta" onclick="payBalance('${order.id}')">${typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE ? "🧪 Test Pay " : "Pay "}${money(due, cur)} Balance</button>`}
       ${payProtectionLine()}`;
   }
   return `
@@ -1215,6 +1215,22 @@ function payBalance(orderId) {
   const order = findOrder(orderId);
   const due = Math.round((balanceOwed(order) - amountAwaiting(order.id)) * 100) / 100;
   if (due <= 0) return;
+  const testMode = typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE;
+  if (testMode && Cloud.live) {
+    if (!confirm("Run a TEST balance payment? No real money will move.")) return;
+    const button = document.getElementById("pay-balance");
+    if (button) { button.disabled = true; button.textContent = "Running test payment…"; }
+    Cloud.testPayment(order, "Balance")
+      .then(result => {
+        flashMessage = "TEST balance successful. " + money(result.amount, result.currency) + " simulated. Fabric seller secured " + money(result.seller_secured, result.currency) + ", tailor secured " + money(result.tailor_secured, result.currency) + ". No real money moved.";
+        renderAll();
+      })
+      .catch(error => {
+        toast(error.message || "The test balance could not be completed.");
+        if (button) { button.disabled = false; button.textContent = "Test Pay Balance"; }
+      });
+    return;
+  }
   if (!ONLINE_PAYMENTS_ENABLED) { toast("Online payments are not open yet. Please do not pay outside NebedaHub."); return; }
   toast("Protected checkout will be enabled after the payment provider is connected.");
 }
