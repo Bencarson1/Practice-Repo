@@ -1,0 +1,44 @@
+name: Security checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Block obvious secrets committed to the repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RInE --exclude-dir=.git             '(sk_live_[A-Za-z0-9]+|whsec_[A-Za-z0-9]+|OPENAI_API_KEY[[:space:]]*=[[:space:]]*[^"$]|SUPABASE_SERVICE_ROLE_KEY[[:space:]]*=[[:space:]]*[^"$]|SUPABASE_SECRET_KEY[[:space:]]*=[[:space:]]*[^"$])' .; then
+            echo "Potential secret found in tracked files."
+            exit 1
+          fi
+
+      - name: Keep real online payments off until server payment flow is deployed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -Eq 'ONLINE_PAYMENTS_ENABLED[[:space:]]*=[[:space:]]*true' wearvia/js/config.js; then
+            echo "ONLINE_PAYMENTS_ENABLED must stay false until the Stripe server/webhook flow is reviewed."
+            exit 1
+          fi
+
+      - name: Check public frontend does not reference service role keys
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RInE 'service[_-]?role|SUPABASE_SERVICE_ROLE_KEY' wearvia/js wearvia/*.html wearvia/admin wearvia/business wearvia/sellers 2>/dev/null; then
+            echo "Service-role material must never be used by browser code."
+            exit 1
+          fi
