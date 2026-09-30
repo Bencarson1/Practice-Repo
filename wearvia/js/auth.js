@@ -119,7 +119,7 @@ const Auth = (() => {
           ${field("Your name", "name", "text", 'required autocomplete="name" maxlength="80"')}
           <label class="field">Phone <small>(optional)</small>${phoneFieldHtml("phone", "", browserCountry())}</label>
           ${field("Email", "email", "email", 'required autocomplete="email"')}
-          ${field("Password <small>(at least 8 characters)</small>", "password", "password", 'required minlength="8" autocomplete="new-password"')}
+          ${field("Password <small>(at least 12 characters)</small>", "password", "password", 'required minlength="12" autocomplete="new-password"')}
           ${tailor ? tailorTermsHtml(false) + tailorTermsCheckbox() : ""}
           ${notes()}
           <button class="cta" type="submit" ${busy ? "disabled" : ""}>${busy ? "Creating your account…" : "Create account"}</button>
@@ -139,7 +139,7 @@ const Auth = (() => {
     } else {
       body = `
         <form class="stack" onsubmit="return Auth.submit(event)">
-          ${field("New password <small>(at least 8 characters)</small>", "password", "password", 'required minlength="8" autocomplete="new-password"')}
+          ${field("New password <small>(at least 12 characters)</small>", "password", "password", 'required minlength="12" autocomplete="new-password"')}
           ${notes()}
           <button class="cta" type="submit" ${busy ? "disabled" : ""}>${busy ? "Saving…" : "Save password"}</button>
         </form>`;
@@ -201,8 +201,8 @@ const Auth = (() => {
     if (values.password !== undefined) values.password = form.password.value; // passwords may start or end with spaces
     if (form.phone_cc) values.phone = readPhone(form, "phone");            // "+234 803 555 0142"
     if (form.acceptTerms) values.acceptTerms = form.acceptTerms.checked;
-    if ((screen === "signUp" || screen === "newPassword") && values.password.length < 8) {
-      setError("Use at least 8 characters for your password.");
+    if ((screen === "signUp" || screen === "newPassword") && values.password.length < 12) {
+      setError("Use at least 12 characters for your password.");
       return false;
     }
     busy = true;
