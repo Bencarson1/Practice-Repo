@@ -53,7 +53,6 @@ jobs:
           # The app is the whole site: https://nebedahub.com/
           cp -R wearvia/. _site/
           rm -rf _site/supabase _site/README.md
-          cp wearvia-prototype.html _site/ 2>/dev/null || true
           cp CNAME _site/CNAME 2>/dev/null || true
           # Old links (https://nebedahub.com/wearvia/…) go to their new addresses
           node scripts/old-address-redirects.mjs _site

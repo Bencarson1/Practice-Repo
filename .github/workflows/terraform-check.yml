@@ -1,0 +1,36 @@
+# Checks the Azure practice Terraform in terraform/ (format + validate).
+# Doesn't sign in to Azure and doesn't create anything.
+
+name: Terraform check
+
+on:
+  push:
+    branches: [main]
+    paths: ["terraform/**", ".github/workflows/terraform-check.yml"]
+  pull_request:
+    paths: ["terraform/**", ".github/workflows/terraform-check.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: terraform
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Format
+        run: terraform fmt -check -recursive
+
+      - name: Init (no backend)
+        run: terraform init -backend=false
+
+      - name: Validate
+        run: terraform validate

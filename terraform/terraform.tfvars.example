@@ -1,0 +1,9 @@
+# Copy this file to terraform.tfvars and fill it in.
+# terraform.tfvars is ignored by git, so your values stay on your computer.
+
+subscription_id      = "00000000-0000-0000-0000-000000000000"
+admin_ssh_public_key = "ssh-ed25519 AAAA... you@your-computer"
+
+# Optional
+# location = "UK South"
+# prefix   = "practice"

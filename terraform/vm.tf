@@ -1,5 +1,5 @@
 resource "azurerm_network_interface" "example" {
-  name                = "practice-nic"
+  name                = "${var.prefix}-nic"
   location            = azurerm_resource_group.example.location
   resource_group_name = azurerm_resource_group.example.name
 
@@ -11,19 +11,16 @@ resource "azurerm_network_interface" "example" {
 }
 
 resource "azurerm_linux_virtual_machine" "example" {
-  name                = "practice-vm"
-  resource_group_name = azurerm_resource_group.example.name
-  location            = azurerm_resource_group.example.location
-  size                = "Standard_B1s"
-
-  admin_username      = "azureuser"
-  network_interface_ids = [
-    azurerm_network_interface.example.id,
-  ]
+  name                  = "${var.prefix}-vm"
+  resource_group_name   = azurerm_resource_group.example.name
+  location              = azurerm_resource_group.example.location
+  size                  = var.vm_size
+  admin_username        = var.admin_username
+  network_interface_ids = [azurerm_network_interface.example.id]
 
   admin_ssh_key {
-    username   = "azureuser"
-    public_key = "ssh-rsa YOUR_SSH_PUBLIC_KEY_HERE"
+    username   = var.admin_username
+    public_key = var.admin_ssh_public_key
   }
 
   os_disk {
@@ -31,10 +28,11 @@ resource "azurerm_linux_virtual_machine" "example" {
     storage_account_type = "Standard_LRS"
   }
 
+  # Ubuntu 24.04 LTS (18.04 no longer gets security updates)
   source_image_reference {
     publisher = "Canonical"
-    offer     = "UbuntuServer"
-    sku       = "18.04-LTS"
+    offer     = "ubuntu-24_04-lts"
+    sku       = "server"
     version   = "latest"
   }
 }
