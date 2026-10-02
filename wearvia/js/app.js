@@ -119,6 +119,7 @@ function renderAll() {
     // The page first: opening a chat marks it read, so the badges are drawn after
     document.getElementById("biz-content").innerHTML = bizSwitcher() + (tab.key === "profile" ? "" : tailorStatusBanner(bizDesigner())) + tab.render(route.id);
     afterChatRender();
+    if (typeof schedulePayoutCheck === "function") schedulePayoutCheck();
     document.getElementById("biz-tabs").innerHTML = tabsHtml(tabs, tab);
     document.title = `${tab.label} · ${(bizDesigner() || {}).business_name || SHOP_NAME} · ${APP.name}`;
   } else if (needsCustomerRecord()) {

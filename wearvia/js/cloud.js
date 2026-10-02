@@ -1266,6 +1266,24 @@ const Cloud = (() => {
     await load();
   }
 
+  // ---- Payouts (Stripe Connect onboarding) ----
+
+  // Current payout readiness for the signed-in tailor and/or fabric seller.
+  async function payoutStatus() {
+    const { data, error } = await state.client.functions.invoke("stripe-connect-status", { body: {} });
+    if (error) throw new Error(friendly(error));
+    if (data && data.error) throw new Error(data.error);
+    return data;
+  }
+
+  // Start (or continue) Stripe onboarding; returns the URL to send them to.
+  async function startPayoutOnboarding(role) {
+    const { data, error } = await state.client.functions.invoke("stripe-connect-onboard", { body: { role } });
+    if (error) throw new Error(friendly(error));
+    if (!data || !data.url) throw new Error((data && data.error) || "Couldn't start payout setup.");
+    return data.url;
+  }
+
   // The owner adds or replaces their private verification documents (My profile)
   async function saveDesignerVerification(id, details) {
     const path = ref => {
@@ -1414,7 +1432,8 @@ const Cloud = (() => {
     requestQuote, sendQuote, acceptQuote, recommendFabrics, chooseRecommendedFabric, generateStyleVariations, sendMessage, markChatRead, refreshChat, testPayment, confirmFabricQuality, customerOutfitResult,
     uploadPhoto, uploadVerificationFile, removePhoto, photoUrl,
     loadTeamLogins, addTeamLogin, removeTeamLogin,
-    registerDesigner, acceptTailorTerms, setDeliveryAddress, saveDesignerProfile, saveDesignerVerification, addPortfolioItem, removePortfolioItem, setDesignerStatus, reviewSeller, resubmitSeller, addSpeciality,
+    registerDesigner, acceptTailorTerms, setDeliveryAddress, saveDesignerProfile, saveDesignerVerification,
+    payoutStatus, startPayoutOnboarding, addPortfolioItem, removePortfolioItem, setDesignerStatus, reviewSeller, resubmitSeller, addSpeciality,
     saveCustomerNotes, searchTailors, tailorPage, ensurePrices, loadPublicLists, convertPriceList, saveHomepageSettings
   };
 })();

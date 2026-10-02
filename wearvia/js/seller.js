@@ -55,6 +55,7 @@ function renderSellerArea(screen, id) {
   }
   content.innerHTML = html;
   document.title = `${title} · ${APP.name}`;
+  if (typeof schedulePayoutCheck === "function") schedulePayoutCheck();
 }
 
 function sellerStatusBadge(fabric) {
@@ -642,6 +643,8 @@ function sellerProfileScreen(seller) {
 }
 
 function sellerPaymentsCard() {
+  // payouts.js renders the Stripe onboarding card; falls back to the closed notice.
+  if (typeof payoutCardHtml === "function") return payoutCardHtml("seller");
   return `<div class="card"><h2>Payments & payouts</h2>
     <p><b>Not open yet.</b> NebedaHub is completing its protected payment and payout setup before fabric sellers can receive customer money.</p>
     <p class="hint">Do not ask customers or tailors to pay you directly. Payout setup will be enabled here when it is ready.</p></div>`;

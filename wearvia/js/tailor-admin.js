@@ -267,8 +267,10 @@ function renderMyProfile() {
 }
 
 function designerPaymentsCard() {
+  // payouts.js renders the Stripe onboarding card; falls back to the closed notice.
+  if (typeof payoutCardHtml === "function") return payoutCardHtml("tailor");
   return `<div class="card"><h2>Payments & payouts</h2>
-    <p><b>Not open yet.</b> NebedaHub is completing its protected payment and payout setup before sellers can receive customer money.</p>
+    <p><b>Not open yet.</b> NebedaHub is completing its protected payment and payout setup before tailors can receive customer money.</p>
     <p class="hint">Do not ask customers to pay you directly. Payment setup will be enabled here when it is ready.</p></div>`;
 }
 
