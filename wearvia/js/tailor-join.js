@@ -43,11 +43,17 @@ function tailorWelcome() {
         <a class="button" href="#/dashboard">Open your Business dashboard</a>
       </div>`;
   } else if (status === "pending") {
-    join = `<div class="card">
+    const steps = tailorApplicationSteps(mine);
+    const left = steps.filter(s => !s.done);
+    join = left.length ? `<div class="card attention">
+        <h2>Finish your application</h2>
+        <p class="hint"><b>${escapeHtml(mine.business_name)}</b>: ${steps.length - left.length} of ${steps.length} steps done. Customers can't find you until it's finished and approved.</p>
+        <p><b>Next step:</b> ${escapeHtml(left[0].label)}</p>
+        <a class="button gold" href="#/profile">Continue my application</a>
+      </div>` : `<div class="card">
         <h2>Waiting for approval</h2>
-        <p class="hint">Thanks for joining! The ${APP_NAME} team is checking <b>${escapeHtml(mine.business_name)}</b>. We'll approve you as soon as we can — then customers near you can find you.</p>
-        <p class="hint">While you wait, add your photo, specialities and portfolio in My profile.</p>
-        <a class="button ghost" href="#/profile">Finish your profile</a>
+        <p class="hint">Thanks — your application for <b>${escapeHtml(mine.business_name)}</b> is complete and there's nothing more to do. The ${APP_NAME} team is checking it, and customers near you can find you once you're approved.</p>
+        <a class="button ghost" href="#/profile">Open My profile</a>
       </div>`;
   } else if (mine) {
     join = `<div class="card">
@@ -58,7 +64,7 @@ function tailorWelcome() {
   } else {
     join = `<div class="card">
         <h2>New tailor or designer</h2>
-        <p class="hint">It takes about two minutes.</p>
+        <p class="hint">Have these ready: a photo of your ID (passport, driving licence or national ID), proof of address, a profile photo and 2 photos of work you've made.</p>
         <button class="gold" onclick="startTailorJoin()">Join as a tailor or designer</button>
       </div>`;
   }
@@ -136,9 +142,10 @@ function tailorJoinForm() {
         <label class="field">Portfolio photos <small>(at least 2 clear photos of work you made)</small><input name="portfolioPhotos" type="file" accept="image/*" multiple required></label>
 
         <h2>Private verification</h2>
-        <label class="field">Government-issued ID <small>(passport, driving licence or national ID)</small><input name="identityDocument" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" required></label>
-        <label class="field">Proof of business/home address <small>(utility bill, bank statement or official letter)</small><input name="addressDocument" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" required></label>
-        <label class="field">Business registration document <small>(optional if you are not formally registered)</small><input name="businessDocument" type="file" accept="image/jpeg,image/png,image/webp,application/pdf"></label>
+        <p class="hint">🔒 Only the ${APP_NAME} team sees these. A clear photo taken with your phone camera is fine (or a PDF).</p>
+        <label class="field">Government-issued ID <small>(passport, driving licence or national ID)</small><input name="identityDocument" type="file" accept="image/*,application/pdf" required></label>
+        <label class="field">Proof of business/home address <small>(utility bill, bank statement or official letter)</small><input name="addressDocument" type="file" accept="image/*,application/pdf" required></label>
+        <label class="field">Business registration document <small>(optional if you are not formally registered)</small><input name="businessDocument" type="file" accept="image/*,application/pdf"></label>
 
         ${tailorTermsHtml(false)}
         ${tailorTermsCheckbox()}
@@ -194,9 +201,9 @@ function joinAsTailor(event) {
 
   Promise.all([
     resizeImage(profileFile, LOGO_MAX_SIZE, 0.85),
-    Cloud.uploadVerificationFile(idFile, "tailor-id"),
-    Cloud.uploadVerificationFile(addressFile, "tailor-address"),
-    businessFile ? Cloud.uploadVerificationFile(businessFile, "tailor-business-registration") : Promise.resolve(null),
+    uploadTailorDocument(idFile, "tailor-id"),
+    uploadTailorDocument(addressFile, "tailor-address"),
+    uploadTailorDocument(businessFile, "tailor-business-registration"),
     Promise.all(portfolioFiles.slice(0, 8).map(file => resizeImage(file, PHOTO_MAX_SIZE, 0.82)))
   ])
     .then(([profileImageData, verificationId, verificationAddress, businessRegistration, portfolioData]) => {
@@ -205,7 +212,7 @@ function joinAsTailor(event) {
     })
     .then(() => {
       Auth.drawChrome();
-      toast("Your tailor application has been submitted for verification.");
+      toast("Your tailor application has been submitted. Check My profile for anything still to do.");
       go("profile");
     })
     .catch(error => {

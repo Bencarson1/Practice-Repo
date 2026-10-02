@@ -7,7 +7,7 @@
 self.NH_APP = {
   name: "seller",
   root: "../",
-  version: "nebedahub-seller-shell-v7",
+  version: "nebedahub-seller-shell-v8",
   oldCaches: /^nebedahub-seller-shell-/,
   shell: ["./", "./index.html", "./manifest.webmanifest", "../css/style.css",
           "../icons/seller-192.png", "../icons/seller-512.png", "../icons/seller-apple-touch-icon.png"]

@@ -18,13 +18,170 @@ const MAKING_TIMES = ["3–5 days", "1 week", "7–14 days", "2–3 weeks", "3�
 let profileForm = null;     // { key, logo, lat, lng, source, adding } while My profile is open
 let profileSaving = false;
 
+// Shown on every Business screen except My profile (which has the full checklist)
 function tailorStatusBanner(d) {
   if (!d) return "";
   if (d.admin_status === "approved") return "";
   if (d.admin_status === "hidden") {
     return `<div class="card attention"><b>Your profile is hidden from customers.</b> ${d.admin_note ? `The ${APP_NAME} team says: “${escapeHtml(d.admin_note)}”.` : ""} Update it and contact ${APP_NAME} to be shown again.</div>`;
   }
-  return `<div class="card attention"><b>Waiting for approval.</b>${d.tailor_terms_accepted_at ? "" : " Accept the tailor terms below first."} Customers can't find you yet. Add your photo, specialities, location and a few portfolio photos — the ${APP_NAME} team checks new tailors and approves them.</div>`;
+  const left = tailorApplicationSteps(d).filter(s => !s.done);
+  if (!left.length) {
+    return `<div class="card attention"><b>Waiting for approval.</b> Your application is complete — there's nothing more to do. The ${APP_NAME} team is checking it, and customers can find you once you're approved.</div>`;
+  }
+  return `<div class="card attention"><b>Your tailor application isn't finished yet.</b> Next: <b>${escapeHtml(left[0].label)}</b>.
+    <a class="button small gold" href="#/profile">Continue my application</a></div>`;
+}
+
+// ---- The tailor application: what's done and what's next ----
+// Mirrors what the database needs before the admin can approve a tailor
+// (wearvia_set_designer_status in supabase/registration-verification.sql).
+
+function tailorApplicationSteps(d) {
+  const portfolio = (d.portfolio || []).length;
+  return [
+    { label: "Accept the tailor terms", done: !!d.tailor_terms_accepted_at, where: "tailor-terms" },
+    { label: "Owner's full name", done: !!String(d.owner_name || "").trim(), where: "tailor-verification" },
+    { label: "Upload your government-issued ID", done: !!d.verification_id, where: "tailor-verification" },
+    { label: "Upload proof of address", done: !!d.verification_address, where: "tailor-verification" },
+    { label: "Add a profile or business photo", done: !!d.profile_image, where: "profile-logo" },
+    { label: "Write about your business", done: !!String(d.description || "").trim(), where: "profile-about" },
+    { label: "Choose at least one speciality", done: (d.speciality_tags || []).length > 0, where: "profile-specs" },
+    { label: "Add your business address", done: !!String(d.address_line || "").trim(), where: "profile-where" },
+    { label: `Add at least 2 portfolio photos (${Math.min(portfolio, 2)} of 2)`, done: portfolio >= 2, where: "profile-portfolio" }
+  ];
+}
+
+function goToApplicationStep(where) {
+  const el = document.getElementById(where);
+  if (!el) return;
+  el.scrollIntoView({ behavior: "smooth", block: "start" });
+  el.classList.add("step-flash");
+  setTimeout(() => el.classList.remove("step-flash"), 1600);
+  const input = el.matches("input, textarea, select") ? el : el.querySelector("input:not([type=checkbox]):not([readonly]), textarea, input");
+  if (input) setTimeout(() => input.focus({ preventScroll: true }), 400);
+}
+
+function tailorChecklistCard(d, canEdit) {
+  if (!d || d.admin_status === "approved" || d.admin_status === "hidden") return "";
+  const steps = tailorApplicationSteps(d);
+  const left = steps.filter(s => !s.done);
+  const done = steps.length - left.length;
+  if (!left.length) {
+    return `<div class="card attention app-steps" id="tailor-application">
+      <h2>✓ Application complete</h2>
+      <p><b>There's nothing more you need to do.</b> The ${APP_NAME} team is now checking your documents and profile.</p>
+      <p class="hint">Once you're approved, this message goes away, your Business dashboard opens and customers near you can find you and send quote requests. Check back here to see when you're approved.</p>
+    </div>`;
+  }
+  const step = s => !s.done && canEdit
+    ? `<button type="button" class="linkish strong" onclick="goToApplicationStep('${s.where}')">${escapeHtml(s.label)}</button>`
+    : escapeHtml(s.label);
+  return `<div class="card attention app-steps" id="tailor-application">
+    <h2>Finish your tailor application <span class="total">${done} of ${steps.length} done</span></h2>
+    <div class="app-progress" role="progressbar" aria-valuemin="0" aria-valuemax="${steps.length}" aria-valuenow="${done}"><span style="width:${Math.round(done / steps.length * 100)}%"></span></div>
+    <p class="next-step"><b>Next step:</b> ${escapeHtml(left[0].label)}
+      ${canEdit ? `<button type="button" class="gold small" onclick="goToApplicationStep('${left[0].where}')">Do this now</button>` : ""}</p>
+    <ol class="app-checklist">
+      ${steps.map(s => `<li class="${s.done ? "done" : ""}"><span class="tick" aria-hidden="true">${s.done ? "✓" : ""}</span>${step(s)}${s.done ? ' <span class="sr-only">(done)</span>' : ""}</li>`).join("")}
+      <li class="final"><span class="tick" aria-hidden="true"></span>Then the ${APP_NAME} team checks everything and approves you</li>
+    </ol>
+    <p class="hint">Customers can't find you until every step is done and you're approved. Your ID, proof of address, phone and exact address are private — only the ${APP_NAME} team sees them.</p>
+    ${canEdit ? "" : `<p class="hint"><b>Only the owner can finish the application.</b> Ask them to sign in and open My profile.</p>`}
+  </div>`;
+}
+
+// ---- Private verification documents (owner only) ----
+
+function tailorVerificationCard(d, canEdit) {
+  if (!d || d.admin_status === "approved" || !canEdit) return "";
+  const status = (ref, label) => {
+    if (!ref) return `<span class="small-text owed">Not uploaded yet</span>`;
+    const url = photoUrl(ref);
+    return url ? `<a class="small-text paid" href="${escapeHtml(url)}" target="_blank" rel="noopener">✓ ${escapeHtml(label)} uploaded — view</a>`
+      : `<span class="small-text paid">✓ ${escapeHtml(label)} uploaded</span>`;
+  };
+  const accept = "image/*,application/pdf";
+  return `<form id="tailor-verification" class="card verification-form" onsubmit="return saveTailorVerification(event)" novalidate>
+    <h2>Private verification</h2>
+    <p class="hint">🔒 Only the ${APP_NAME} team sees these — never customers. A clear photo taken with your phone camera is fine (or a PDF), up to 10 MB each. You can save one document now and add the other later.</p>
+    <label class="field">Owner or responsible person's full name
+      <input name="ownerName" maxlength="100" autocomplete="name" value="${escapeHtml(d.owner_name || (Cloud.me && Cloud.me.name) || "")}"></label>
+    <label class="field">Government-issued ID <small>(passport, driving licence or national ID card)</small>
+      ${status(d.verification_id, "ID")}
+      <input name="identityDocument" type="file" accept="${accept}"></label>
+    <label class="field">Proof of address <small>(utility bill, bank statement or official letter from the last 3 months)</small>
+      ${status(d.verification_address, "Proof of address")}
+      <input name="addressDocument" type="file" accept="${accept}"></label>
+    <label class="field">Business registration document <small>(optional — skip it if you aren't formally registered)</small>
+      ${d.business_registration ? status(d.business_registration, "Business registration") : ""}
+      <input name="businessDocument" type="file" accept="${accept}"></label>
+    <p id="verification-error" class="form-error" role="alert"></p>
+    <div class="form-actions"><button type="submit" class="gold" id="save-verification">Save verification</button></div>
+  </form>`;
+}
+
+// Phone photos (any image type, including iPhone HEIC where the browser can
+// open it) become a JPEG no bigger than 2400px; PDFs are kept as they are.
+function prepareVerificationFile(file) {
+  const name = file.name || "document";
+  if (file.type === "application/pdf" || /\.pdf$/i.test(name)) {
+    return Promise.resolve(file.type === "application/pdf" ? file : new File([file], name, { type: "application/pdf" }));
+  }
+  if (file.size > 30 * 1024 * 1024) return Promise.reject(new Error(`${name} is too big. Take a new photo of the document, or upload a smaller file.`));
+  const ext = (name.match(/\.([a-z0-9]+)$/i) || [])[1];
+  const typed = file.type ? file : new File([file], name, { type: "image/" + (ext ? ext.toLowerCase().replace("jpg", "jpeg") : "jpeg") });
+  return resizeImage(typed, 2400, 0.88)
+    .then(dataUrl => {
+      const bytes = atob(dataUrl.split(",")[1]);
+      const array = new Uint8Array(bytes.length);
+      for (let i = 0; i < bytes.length; i++) array[i] = bytes.charCodeAt(i);
+      return new Blob([array], { type: "image/jpeg" });
+    })
+    .then(blob => new File([blob], name.replace(/\.[a-z0-9]+$/i, "") + ".jpg", { type: "image/jpeg" }))
+    .catch(() => { throw new Error(`We couldn't open ${name}. Take a clear photo of the document with your phone camera, or upload a JPG, PNG or PDF.`); });
+}
+
+function uploadTailorDocument(file, purpose) {
+  if (!file) return Promise.resolve(null);
+  return prepareVerificationFile(file).then(ready => Cloud.live ? Cloud.uploadVerificationFile(ready, purpose) : `demo:${purpose}:${ready.name}`);
+}
+
+function saveTailorVerification(event) {
+  event.preventDefault();
+  const d = bizDesigner();
+  const form = event.target;
+  const ownerName = form.ownerName.value.trim();
+  const idFile = form.identityDocument.files[0] || null;
+  const addressFile = form.addressDocument.files[0] || null;
+  const businessFile = form.businessDocument.files[0] || null;
+  if (!ownerName) return formError("verification-error", "Enter the owner's full name.");
+  if (!idFile && !addressFile && !businessFile && ownerName === (d.owner_name || "")) {
+    return formError("verification-error", d.verification_id ? "Choose your proof of address to upload." : "Choose a photo or PDF of your government-issued ID to upload.");
+  }
+  formError("verification-error", "");
+  const button = document.getElementById("save-verification");
+  if (button) { button.disabled = true; button.textContent = "Uploading…"; }
+  Promise.all([uploadTailorDocument(idFile, "tailor-id"), uploadTailorDocument(addressFile, "tailor-address"), uploadTailorDocument(businessFile, "tailor-business-registration")])
+    .then(([idRef, addressRef, businessRef]) => {
+      if (Cloud.live) return Cloud.saveDesignerVerification(d.id, { ownerName, verificationId: idRef, verificationAddress: addressRef, businessRegistration: businessRef });
+      Object.assign(d, { owner_name: ownerName }, idRef ? { verification_id: idRef } : {}, addressRef ? { verification_address: addressRef } : {},
+        businessRef ? { business_registration: businessRef } : {}, { verification_submitted_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+      saveData();
+    })
+    .then(() => {
+      profileForm = null;
+      const next = tailorApplicationSteps(bizDesigner() || d).find(s => !s.done);
+      toast(next ? `Saved. Next: ${next.label}.` : "Saved — your application is complete!");
+      renderAll();
+      setTimeout(() => goToApplicationStep("tailor-application"), 50);
+    })
+    .catch(error => {
+      formError("verification-error", error.message || "Couldn't upload your documents. Check your connection and try again.");
+      const again = document.getElementById("save-verification");
+      if (again) { again.disabled = false; again.textContent = "Save verification"; }
+    });
+  return false;
 }
 
 // ---- My profile ----
@@ -43,10 +200,11 @@ function renderMyProfile() {
   const dis = canEdit ? "" : "disabled";
   return `
     ${bizHeader("My profile", `What customers see when they find ${escapeHtml(d.business_name)} on ${APP_NAME}.`)}
-    ${tailorStatusBanner(d)}
+    ${d.admin_status === "hidden" ? tailorStatusBanner(d) : tailorChecklistCard(d, canEdit)}
     ${canEdit ? "" : `<div class="card"><p class="hint">Only the owner can change the profile. Ask them to update it.</p></div>`}
-    ${canEdit ? designerPaymentsCard() : ""}
     ${tailorTermsCard(d, canEdit)}
+    ${tailorVerificationCard(d, canEdit)}
+    ${canEdit ? designerPaymentsCard() : ""}
     <div class="card">
       <p class="share-row">Your public page: <a href="${escapeHtml(link)}" target="_blank" rel="noopener">${escapeHtml(link.replace(/^https?:\/\//, ""))}</a>
         ${d.admin_status === "approved" ? `· <a href="${escapeHtml(appUrl("customer", "tailor/" + d.slug))}" target="_blank" rel="noopener">see it in ${APP_NAME}</a>` : "(live once you're approved)"}</p>
@@ -58,10 +216,10 @@ function renderMyProfile() {
         <label>Business name<input name="business" required maxlength="80" value="${escapeHtml(d.business_name)}"></label>
         <label>Web address <small class="muted">nebedahub.com/tailor/<b>this</b>/</small><input name="slug" maxlength="60" pattern="[a-z0-9-]+" value="${escapeHtml(d.slug || "")}"></label>
         <p class="hint wide">🔒 Customers contact you through ${APP_NAME}: phone numbers, emails, websites and social handles are hidden from your profile and portfolio automatically.</p>
-        <label class="wide">About your business<textarea name="description" rows="4" maxlength="1200" placeholder="What you make, how long it takes, how fittings work…">${escapeHtml(d.description || "")}</textarea></label>
+        <label class="wide" id="profile-about">About your business<textarea name="description" rows="4" maxlength="1200" placeholder="What you make, how long it takes, how fittings work…">${escapeHtml(d.description || "")}</textarea></label>
       </div>
 
-      <h2>Specialities</h2>
+      <h2 id="profile-specs">Specialities</h2>
       <div class="spec-picker">${specialityList().map(sp => `<label class="check"><input type="checkbox" name="spec" value="${escapeHtml(sp.name)}" ${(d.speciality_tags || []).includes(sp.name) ? "checked" : ""}> ${escapeHtml(sp.name)}</label>`).join("")}</div>
 
       <h2>Orders</h2>
@@ -71,13 +229,13 @@ function renderMyProfile() {
         <label>Usual making time<select name="making">${times.map(t => `<option ${t === d.delivery_time ? "selected" : ""}>${escapeHtml(t)}</option>`).join("")}</select></label>
       </div>
 
-      <h2>Where you are</h2>
+      <h2 id="profile-where">Where you are</h2>
       <p class="hint">Customers search by distance. We look up your map position from your postcode (or address) when you save. Customers see your area (e.g. “SE15”) and a position rounded to about 1 km. Your full address is shared with a customer only once their deposit is confirmed, in “Delivery and fitting details” — for delivery and fittings.</p>
       <div class="form-grid">
         <label>Country<select name="country" required>${countryOptions(d.country_code, "Choose your country")}</select></label>
         <label>City or town<input name="city" required maxlength="60" value="${escapeHtml(d.city || "")}"></label>
         <label>Postcode<input name="postcode" maxlength="12" value="${escapeHtml(d.postcode || "")}" autocomplete="postal-code"></label>
-        <label class="wide">Full address <small class="muted">(optional)</small><input name="address" maxlength="120" value="${escapeHtml(d.address_line || "")}" autocomplete="street-address"></label>
+        <label class="wide">Full business address <small class="muted">(private — needed for approval)</small><input name="address" maxlength="120" value="${escapeHtml(d.address_line || "")}" autocomplete="street-address"></label>
         <label>Phone <small class="muted">(only the ${APP_NAME} team sees it)</small>${phoneFieldHtml("phone", d.phone || "", d.country_code)}</label>
       </div>
       <div id="profile-location" class="location-row">${profileLocationRow()}</div>
@@ -93,9 +251,9 @@ function renderMyProfile() {
       ${canEdit ? `<div class="form-actions"><button type="submit" class="gold" id="save-profile">Save profile</button></div>` : ""}
     </form>
 
-    <div class="card">
+    <div class="card" id="profile-portfolio">
       <h2>Portfolio <span class="total">${(d.portfolio || []).length} of ${PORTFOLIO_MAX}</span></h2>
-      <p class="hint">Photos of outfits you've made. The first few show on your page and in search.</p>
+      <p class="hint">Photos of outfits you've made. The first few show on your page and in search.${d.admin_status === "approved" ? "" : " You need at least 2 to be approved."}</p>
       <div class="portfolio-grid edit">${(d.portfolio || []).map(p => `
         <div class="portfolio-item"><img src="${escapeHtml(photoUrl(p.image))}" alt="${escapeHtml(p.title || "Portfolio photo")}">
           ${p.title ? `<span>${escapeHtml(p.title)}</span>` : ""}
@@ -239,7 +397,10 @@ function saveMyProfile(event) {
     })
     .then(() => {
       profileForm = null;
-      toast(warning ? "Saved — but your map position isn't set." : hidDetails ? "Saved. " + CONTACT_HIDDEN_NOTICE : "Profile saved.");
+      const fresh = bizDesigner() || d;
+      const next = fresh.admin_status === "approved" || fresh.admin_status === "hidden" ? null : tailorApplicationSteps(fresh).find(s => !s.done);
+      toast(warning ? "Saved — but your map position isn't set." : hidDetails ? "Saved. " + CONTACT_HIDDEN_NOTICE
+        : next ? `Profile saved. Next: ${next.label}.` : "Profile saved.");
       renderAll();
       if (warning) formError("profile-error", warning);
     })
@@ -305,7 +466,7 @@ function removePortfolioPhoto(itemId) {
 // The tailor terms: shown until the owner ticks them
 function tailorTermsCard(d, canEdit) {
   if (d.tailor_terms_accepted_at) return "";
-  return `<form class="card attention" onsubmit="return acceptTermsFromProfile(event, '${d.id}')">
+  return `<form class="card attention" id="tailor-terms" onsubmit="return acceptTermsFromProfile(event, '${d.id}')">
     <h2>Tailor terms</h2>
     <p class="hint">${d.admin_status === "approved" ? "" : `The ${APP_NAME} team approves you once you've accepted them. `}They protect you and your customers: orders, chats and payments stay on ${APP_NAME}.</p>
     ${tailorTermsHtml(true)}

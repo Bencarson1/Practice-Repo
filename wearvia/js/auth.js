@@ -110,7 +110,7 @@ const Auth = (() => {
           : seller
           ? `Put your fabrics in front of customers and tailors on ${APP_NAME}. You'll set up your shop next.`
           : tailor
-            ? `Get found by customers near you and run quotes, chats, orders and payments from your own dashboard. New tailors are checked by the ${APP_NAME} team before customers can see them.`
+            ? `Get found by customers near you and run quotes, chats, orders and payments from your own dashboard. After this you'll upload your ID, proof of address and photos of your work, then the ${APP_NAME} team checks and approves you.`
             : `Find tailors near you, then design, order and track your outfits.`}</p>
         <form class="stack" onsubmit="return Auth.submit(event)">
           ${tailor ? field("Business name", "businessName", "text", 'required maxlength="80" autocomplete="organization"') : ""}
@@ -234,7 +234,9 @@ const Auth = (() => {
                             unit: customerBodyUnit({ country_code: values.country }) })
         .then(result => {
           if (result.needsConfirmation) {
-            message = `Nearly done! We've sent a link to ${values.email}. Open it to confirm your email, then sign in here.`;
+            message = type === "designer"
+              ? `Nearly done! We've sent a link to ${values.email}. Open it to confirm your email, then sign in here. You'll then finish your tailor application in My profile — have a photo of your ID and proof of address ready.`
+              : `Nearly done! We've sent a link to ${values.email}. Open it to confirm your email, then sign in here.`;
             show("signIn");
             const email = document.querySelector("#auth-view [name=email]");
             if (email) email.value = values.email;

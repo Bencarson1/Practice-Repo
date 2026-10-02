@@ -1266,6 +1266,20 @@ const Cloud = (() => {
     await load();
   }
 
+  // The owner adds or replaces their private verification documents (My profile)
+  async function saveDesignerVerification(id, details) {
+    const path = ref => {
+      const where = splitRef(ref);
+      return where && where.bucket === VERIFICATION_FILES ? where.path : null;
+    };
+    const fields = { owner_name: details.ownerName || "" };
+    if (details.verificationId) fields.verification_id_path = path(details.verificationId);
+    if (details.verificationAddress) fields.verification_address_path = path(details.verificationAddress);
+    if (details.businessRegistration) fields.business_registration_path = path(details.businessRegistration);
+    if (details.verificationId || details.verificationAddress || details.businessRegistration) fields.verification_submitted_at = new Date().toISOString();
+    await saveDesignerProfile(id, fields);
+  }
+
   async function addPortfolioItem(designerId, imageUrl, title) {
     const { error } = await state.client.from("designer_portfolio_items").insert({
       designer_id: designerId, image_url: imageUrl, title: title || null, sort_order: Date.now() % 1000000 });
@@ -1400,7 +1414,7 @@ const Cloud = (() => {
     requestQuote, sendQuote, acceptQuote, recommendFabrics, chooseRecommendedFabric, generateStyleVariations, sendMessage, markChatRead, refreshChat, testPayment, confirmFabricQuality, customerOutfitResult,
     uploadPhoto, uploadVerificationFile, removePhoto, photoUrl,
     loadTeamLogins, addTeamLogin, removeTeamLogin,
-    registerDesigner, acceptTailorTerms, setDeliveryAddress, saveDesignerProfile, addPortfolioItem, removePortfolioItem, setDesignerStatus, reviewSeller, resubmitSeller, addSpeciality,
+    registerDesigner, acceptTailorTerms, setDeliveryAddress, saveDesignerProfile, saveDesignerVerification, addPortfolioItem, removePortfolioItem, setDesignerStatus, reviewSeller, resubmitSeller, addSpeciality,
     saveCustomerNotes, searchTailors, tailorPage, ensurePrices, loadPublicLists, convertPriceList, saveHomepageSettings
   };
 })();
