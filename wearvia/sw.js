@@ -10,7 +10,7 @@
 self.NH_APP = {
   name: "customer",
   root: "./",
-  version: "nebedahub-shell-v18",
+  version: "nebedahub-shell-v19",
   oldCaches: /^(wearvia-|nebedahub-shell-)/,
   shell: ["./", "./index.html", "./manifest.webmanifest", "./css/style.css",
           "./icons/icon-192.png", "./icons/icon-512.png", "./icons/apple-touch-icon.png"]

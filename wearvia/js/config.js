@@ -17,7 +17,7 @@ const ONLINE_PAYMENTS_ENABLED = false;
 // bank through Stripe. Turn on ONLY after the Stripe Edge Functions are
 // deployed and STRIPE_SECRET_KEY is set in Supabase (see supabase/STRIPE-SETUP.md).
 // This is separate from ONLINE_PAYMENTS_ENABLED and moves no real money on its own.
-const PAYOUTS_ONBOARDING_ENABLED = false;
+const PAYOUTS_ONBOARDING_ENABLED = true;
 
 // Safe transaction simulation. No real money moves while this is true.
 const TRANSACTION_TEST_MODE = true;
