@@ -7,7 +7,7 @@
 self.NH_APP = {
   name: "admin",
   root: "../",
-  version: "nebedahub-admin-shell-v10",
+  version: "nebedahub-admin-shell-v11",
   oldCaches: /^nebedahub-admin-shell-/,
   shell: ["./", "./index.html", "./manifest.webmanifest", "../css/style.css",
           "../icons/admin-192.png", "../icons/admin-512.png", "../icons/admin-apple-touch-icon.png"]

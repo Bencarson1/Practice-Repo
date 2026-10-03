@@ -1268,31 +1268,39 @@ const Cloud = (() => {
 
   // ---- Payouts (Stripe Connect onboarding) ----
 
-  // Pull the real error message a function returned (invoke() hides it behind
-  // "non-2xx status code"), so the person sees what actually went wrong.
-  async function fnError(error) {
+  // Call one of our Edge Functions with a plain fetch. We build the headers
+  // ourselves (all ASCII) and pass the signed-in user's token, which sidesteps
+  // a header-encoding bug in the library's functions.invoke().
+  async function callFunction(name, body) {
+    let token = SUPABASE_PUBLISHABLE_KEY;
     try {
-      if (error && error.context && typeof error.context.json === "function") {
-        const body = await error.context.json();
-        if (body && body.error) return body.error;
-      }
-    } catch (_e) { /* fall through */ }
-    return friendly(error);
+      const { data } = await state.client.auth.getSession();
+      if (data && data.session && data.session.access_token) token = data.session.access_token;
+    } catch (_e) { /* use the publishable key */ }
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": SUPABASE_PUBLISHABLE_KEY,
+        "Authorization": `Bearer ${token}`,
+      },
+      body: JSON.stringify(body || {}),
+    });
+    let data = null;
+    try { data = await res.json(); } catch (_e) { /* no JSON body */ }
+    if (!res.ok) throw new Error((data && data.error) || `Something went wrong (${res.status}). Please try again.`);
+    return data || {};
   }
 
   // Current payout readiness for the signed-in tailor and/or fabric seller.
   async function payoutStatus() {
-    const { data, error } = await state.client.functions.invoke("stripe-connect-status", { body: {} });
-    if (error) throw new Error(await fnError(error));
-    if (data && data.error) throw new Error(data.error);
-    return data;
+    return await callFunction("stripe-connect-status", {});
   }
 
   // Start (or continue) Stripe onboarding; returns the URL to send them to.
   async function startPayoutOnboarding(role) {
-    const { data, error } = await state.client.functions.invoke("stripe-connect-onboard", { body: { role } });
-    if (error) throw new Error(await fnError(error));
-    if (!data || !data.url) throw new Error((data && data.error) || "Couldn't start payout setup.");
+    const data = await callFunction("stripe-connect-onboard", { role });
+    if (!data || !data.url) throw new Error(data.error || "Couldn't start payout setup.");
     return data.url;
   }
 
