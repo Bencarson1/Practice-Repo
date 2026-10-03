@@ -2,17 +2,13 @@
 // stripe-connect-status — Stage 1 of payments.
 //
 // For the signed-in tailor and/or fabric seller, re-checks their Stripe
-// account with Stripe, updates the stored booleans (charges/payouts enabled,
-// details submitted), and returns the current payout status for both.
-//
-// The app calls this when the "Payments & payouts" card opens and when the
-// person returns from Stripe onboarding, so the card shows "connected".
+// account, updates the stored booleans, and returns payout status for both.
+// Talks to Stripe over plain fetch (no Stripe SDK).
 //
 // Needs STRIPE_SECRET_KEY set in Supabase (SUPABASE_URL and
 // SUPABASE_SERVICE_ROLE_KEY are provided automatically).
 // ============================================================
 
-import Stripe from "npm:stripe@17.7.0";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -22,10 +18,7 @@ const corsHeaders = {
 };
 
 const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
-const stripe = new Stripe(STRIPE_SECRET_KEY, {
-  httpClient: Stripe.createFetchHttpClient(),
-  apiVersion: "2024-06-20",
-});
+const STRIPE_API = "https://api.stripe.com/v1";
 
 const admin = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
@@ -39,7 +32,15 @@ function json(body: unknown, status = 200) {
   });
 }
 
-// Refresh one business (tailor or seller) and return its status, or null.
+async function stripeGet(path: string) {
+  const res = await fetch(`${STRIPE_API}${path}`, {
+    headers: { "Authorization": `Bearer ${STRIPE_SECRET_KEY}` },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((data as { error?: { message?: string } })?.error?.message || `Stripe error ${res.status}`);
+  return data as Record<string, unknown>;
+}
+
 async function refreshOne(table: "designers" | "suppliers", userId: string) {
   const nameCol = table === "suppliers" ? "name" : "business_name";
   const { data: biz } = await admin
@@ -59,7 +60,7 @@ async function refreshOne(table: "designers" | "suppliers", userId: string) {
 
   if (accountId) {
     try {
-      const acct = await stripe.accounts.retrieve(accountId);
+      const acct = await stripeGet(`/accounts/${accountId}`);
       charges = !!acct.charges_enabled;
       payouts = !!acct.payouts_enabled;
       details = !!acct.details_submitted;
@@ -67,9 +68,9 @@ async function refreshOne(table: "designers" | "suppliers", userId: string) {
         stripe_charges_enabled: charges,
         stripe_payouts_enabled: payouts,
         stripe_details_submitted: details,
-      }).eq("id", biz.id);
+      }).eq("id", row.id);
     } catch (_e) {
-      // Keep the stored values if Stripe can't be reached this moment.
+      // Keep stored values if Stripe can't be reached this moment.
     }
   }
 
