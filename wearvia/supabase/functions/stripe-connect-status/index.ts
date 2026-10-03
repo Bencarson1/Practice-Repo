@@ -46,7 +46,13 @@ async function stripeGet(path: string) {
     headers: { "Authorization": `Bearer ${STRIPE_SECRET_KEY}` },
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((data as { error?: { message?: string } })?.error?.message || `Stripe error ${res.status}`);
+  if (!res.ok) {
+    const raw = (data as { error?: { message?: string } })?.error?.message || `Stripe error ${res.status}`;
+    const safe = /Invalid API Key provided/i.test(raw)
+      ? "The Stripe secret key saved in Supabase is invalid or no longer active. Replace STRIPE_SECRET_KEY with a current Stripe test secret key."
+      : raw;
+    throw new Error(safe);
+  }
   return data as Record<string, unknown>;
 }
 
