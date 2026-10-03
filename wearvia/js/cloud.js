@@ -1277,12 +1277,16 @@ const Cloud = (() => {
       const { data } = await state.client.auth.getSession();
       if (data && data.session && data.session.access_token) token = data.session.access_token;
     } catch (_e) { /* use the publishable key */ }
+    // Keep the header a valid ByteString: strip anything that isn't printable
+    // ASCII (a stray space/newline/invisible char would otherwise crash fetch).
+    // A normal token (letters, digits, - _ .) is unchanged.
+    const authValue = "Bearer " + String(token).replace(/[^\x21-\x7E]/g, "");
     const res = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "apikey": SUPABASE_PUBLISHABLE_KEY,
-        "Authorization": `Bearer ${token}`,
+        "apikey": String(SUPABASE_PUBLISHABLE_KEY).replace(/[^\x21-\x7E]/g, ""),
+        "Authorization": authValue,
       },
       body: JSON.stringify(body || {}),
     });
