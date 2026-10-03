@@ -99,6 +99,35 @@ function tailorWelcome() {
 
 // ---- Create your tailor profile (someone already signed in, or in the demo) ----
 
+// Portfolio photos, added one at a time (simpler than multi-select, works on phones)
+let joinPortfolioFiles = [];
+
+function joinPortfolioStripHtml() {
+  const n = joinPortfolioFiles.length;
+  const status = n === 0 ? `No photos yet — add at least 2.`
+    : n < 2 ? `${n} photo added — add at least ${2 - n} more.`
+    : `${n} photos added ✓`;
+  return `<p class="hint">${status}</p>
+    ${n ? `<div class="join-portfolio-grid">${joinPortfolioFiles.map((f, i) =>
+      `<div class="join-thumb"><img src="${URL.createObjectURL(f)}" alt="Portfolio photo ${i + 1}">
+        <button type="button" class="small danger" onclick="removeJoinPortfolio(${i})">Remove</button></div>`).join("")}</div>` : ""}`;
+}
+
+function addJoinPortfolio(input) {
+  Array.from(input.files || []).forEach(f => {
+    if (f && f.type.startsWith("image/") && joinPortfolioFiles.length < 8) joinPortfolioFiles.push(f);
+  });
+  input.value = "";                 // let the same file be picked again if needed
+  const el = document.getElementById("join-portfolio");
+  if (el) el.innerHTML = joinPortfolioStripHtml();
+}
+
+function removeJoinPortfolio(i) {
+  joinPortfolioFiles.splice(i, 1);
+  const el = document.getElementById("join-portfolio");
+  if (el) el.innerHTML = joinPortfolioStripHtml();
+}
+
 function tailorJoinForm() {
   const mine = myTailorBusiness();
   if (mine) {
@@ -107,6 +136,7 @@ function tailorJoinForm() {
       <p class="hint"><b>${escapeHtml(mine.business_name)}</b> is yours on ${APP_NAME}.</p>
       <a class="button" href="#/profile">Open My profile</a></div>`;
   }
+  joinPortfolioFiles = [];   // fresh portfolio list each time the form opens
   const specs = specialityList().filter(x => x.active !== false);
   const me = Cloud.me || {};
   return `
@@ -138,8 +168,12 @@ function tailorJoinForm() {
         </fieldset>
 
         <h2>Photos of your work</h2>
-        <label class="field">Profile or business photo<input name="profilePhoto" type="file" accept="image/*" required></label>
-        <label class="field">Portfolio photos <small>(at least 2 clear photos of work you made)</small><input name="portfolioPhotos" type="file" accept="image/*" multiple required></label>
+        <label class="field">Profile or business photo <small>(1 photo)</small><input name="profilePhoto" type="file" accept="image/*" required></label>
+        <div class="field">
+          <label>Portfolio photos <small>(at least 2 photos of work you made — add them one at a time)</small></label>
+          <label class="button file-button">+ Add a photo<input type="file" accept="image/*" onchange="addJoinPortfolio(this)"></label>
+          <div id="join-portfolio" class="join-portfolio">${joinPortfolioStripHtml()}</div>
+        </div>
 
         <h2>Private verification</h2>
         <p class="hint">🔒 Only the ${APP_NAME} team sees these. A clear photo taken with your phone camera is fine (or a PDF).</p>
@@ -159,7 +193,7 @@ function joinAsTailor(event) {
   event.preventDefault();
   const form = event.target;
   const specialities = Array.from(form.querySelectorAll('input[name="speciality"]:checked')).map(x => x.value);
-  const portfolioFiles = Array.from(form.portfolioPhotos.files || []);
+  const portfolioFiles = joinPortfolioFiles.slice();
   const details = {
     ownerName: form.ownerName.value.trim(),
     businessName: form.business.value.trim(),
