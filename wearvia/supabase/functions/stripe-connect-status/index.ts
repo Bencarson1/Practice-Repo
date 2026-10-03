@@ -12,8 +12,8 @@
 // SUPABASE_SERVICE_ROLE_KEY are provided automatically).
 // ============================================================
 
-import Stripe from "https://esm.sh/stripe@17.3.1?target=deno";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import Stripe from "npm:stripe@17.7.0";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
