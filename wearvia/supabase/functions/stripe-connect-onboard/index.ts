@@ -38,6 +38,7 @@ function stripeSecretKey(): string {
 const STRIPE_SECRET_KEY = stripeSecretKey();
 const STRIPE_API = "https://api.stripe.com/v1";
 const STRIPE_V2_API = "https://api.stripe.com/v2/core";
+const STRIPE_API_VERSION = "2026-09-30.endive";
 
 const admin = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
@@ -88,6 +89,7 @@ async function stripeV2(path: string, method: string, params?: Record<string, un
     method,
     headers: {
       "Authorization": `Bearer ${STRIPE_SECRET_KEY}`,
+      "Stripe-Version": STRIPE_API_VERSION,
       "Content-Type": "application/json",
     },
     body: params ? JSON.stringify(params) : undefined,
