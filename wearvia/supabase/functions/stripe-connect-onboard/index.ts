@@ -37,6 +37,7 @@ function stripeSecretKey(): string {
 
 const STRIPE_SECRET_KEY = stripeSecretKey();
 const STRIPE_API = "https://api.stripe.com/v1";
+const STRIPE_V2_API = "https://api.stripe.com/v2/core";
 
 const admin = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
@@ -82,6 +83,26 @@ async function stripe(path: string, method: string, params?: Record<string, unkn
   return data as Record<string, unknown>;
 }
 
+async function stripeV2(path: string, method: string, params?: Record<string, unknown>) {
+  const res = await fetch(`${STRIPE_V2_API}${path}`, {
+    method,
+    headers: {
+      "Authorization": `Bearer ${STRIPE_SECRET_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: params ? JSON.stringify(params) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const raw =
+      (data as { error?: { message?: string } })?.error?.message ||
+      (data as { message?: string })?.message ||
+      `Stripe error ${res.status}`;
+    throw new Error(raw);
+  }
+  return data as Record<string, unknown>;
+}
+
 function isoCountry(code: string | null): string {
   return code && /^[A-Za-z]{2}$/.test(code) ? code.toUpperCase() : "GB";
 }
@@ -123,14 +144,34 @@ Deno.serve(async (req: Request) => {
     const row = biz as Record<string, unknown>;
     let accountId = row.stripe_account_id as string | null;
     if (!accountId) {
-      const account = await stripe("/accounts", "POST", {
-        type: "express",
-        email: user.email ?? undefined,
-        country: isoCountry(row.country_code as string | null),
-        business_type: "individual",
-        capabilities: { transfers: { requested: true } },
-        business_profile: { name: row[nameCol] ?? undefined },
-        metadata: { nebedahub_role: role, business_id: row.id, owner_user_id: user.id },
+      const account = await stripeV2("/accounts", "POST", {
+        contact_email: user.email ?? undefined,
+        display_name: row[nameCol] ?? undefined,
+        dashboard: "express",
+        identity: {
+          country: isoCountry(row.country_code as string | null).toLowerCase(),
+          entity_type: "individual",
+        },
+        configuration: {
+          recipient: {
+            capabilities: {
+              stripe_balance: {
+                stripe_transfers: { requested: true },
+              },
+            },
+          },
+        },
+        defaults: {
+          responsibilities: {
+            fees_collector: "application",
+            losses_collector: "application",
+          },
+        },
+        metadata: {
+          nebedahub_role: role,
+          business_id: String(row.id),
+          owner_user_id: user.id,
+        },
       });
       accountId = account.id as string;
       const { error: upErr } = await admin.from(table).update({ stripe_account_id: accountId }).eq("id", row.id);
