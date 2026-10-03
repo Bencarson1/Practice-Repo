@@ -22,7 +22,20 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
+const RAW_STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
+
+// Secrets are sometimes pasted from a password manager or rich-text source with
+// a trailing newline or smart quote. Header values must be ASCII ByteStrings.
+// Normalise only accidental surrounding/whitespace characters, then validate
+// the Stripe key shape before it is ever placed in an Authorization header.
+function stripeSecretKey(): string {
+  return RAW_STRIPE_SECRET_KEY
+    .trim()
+    .replace(/[“”‘’"'\s]/g, "")
+    .replace(/[^\x21-\x7E]/g, "");
+}
+
+const STRIPE_SECRET_KEY = stripeSecretKey();
 const STRIPE_API = "https://api.stripe.com/v1";
 
 const admin = createClient(
@@ -72,6 +85,9 @@ Deno.serve(async (req: Request) => {
   try {
     if (!STRIPE_SECRET_KEY) {
       return json({ error: "Payouts aren't configured yet. (STRIPE_SECRET_KEY is not set in Supabase.)" }, 400);
+    }
+    if (!/^sk_(test|live)_/.test(STRIPE_SECRET_KEY)) {
+      return json({ error: "The Stripe secret key saved in Supabase is not valid. Please replace STRIPE_SECRET_KEY with the Stripe secret key only." }, 400);
     }
 
     const token = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
