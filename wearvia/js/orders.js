@@ -236,6 +236,7 @@ function renderOrderDetail(orderId) {
     <p><a href="#/orders">← All orders</a></p>
     ${bizHeader(`Order ${order.id} ${stageBadge(order)}`, `${escapeHtml(order.outfit_type)} for <a href="#/customers/${order.customer_id}">${escapeHtml(customer ? customer.name : "Unknown")}</a> · placed ${formatDate(order.created_at)} · due ${formatDate(order.due_date)}`)}
     ${styleBriefCard(order)}
+    ${tailorDisputeCard(order)}
 
     <div class="two-col">
       <div class="card chat-card">
@@ -369,4 +370,23 @@ function confirmFabricQualityFor(orderId) {
       renderAll();
     })
     .catch(error => toast(error.message || "Could not release the fabric seller balance."));
+}
+
+
+// A customer's problem report on this order, as the tailor sees it
+function tailorDisputeCard(order) {
+  const d = typeof orderDispute === "function" ? orderDispute(order) : null;
+  if (!d) return "";
+  const cur = orderCurrency(order);
+  const photos = d.evidence_photos.map((ref, i) => `<a href="${photoUrl(ref)}" target="_blank" rel="noopener"><img class="dispatch-photo" src="${photoUrl(ref)}" alt="Customer photo ${i + 1}"></a>`).join("");
+  if (d.status === "open") {
+    return `<div class="card attention"><h2>⚠️ The customer reported a problem</h2>
+      <p>“${escapeHtml(d.reason)}”</p>
+      <div class="chat-photos">${photos}</div>
+      <p class="hint">Your final 30% is on hold while NebedaHub reviews the customer's photos against the style they asked for. Reply in the order chat with your side — photos of the finished outfit before delivery help.</p></div>`;
+  }
+  return `<div class="card"><h2>NebedaHub's decision on the customer's problem report</h2>
+    <p class="hint">${escapeHtml(({ pay_tailor: "You receive your full final payment.", split: "Your final payment was split: part to you, part refunded to the customer.", refund_customer: "Your final payment was refunded to the customer." })[d.decision] || "")}</p>
+    <p class="hint">To you: <b>${money(d.tailor_amount || 0, cur)}</b> · Refunded: <b>${money(d.refund_amount || 0, cur)}</b></p>
+    ${d.admin_note ? `<p class="hint">“${escapeHtml(d.admin_note)}”</p>` : ""}</div>`;
 }

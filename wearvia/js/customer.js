@@ -1232,11 +1232,17 @@ function screenTracking(orderId) {
       : `<button class="cta" onclick="go('pay/${order.id}')">${typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE ? "🧪 Test Pay " + money(order.quote_total, cur) + " in Full" : realPaymentsOn() ? "Pay " + money(order.quote_total, cur) + " in Full" : "Pay " + money(order.deposit_amount, cur) + " Deposit"} →</button>`;
   } else if (order.stage === "delivered" && !order.review_rating) {
     const heldTailor = (db.test_allocations || []).filter(a => a.order_id === order.id && a.recipient_type === "tailor" && a.release_stage === "tailor_customer_acceptance" && a.status === "secured").reduce((n,a) => n + (a.amount || 0), 0);
-    action = heldTailor > 0 && payInFullMode()
+    const dispute = orderDispute(order);
+    action = dispute && dispute.status === "open" && heldTailor > 0
+      ? `<div class="card attention"><b>Problem reported — NebedaHub is reviewing it</b>
+           <p class="hint">“${escapeHtml(dispute.reason)}”</p>
+           <p class="hint">The tailor's final payment is on hold until NebedaHub decides. You can add more photos or explain more in the order chat.</p></div>
+         <button class="btn-outline" onclick="confirmCustomerOutfit('${order.id}', true)">It's fine now — I'm happy with the outfit</button>`
+      : heldTailor > 0 && payInFullMode()
       ? `<div class="card attention"><b>Final tailor payment is protected</b><p class="hint">The tailor has confirmed delivery. Please confirm whether you received the outfit and are happy with it.</p></div>
          <button class="cta" onclick="confirmCustomerOutfit('${order.id}', true)">I received it and I am happy</button>
-         <button class="btn-outline" onclick="confirmCustomerOutfit('${order.id}', false)">I have a problem with the outfit</button>`
-      : `<button class="cta" onclick="go('review/${order.id}')">Leave a Review →</button>`;
+         <button class="btn-outline" onclick="${realPaymentsOn() ? `go('problem/${order.id}')` : `confirmCustomerOutfit('${order.id}', false)`}">I have a problem with the outfit</button>`
+      : `${disputeResultHtml(dispute)}<button class="cta" onclick="go('review/${order.id}')">Leave a Review →</button>`;
   } else if (due > 0 && qcPassed) {
     action = `
       ${Cloud.live && typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE ? `<div class="card attention"><b>🧪 Transaction test mode</b><p class="hint">No real money will move.</p></div>` : Cloud.live && ONLINE_PAYMENTS_ENABLED ? `<div class="meta"><b>Secure payment:</b> Continue through NebedaHub's protected checkout.</div>` : !Cloud.live ? `<div class="selopt"><span class="fl">Pay by</span><span class="optbtns">${["Card", "Apple Pay", "Bank transfer"].map(m =>
@@ -1322,6 +1328,126 @@ function confirmCustomerOutfit(orderId, happy) {
       renderAll();
     })
     .catch(error => toast(error.message || "Could not complete the protected payment step."));
+}
+
+// ---- Problem with a delivered outfit: photo evidence, then NebedaHub reviews ----
+
+// The latest problem report on an order (open first)
+function orderDispute(order) {
+  const list = (db.outfit_disputes || []).filter(d => order && d.order_id === order.id);
+  return list.find(d => d.status === "open") || list.filter(d => d.status === "resolved").pop() || null;
+}
+
+const DISPUTE_DECISIONS = {
+  pay_tailor: "The outfit matched what was agreed, so the tailor receives their final payment.",
+  split: "Partly the tailor's fault: part of the tailor's final payment is refunded to you.",
+  refund_customer: "Not what was ordered: the tailor's final payment is refunded to you."
+};
+
+function disputeResultHtml(dispute) {
+  if (!dispute || dispute.status !== "resolved") return "";
+  const cur = orderCurrency(findOrder(dispute.order_id));
+  return `<div class="card"><b>NebedaHub's decision on your problem report</b>
+    <p class="hint">${escapeHtml(DISPUTE_DECISIONS[dispute.decision] || "")}</p>
+    ${dispute.refund_amount > 0 ? `<p class="hint">Refund to your card: <b>${money(dispute.refund_amount, cur)}</b> (it can take 5–10 days to show).</p>` : ""}
+    ${dispute.admin_note ? `<p class="hint">“${escapeHtml(dispute.admin_note)}”</p>` : ""}</div>`;
+}
+
+let problemDraft = { orderId: null, reason: "", photos: [], adding: 0, sending: false };
+
+function problemDraftFor(orderId) {
+  if (problemDraft.orderId !== orderId) problemDraft = { orderId, reason: "", photos: [], adding: 0, sending: false };
+  return problemDraft;
+}
+
+function screenProblem(orderId) {
+  const order = findOrder(orderId);
+  if (!order) return screenNotFound();
+  const draftP = problemDraftFor(order.id);
+  const styleRef = orderPrimaryStyleRef(order);
+  return `
+    ${cTop("Report a problem", "tracking/" + order.id)}
+    <div class="content">
+      ${flash()}
+      <div class="card attention"><b>How this works</b>
+        <p class="hint">1. Take clear photos of the outfit you received (front, back, and close-ups of what's wrong).</p>
+        <p class="hint">2. Say what's wrong. Your photos and message are posted in the order chat, so ${escapeHtml(designerName(order.designer_id))} can see them and reply.</p>
+        <p class="hint">3. NebedaHub compares them with the style you asked for and decides. The tailor's final payment is on hold until then.</p></div>
+      <h3>What you asked for</h3>
+      ${hasInspiration(order.inspiration) ? inspirationBlock(order.id, order.inspiration) : styleRef ? stylePreviewThumb(styleRef, "Your style") : `<div class="meta">Your style photos and messages are in the order chat.</div>`}
+      <h3>Photos of the outfit you received <small class="muted">(at least 1)</small></h3>
+      <div class="chat-pending-row" id="problem-photos">${problemPhotoStrip()}</div>
+      <label class="button btn-outline ${draftP.photos.length + draftP.adding >= CHAT_MAX_PHOTOS ? "is-full" : ""}">📷 Add photos
+        <input type="file" accept="image/*" multiple hidden onchange="addProblemPhotos(this)"></label>
+      <label class="field">What's wrong?
+        <textarea id="problem-reason" maxlength="900" rows="4" placeholder="For example: the sleeves are shorter than in my style photo, and the colour is different." oninput="problemDraft.reason = this.value">${escapeHtml(draftP.reason)}</textarea></label>
+      <div class="form-error" id="problem-error"></div>
+      <button id="problem-send" class="cta" onclick="sendProblemReport('${order.id}')" ${draftP.sending ? "disabled" : ""}>${draftP.sending ? "Sending…" : "Send to NebedaHub for review"}</button>
+      <button class="btn-outline" onclick="go('tracking/${order.id}')">Cancel</button>
+    </div>`;
+}
+
+function problemPhotoStrip() {
+  const tiles = problemDraft.photos.map((ref, i) => `<span class="chat-pending">
+      <img src="${photoUrl(ref)}" alt="Photo ${i + 1}">
+      <button type="button" onclick="removeProblemPhoto(${i})" aria-label="Remove photo ${i + 1}">×</button></span>`).join("");
+  const loading = Array.from({ length: problemDraft.adding }, () => `<span class="chat-pending is-loading">…</span>`).join("");
+  return tiles + loading;
+}
+
+function redrawProblemPhotos() {
+  const el = document.getElementById("problem-photos");
+  if (el) el.innerHTML = problemPhotoStrip();
+}
+
+function addProblemPhotos(input) {
+  const files = Array.from(input.files || []);
+  input.value = "";
+  const room = CHAT_MAX_PHOTOS - problemDraft.photos.length - problemDraft.adding;
+  if (room <= 0) { toast(`Up to ${CHAT_MAX_PHOTOS} photos.`); return; }
+  if (files.length > room) toast(`Only ${room} more photo${room === 1 ? "" : "s"} added — up to ${CHAT_MAX_PHOTOS}.`);
+  const picked = files.slice(0, room);
+  problemDraft.adding += picked.length;
+  redrawProblemPhotos();
+  picked.reduce((chain, file) => chain.then(() =>
+    resizeImage(file, CHAT_PHOTO_MAX_SIZE, 0.8)
+      .then(url => PhotoStore.put(url, "chat"))
+      .then(ref => { problemDraft.photos.push(ref); })
+      .catch(error => toast(error.message || "Couldn't add that photo."))
+      .finally(() => { problemDraft.adding -= 1; redrawProblemPhotos(); })
+  ), Promise.resolve());
+}
+
+function removeProblemPhoto(index) {
+  problemDraft.photos.splice(index, 1);
+  redrawProblemPhotos();
+}
+
+function sendProblemReport(orderId) {
+  const order = findOrder(orderId);
+  const err = document.getElementById("problem-error");
+  const say = message => { if (err) err.textContent = message; };
+  if (!order || problemDraft.sending) return;
+  const box = document.getElementById("problem-reason");
+  const reason = (box ? box.value : problemDraft.reason).trim();
+  if (problemDraft.adding) return say("One moment — your photos are still being added.");
+  if (!problemDraft.photos.length) return say("Please add at least one photo of the outfit you received.");
+  if (reason.length < 10) return say("Please describe what is wrong with the outfit.");
+  if (!confirm("Send your photos and message to NebedaHub for review? The tailor will also see them in the order chat.")) return;
+  problemDraft.sending = true;
+  const button = document.getElementById("problem-send");
+  if (button) { button.disabled = true; button.textContent = "Sending…"; }
+  Cloud.reportOutfitProblem(order, reason, problemDraft.photos.slice())
+    .then(() => {
+      problemDraft = { orderId: null, reason: "", photos: [], adding: 0, sending: false };
+      flashMessage = "Thank you. NebedaHub is reviewing your report and will decide what happens to the tailor's final payment.";
+      go("tracking/" + order.id);
+    })
+    .catch(error => {
+      problemDraft.sending = false;
+      say(error.message || "Couldn't send your report. Please try again.");
+      if (button) { button.disabled = false; button.textContent = "Send to NebedaHub for review"; }
+    });
 }
 
 // ---- Screen 20: Delivery tracking (step 15) ----
@@ -1688,6 +1814,7 @@ const CUSTOMER_SCREENS = {
   chat: screenChat,
   orders: screenOrders,
   tracking: screenTracking,
+  problem: screenProblem,
   delivery: screenDelivery,
   review: screenReview,
   invoice: screenInvoice,

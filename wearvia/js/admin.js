@@ -335,3 +335,81 @@ async function saveHomepageManager(event) {
   }
   return false;
 }
+
+
+// ---- Problem reports: a customer says the delivered outfit isn't right ----
+// The tailor's final 30% is frozen until an admin compares the customer's
+// photos with the style they ordered, reads the chat, and decides.
+
+function renderOutfitDisputes() {
+  const all = (db.outfit_disputes || []).slice().sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+  const open = all.filter(d => d.status === "open");
+  const done = all.filter(d => d.status !== "open");
+  return `
+    ${bizHeader("Problem reports", "Customers who say their delivered outfit isn't right. The tailor's final 30% is on hold until you decide. Compare the customer's photos with the style they ordered and read both sides in the chat.")}
+    ${open.length ? open.map(disputeReviewCard).join("") : `<div class="card"><p class="empty">No open problem reports. 🎉</p></div>`}
+    ${done.length ? `<div class="card"><h2>Decided</h2>${done.map(d => {
+      const order = findOrder(d.order_id);
+      const cur = order ? orderCurrency(order) : "GBP";
+      return `<div class="hidden-contact-row"><div class="row-between wrap"><b>${escapeHtml(d.order_id)}</b>
+        <span class="muted small-text">${d.status === "withdrawn" ? "Withdrawn by the customer" : escapeHtml(DISPUTE_DECISIONS[d.decision] || d.decision || "")}</span></div>
+        ${d.status === "resolved" ? `<div class="small-text">Tailor ${money(d.tailor_amount || 0, cur)} · refunded ${money(d.refund_amount || 0, cur)}${d.admin_note ? ` · “${escapeHtml(d.admin_note)}”` : ""}</div>` : ""}</div>`;
+    }).join("")}</div>` : ""}`;
+}
+
+function disputeReviewCard(d) {
+  const order = findOrder(d.order_id);
+  if (!order) return "";
+  const cur = orderCurrency(order);
+  const held = (db.test_allocations || []).filter(a => a.real && a.order_id === order.id && a.recipient_type === "tailor"
+    && a.release_stage === "tailor_customer_acceptance" && a.status === "secured").reduce((n, a) => n + (a.amount || 0), 0);
+  const third = Math.round(held / 3 * 100) / 100;
+  const photos = d.evidence_photos.map((ref, i) => `<a href="${photoUrl(ref)}" target="_blank" rel="noopener"><img class="dispatch-photo" src="${photoUrl(ref)}" alt="Customer photo ${i + 1}"></a>`).join("");
+  const styleRef = orderPrimaryStyleRef(order);
+  return `<div class="card attention" id="dispute-${d.id}">
+    <div class="row-between wrap"><h2>${escapeHtml(order.id)} · ${escapeHtml(order.outfit_type || "Outfit")}</h2>
+      <span class="muted small-text">reported ${formatDate(String(d.created_at).slice(0, 10))}</span></div>
+    <div class="small-text">${escapeHtml(customerName(order.customer_id))} (customer) ↔ ${escapeHtml(designerName(order.designer_id))} (tailor) · order ${money(order.quote_total, cur)} · <b>on hold: ${money(held, cur)}</b></div>
+    <h3>What the customer says</h3>
+    <p>“${escapeHtml(d.reason)}”</p>
+    <div class="two-col">
+      <div><h3>What they ordered</h3>
+        ${hasInspiration(order.inspiration) ? inspirationBlock(order.id, order.inspiration) : styleRef ? stylePreviewThumb(styleRef, "Style ordered") : `<p class="hint">No style photo on the order — check the chat below.</p>`}
+        <div class="small-text muted">${escapeHtml([order.colour && colourName(order.colour), order.embroidery && order.embroidery + " embroidery", order.sleeve_style && order.sleeve_style + " sleeve", order.neck_style && order.neck_style + " neck"].filter(Boolean).join(" · "))}</div></div>
+      <div><h3>What they received</h3><div class="chat-photos">${photos}</div></div>
+    </div>
+    <details><summary>Read the whole order chat</summary>${chatLogHtml(order, "team", false)}</details>
+    <h3>Your decision</h3>
+    <form class="form-grid" onsubmit="return resolveDisputeFromAdmin(event, '${d.id}')">
+      <label class="radio-row"><input type="radio" name="decision" value="pay_tailor" required> <span><b>Pay the tailor</b> — the outfit matches what was agreed. Tailor gets ${money(held, cur)}.</span></label>
+      <label class="radio-row"><input type="radio" name="decision" value="split"> <span><b>Split</b> — partly the tailor's fault. Customer refunded ${money(held - third, cur)}, tailor gets ${money(third, cur)}.</span></label>
+      <label class="radio-row"><input type="radio" name="decision" value="refund_customer"> <span><b>Refund the customer</b> — not what was ordered. Customer refunded ${money(held, cur)}.</span></label>
+      <label>Note to both sides (required)<textarea name="note" rows="3" maxlength="900" required placeholder="What you saw and why you decided this."></textarea></label>
+      <div class="form-error" id="dispute-error-${d.id}"></div>
+      <div class="form-actions"><button type="submit" class="gold">Confirm decision</button></div>
+    </form>
+    <p class="hint">Only the held ${money(held, cur)} is decided here. Anything larger (e.g. a full refund) is done in the Stripe dashboard.</p>
+  </div>`;
+}
+
+function resolveDisputeFromAdmin(event, disputeId) {
+  event.preventDefault();
+  const form = event.target;
+  const d = (db.outfit_disputes || []).find(x => x.id === disputeId);
+  const err = document.getElementById("dispute-error-" + disputeId);
+  const decision = (form.querySelector("[name=decision]:checked") || {}).value;
+  const note = form.note.value.trim();
+  if (!d || !decision) return false;
+  if (note.length < 5) { if (err) err.textContent = "Write a short note explaining the decision."; return false; }
+  const label = { pay_tailor: "pay the tailor", split: "split the held payment", refund_customer: "refund the customer" }[decision];
+  if (!confirm(`Confirm: ${label} for ${d.order_id}? Money moves straight away and this can't be undone here.`)) return false;
+  const button = form.querySelector("button[type=submit]");
+  if (button) { button.disabled = true; button.textContent = "Saving…"; }
+  Cloud.resolveOutfitDispute(d, decision, note)
+    .then(() => { toast(`Decision saved for ${d.order_id}.`); renderAll(); })
+    .catch(error => {
+      if (err) err.textContent = error.message || "Couldn't save the decision.";
+      if (button) { button.disabled = false; button.textContent = "Confirm decision"; }
+    });
+  return false;
+}

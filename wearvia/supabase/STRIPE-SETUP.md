@@ -104,7 +104,8 @@ How the money moves (all decided by the database, never by the browser):
 | Fabric seller marks the fabric **dispatched** | Seller is sent **70%** of their share. |
 | Tailor presses **Confirm fabric received & quality accepted** | Seller is sent their final **30%**. |
 | Tailor marks the order delivered, customer presses **I received it and I am happy** | Tailor is sent their final **30%**. |
-| …or customer presses **I have a problem with the outfit** | Of the tailor's held 30%: 20% is refunded to the customer's card, 10% goes to the tailor. |
+| …or customer presses **I have a problem with the outfit** | They must upload photos of the outfit they received (posted in the order chat) and say what's wrong. The tailor's 30% is **frozen** — nothing moves until a NebedaHub admin reviews it. |
+| Admin decides in **NebedaHub Admin → Problem reports** | After comparing the photos with the style ordered and reading the chat: **Pay the tailor** (all 30%), **Split** (customer refunded 20%, tailor 10%), or **Refund the customer** (all 30%). A note explaining the decision is required and both sides see it. |
 
 If a tailor or seller hasn't finished payout setup, their money waits safely
 in NebedaHub's Stripe balance and is sent as soon as they connect (when they
@@ -167,8 +168,10 @@ Use a UK tailor and a UK fabric seller who both show **Payouts connected**.
 5. As the tailor, confirm the fabric quality → the seller's 30%.
 6. As the tailor, move the order to delivered; as the customer, press
    **I received it and I am happy** → the tailor's 30%.
-7. Repeat with **I have a problem** on a second order → a refund appears on
-   the payment in Stripe.
+7. On a second order press **I have a problem**, add a photo and a reason.
+   Check nothing moves in Stripe. Then in **NebedaHub Admin → Problem
+   reports** choose **Split** with a note → a refund appears on the payment
+   in Stripe and a transfer for the tailor's part.
 
 The tailor's order page and the seller's order card show "⏳ … is due and
 waiting to be sent" if a payout couldn't go yet, with the reason.

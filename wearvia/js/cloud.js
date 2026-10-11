@@ -246,7 +246,7 @@ const Cloud = (() => {
   async function load() {
     const tables = ["fabrics", "measurement_profiles", "orders", "fabric_recommendations", "payments",
       "invoices", "deliveries", "fabric_order_lines", "tailors", "wedding_orders", "wedding_order_members",
-      "ready_to_wear_items", "ready_to_wear_sales", "order_messages", "order_chat_reads", "test_payment_allocations", "payment_payouts", "countries", "specialities", "designer_customer_notes",
+      "ready_to_wear_items", "ready_to_wear_sales", "order_messages", "order_chat_reads", "test_payment_allocations", "payment_payouts", "outfit_disputes", "countries", "specialities", "designer_customer_notes",
       "currencies", "exchange_rates", "homepage_settings"];
     const sortBy = { order_chat_reads: "last_read_at", countries: "sort_order", specialities: "sort_order", designer_customer_notes: "updated_at",
       currencies: "sort_order", exchange_rates: "currency_code", homepage_settings: "key" };
@@ -456,6 +456,14 @@ const Cloud = (() => {
         is_test: !!p.is_test, test_reference: p.test_reference || ""
       })).filter(p => p.order_id),
 
+      // Customer problem reports on a delivered outfit, reviewed by the admin
+      outfit_disputes: (r.outfit_disputes || []).filter(d => numberOf.has(d.order_id)).map(d => ({
+        id: d.id, order_id: numberOf.get(d.order_id), order_uuid: d.order_id, reason: d.reason || "",
+        evidence_photos: (d.evidence_photos || []).map(p => `sb:${CHAT}/${p}`), status: d.status, decision: d.decision || null,
+        admin_note: d.admin_note || "", tailor_amount: num(d.tailor_amount), refund_amount: num(d.refund_amount),
+        created_at: iso(d.created_at), resolved_at: iso(d.resolved_at)
+      })),
+
       test_allocations: (r.test_payment_allocations || []).filter(a => numberOf.has(a.order_id)).map(a => ({
         id: a.id, payment_id: a.payment_id, order_id: numberOf.get(a.order_id),
         recipient_type: a.recipient_type, recipient_id: a.recipient_id, amount: num(a.amount),
@@ -602,9 +610,9 @@ const Cloud = (() => {
 
   function sendMessage(order, body, photoRefs) {
     return run(async () => {
-      const { error } = await state.client.from("order_messages").insert({
+      const { data: sent, error } = await state.client.from("order_messages").insert({
         order_id: order._uuid, body, photos: photoRefs.map(ref => photoPath(ref, CHAT)).filter(Boolean)
-      });
+      }).select("id").single();
       if (error) throw new Error(friendly(error));
       photoRefs.forEach(ref => state.localPhotos.delete(ref));
       await refreshChat();
@@ -612,6 +620,7 @@ const Cloud = (() => {
       const side = APP_KIND === "seller" ? "seller" : isTeam() ? "team" : "customer";
       if (!db.chat_reads.some(r => r.order_id === order.id && r.side === side)) db.chat_reads.push({ order_id: order.id, side, last_read_at: "" });
       db.chat_reads.find(r => r.order_id === order.id && r.side === side).last_read_at = new Date().toISOString();
+      return sent ? sent.id : null;
     });
   }
 
@@ -1332,6 +1341,37 @@ const Cloud = (() => {
     return data.url;
   }
 
+  // The customer reports a problem with a delivered outfit. The photos go into the
+  // order chat (so the tailor sees them too), then the report freezes the tailor's
+  // held 30% until a NebedaHub admin reviews it.
+  async function reportOutfitProblem(order, reason, photoRefs) {
+    if (!order || !order._uuid) throw new Error("Order not found.");
+    if (!photoRefs || !photoRefs.length) throw new Error("Please add at least one photo of the outfit you received.");
+    const messageId = await sendMessage(order, "⚠️ Problem with my outfit: " + reason, photoRefs);
+    if (!messageId) throw new Error("Couldn't post your photos. Please try again.");
+    return run(async () => {
+      const { data, error } = await state.client.rpc("wearvia_report_outfit_problem", {
+        p_order_id: order._uuid, p_message_id: messageId, p_reason: reason
+      });
+      if (error) throw new Error(friendly(error));
+      await load();
+      return data;
+    });
+  }
+
+  // The admin's decision on a problem report; any refund/payout is then sent.
+  function resolveOutfitDispute(dispute, decision, note) {
+    return run(async () => {
+      const { data, error } = await state.client.rpc("wearvia_resolve_outfit_dispute", {
+        p_dispute_id: dispute.id, p_decision: decision, p_note: note
+      });
+      if (error) throw new Error(friendly(error));
+      await callFunction("stripe-settle", { order_id: dispute.order_uuid }).catch(e => console.warn("Payout will be retried:", e.message));
+      await load();
+      return data;
+    });
+  }
+
   // Ask the server to send any payouts/refunds that are due. Safe to call any
   // time: it only sends money the database has already released.
   // args: { order_id } or { scope: "mine" }
@@ -1498,7 +1538,7 @@ const Cloud = (() => {
     start, afterSignIn, signIn, signUp, signOut, sendPasswordReset, setNewPassword,
     newId, isTeam, isOwner, homeRoute, becomeCustomer,
     save, flush, refresh, refreshIfStale, placeOrder, deleteOrder,
-    requestQuote, sendQuote, acceptQuote, recommendFabrics, chooseRecommendedFabric, generateStyleVariations, sendMessage, markChatRead, refreshChat, testPayment, confirmFabricQuality, customerOutfitResult, startCheckout, settlePayouts,
+    requestQuote, sendQuote, acceptQuote, recommendFabrics, chooseRecommendedFabric, generateStyleVariations, sendMessage, markChatRead, refreshChat, testPayment, confirmFabricQuality, customerOutfitResult, startCheckout, settlePayouts, reportOutfitProblem, resolveOutfitDispute,
     uploadPhoto, uploadVerificationFile, removePhoto, photoUrl,
     loadTeamLogins, addTeamLogin, removeTeamLogin,
     registerDesigner, acceptTailorTerms, setDeliveryAddress, saveDesignerProfile, saveDesignerVerification,

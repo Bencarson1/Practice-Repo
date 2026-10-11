@@ -34,7 +34,8 @@ const ADMIN_TABS = [
   { key: "sellers", label: "Seller fabrics", render: renderSellerFabrics, badge: () => activeFabrics().filter(f => f.status === "pending").length },
   { key: "fabrics", label: "Fabric inventory", render: renderFabrics },
   { key: "specialities", label: "Specialities", render: renderSpecialities },
-  { key: "contacts", label: "Hidden contact details", render: renderHiddenContacts }
+  { key: "contacts", label: "Hidden contact details", render: renderHiddenContacts },
+  { key: "problems", label: "Problem reports", render: renderOutfitDisputes, badge: () => (db.outfit_disputes || []).filter(d => d.status === "open").length }
 ];
 
 // Screens someone without an account can open in each app

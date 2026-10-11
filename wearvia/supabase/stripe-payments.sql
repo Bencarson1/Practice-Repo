@@ -10,9 +10,12 @@
 --   NebedaHub keeps 10% of each portion (tailor portion, fabric seller portion).
 --   Of what is left (90%):
 --     Tailor        70% released when the customer pays
---                   30% held until the customer confirms the outfit
---                       (if the customer reports a problem: 1/3 of the held
---                        amount goes to the tailor and 2/3 is refunded)
+--                   30% held until the customer confirms the outfit.
+--                       If the customer reports a problem instead, they must
+--                       post photos of the outfit they received in the order
+--                       chat; the 30% stays frozen until a NebedaHub admin
+--                       reviews it and decides (pay the tailor / split /
+--                       refund the held 30%). Nothing is refunded automatically.
 --     Fabric seller 70% released when the seller dispatches the fabric
 --                   30% held until the tailor confirms fabric quality
 --
@@ -268,21 +271,61 @@ begin
   return jsonb_build_object('released', v_released, 'currency', upper(coalesce(v_order.currency_code, 'GBP')));
 end $$;
 
--- The customer confirms the outfit (or reports a problem): the tailor's held 30%
+-- ---- 5b. Problems with the outfit: evidence, then an admin review ----
+
+create table if not exists public.outfit_disputes (
+  id                  uuid primary key default gen_random_uuid(),
+  order_id            uuid not null references public.orders (id) on delete cascade,
+  customer_id         uuid,
+  reason              text not null check (char_length(reason) between 10 and 1000),
+  evidence_message_id uuid references public.order_messages (id) on delete set null,
+  evidence_photos     text[] not null default '{}',     -- paths in the chat-photos bucket
+  status              text not null default 'open' check (status in ('open', 'resolved', 'withdrawn')),
+  decision            text check (decision in ('pay_tailor', 'split', 'refund_customer')),
+  admin_note          text,
+  tailor_amount       numeric(12, 2),
+  refund_amount       numeric(12, 2),
+  created_by          uuid default auth.uid(),
+  created_at          timestamptz not null default now(),
+  resolved_by         uuid,
+  resolved_at         timestamptz
+);
+create unique index if not exists outfit_disputes_one_open on public.outfit_disputes (order_id) where status = 'open';
+
+alter table public.outfit_disputes enable row level security;
+revoke insert, update, delete on public.outfit_disputes from anon, authenticated;
+grant select on public.outfit_disputes to authenticated;
+
+drop policy if exists "outfit_disputes: admin reads" on public.outfit_disputes;
+create policy "outfit_disputes: admin reads" on public.outfit_disputes
+  for select to authenticated using (public.is_admin());
+
+drop policy if exists "outfit_disputes: tailor team reads own orders" on public.outfit_disputes;
+create policy "outfit_disputes: tailor team reads own orders" on public.outfit_disputes
+  for select to authenticated using (
+    exists (select 1 from public.orders o where o.id = outfit_disputes.order_id and public.can_manage_designer(o.designer_id)));
+
+drop policy if exists "outfit_disputes: customer reads own orders" on public.outfit_disputes;
+create policy "outfit_disputes: customer reads own orders" on public.outfit_disputes
+  for select to authenticated using (
+    exists (select 1 from public.orders o join public.customers c on c.id = o.customer_id
+            where o.id = outfit_disputes.order_id and c.auth_user_id = auth.uid()));
+
+-- The customer confirms they're happy: the tailor's held 30% is due.
+-- (A problem goes through wearvia_report_outfit_problem instead.)
 create or replace function public.wearvia_outfit_received(p_order_id uuid, p_happy boolean)
 returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
-  v_order  public.orders%rowtype;
-  v_held   public.payment_payouts%rowtype;
-  v_tailor numeric;
-  v_refund numeric;
-  v_cur    text;
+  v_order public.orders%rowtype;
+  v_held  public.payment_payouts%rowtype;
 begin
+  if not coalesce(p_happy, false) then
+    raise exception 'Please report the problem with photos of the outfit you received, so NebedaHub can review it.';
+  end if;
   select * into v_order from public.orders where id = p_order_id for update;
   if not found then raise exception 'Order not found.'; end if;
-  if not (public.is_admin() or exists (
-      select 1 from public.customers c where c.id = v_order.customer_id and c.auth_user_id = auth.uid())) then
+  if not exists (select 1 from public.customers c where c.id = v_order.customer_id and c.auth_user_id = auth.uid()) then
     raise exception 'Only the customer for this order can confirm it.';
   end if;
   if v_order.stage::text <> 'delivered' then
@@ -292,25 +335,110 @@ begin
    where order_id = p_order_id and recipient_type = 'tailor' and release_stage = 'tailor_customer_acceptance' and status = 'secured'
    limit 1 for update;
   if not found then raise exception 'There is no protected tailor balance waiting on this order.'; end if;
-  v_cur := v_held.currency_code;
 
-  if p_happy then
-    update public.payment_payouts set status = 'released', released_at = now(), updated_at = now() where id = v_held.id;
-    return jsonb_build_object('tailor_release', v_held.amount, 'customer_refund', 0, 'currency', v_cur);
+  -- Happy after all: an open problem report is withdrawn
+  update public.outfit_disputes set status = 'withdrawn', resolved_at = now(), resolved_by = auth.uid()
+   where order_id = p_order_id and status = 'open';
+  update public.payment_payouts set status = 'released', released_at = now(), updated_at = now() where id = v_held.id;
+  return jsonb_build_object('tailor_release', v_held.amount, 'customer_refund', 0, 'currency', v_held.currency_code);
+end $$;
+
+-- The customer reports a problem. They must first post photos of the outfit
+-- they received in the order chat (p_message_id is that message). The tailor's
+-- held 30% stays frozen until an admin decides.
+create or replace function public.wearvia_report_outfit_problem(p_order_id uuid, p_message_id uuid, p_reason text)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_order  public.orders%rowtype;
+  v_photos text[];
+  v_reason text := btrim(coalesce(p_reason, ''));
+  v_id     uuid;
+begin
+  select * into v_order from public.orders where id = p_order_id for update;
+  if not found then raise exception 'Order not found.'; end if;
+  if not exists (select 1 from public.customers c where c.id = v_order.customer_id and c.auth_user_id = auth.uid()) then
+    raise exception 'Only the customer for this order can report a problem.';
+  end if;
+  if v_order.stage::text <> 'delivered' then
+    raise exception 'You can report a problem once the tailor marks the outfit delivered.';
+  end if;
+  if not exists (select 1 from public.payment_payouts
+                  where order_id = p_order_id and recipient_type = 'tailor'
+                    and release_stage = 'tailor_customer_acceptance' and status = 'secured') then
+    raise exception 'The tailor''s final payment has already been settled for this order.';
+  end if;
+  if exists (select 1 from public.outfit_disputes where order_id = p_order_id and status = 'open') then
+    raise exception 'You''ve already reported a problem. NebedaHub is reviewing it.';
+  end if;
+  if char_length(v_reason) < 10 then
+    raise exception 'Please describe what is wrong with the outfit.';
+  end if;
+  -- The evidence: a fresh chat message from this customer, on this order, with photos
+  select m.photos into v_photos from public.order_messages m
+   where m.id = p_message_id and m.order_id = p_order_id and m.sender_id = auth.uid()
+     and cardinality(m.photos) >= 1 and m.created_at > now() - interval '1 hour';
+  if not found then
+    raise exception 'Please add at least one photo of the outfit you received.';
   end if;
 
-  -- Problem reported: 1/3 of the held amount to the tailor, 2/3 refunded
-  v_tailor := round(v_held.amount / 3, 2);
-  v_refund := v_held.amount - v_tailor;
-  update public.payment_payouts set status = 'cancelled', updated_at = now() where id = v_held.id;
-  insert into public.payment_payouts (order_id, payment_id, recipient_type, recipient_id, release_stage, amount, currency_code, status, released_at)
-  select p_order_id, v_held.payment_id, x.rtype, x.rid, x.stage, x.amt, v_cur, 'released', now()
-    from (values
-      ('tailor',   v_order.designer_id, 'tailor_customer_acceptance', v_tailor),
-      ('customer', v_order.customer_id, 'customer_refund',            v_refund)
-    ) as x(rtype, rid, stage, amt)
-   where x.amt > 0;
-  return jsonb_build_object('tailor_release', v_tailor, 'customer_refund', v_refund, 'currency', v_cur);
+  insert into public.outfit_disputes (order_id, customer_id, reason, evidence_message_id, evidence_photos)
+  values (p_order_id, v_order.customer_id, left(v_reason, 1000), p_message_id, v_photos)
+  returning id into v_id;
+  return jsonb_build_object('dispute_id', v_id, 'status', 'open');
+end $$;
+
+-- A NebedaHub admin reviews the photos and chat, then decides what happens
+-- to the tailor's held 30% (only that amount — nothing already paid out):
+--   pay_tailor       the tailor did the work as agreed: they get all of it
+--   split            partly the tailor's fault: 1/3 to the tailor, 2/3 refunded
+--                    (10% / 20% of the tailor's share)
+--   refund_customer  not what was ordered: all of it is refunded
+create or replace function public.wearvia_resolve_outfit_dispute(p_dispute_id uuid, p_decision text, p_note text)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_dispute public.outfit_disputes%rowtype;
+  v_order   public.orders%rowtype;
+  v_held    public.payment_payouts%rowtype;
+  v_tailor  numeric;
+  v_refund  numeric;
+begin
+  if not public.is_admin() then raise exception 'Only a NebedaHub admin can decide a problem report.'; end if;
+  if p_decision not in ('pay_tailor', 'split', 'refund_customer') then raise exception 'Choose a decision.'; end if;
+  if char_length(btrim(coalesce(p_note, ''))) < 5 then
+    raise exception 'Write a short note explaining the decision (both sides will see it).';
+  end if;
+  select * into v_dispute from public.outfit_disputes where id = p_dispute_id for update;
+  if not found or v_dispute.status <> 'open' then raise exception 'This problem report is no longer open.'; end if;
+  select * into v_order from public.orders where id = v_dispute.order_id;
+  select * into v_held from public.payment_payouts
+   where order_id = v_dispute.order_id and recipient_type = 'tailor' and release_stage = 'tailor_customer_acceptance' and status = 'secured'
+   limit 1 for update;
+  if not found then raise exception 'There is no held tailor payment on this order any more.'; end if;
+
+  if p_decision = 'pay_tailor' then
+    v_tailor := v_held.amount; v_refund := 0;
+    update public.payment_payouts set status = 'released', released_at = now(), updated_at = now() where id = v_held.id;
+  else
+    v_tailor := case when p_decision = 'split' then round(v_held.amount / 3, 2) else 0 end;
+    v_refund := v_held.amount - v_tailor;
+    update public.payment_payouts set status = 'cancelled', updated_at = now() where id = v_held.id;
+    insert into public.payment_payouts (order_id, payment_id, recipient_type, recipient_id, release_stage, amount, currency_code, status, released_at)
+    select v_dispute.order_id, v_held.payment_id, x.rtype, x.rid, x.stage, x.amt, v_held.currency_code, 'released', now()
+      from (values
+        ('tailor',   v_order.designer_id, 'tailor_customer_acceptance', v_tailor),
+        ('customer', v_order.customer_id, 'customer_refund',            v_refund)
+      ) as x(rtype, rid, stage, amt)
+     where x.amt > 0;
+  end if;
+
+  update public.outfit_disputes
+     set status = 'resolved', decision = p_decision, admin_note = left(btrim(p_note), 1000),
+         tailor_amount = v_tailor, refund_amount = v_refund, resolved_by = auth.uid(), resolved_at = now()
+   where id = p_dispute_id;
+  return jsonb_build_object('decision', p_decision, 'tailor_release', v_tailor, 'customer_refund', v_refund,
+                            'currency', v_held.currency_code, 'order_id', v_dispute.order_id);
 end $$;
 
 -- ---- 6. For stripe-settle: what is due, and record what was sent ----
@@ -361,6 +489,10 @@ grant execute on function public.wv_stripe_mark_payout(uuid, text, text, text) t
 
 revoke execute on function public.wearvia_release_fabric_balance(uuid) from public, anon;
 revoke execute on function public.wearvia_outfit_received(uuid, boolean) from public, anon;
+revoke execute on function public.wearvia_report_outfit_problem(uuid, uuid, text) from public, anon;
+revoke execute on function public.wearvia_resolve_outfit_dispute(uuid, text, text) from public, anon;
+grant execute on function public.wearvia_report_outfit_problem(uuid, uuid, text) to authenticated;
+grant execute on function public.wearvia_resolve_outfit_dispute(uuid, text, text) to authenticated;
 grant execute on function public.wearvia_release_fabric_balance(uuid) to authenticated;
 grant execute on function public.wearvia_outfit_received(uuid, boolean) to authenticated;
 
