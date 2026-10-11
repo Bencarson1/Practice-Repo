@@ -436,7 +436,9 @@ function sellerOrdersScreen(seller) {
           <div class="row-between"><b>${escapeHtml(o.fabric_name)}</b><span class="badge sstatus-${o.status}">${escapeHtml(statusText)}</span></div>
           <div class="muted small-text">${escapeHtml(o.ref || o.id)} · ordered ${formatDate(o.created_at)}${first ? ` · for ${escapeHtml(first)}'s outfit` : ""}</div>
           <div>${lengthText(o.yards, unit)} × ${money(pricePerUnit(o.price_per_yard, unit), o.currency_code || sellerCurrency(seller))} = <b>${money(o.total, o.currency_code || sellerCurrency(seller))}</b></div>
-          ${sellerTestAlloc.length ? `<div class="notice soft"><b>🧪 TEST payout</b><br>Released: ${money(sellerTestReleased, sellerTestCurrency)} · Protected: ${money(sellerTestSecured, sellerTestCurrency)}<br><small>NebedaHub commission is deducted before these amounts. No real payout has been sent.</small></div>` : ""}
+          ${sellerTestAlloc.length ? (sellerTestAlloc.some(a => a.real)
+            ? `<div class="notice soft"><b>Your payout</b><br>Released: ${money(sellerTestReleased, sellerTestCurrency)} · Protected: ${money(sellerTestSecured, sellerTestCurrency)}<br><small>NebedaHub's 10% is already taken off. 70% is paid when you dispatch; the last 30% when the tailor approves the fabric.</small>${payoutWaitingNote(sellerTestAlloc)}</div>`
+            : `<div class="notice soft"><b>🧪 TEST payout</b><br>Released: ${money(sellerTestReleased, sellerTestCurrency)} · Protected: ${money(sellerTestSecured, sellerTestCurrency)}<br><small>NebedaHub commission is deducted before these amounts. No real payout has been sent.</small></div>`) : ""}
           <div class="small-text"><span class="muted">Send to the tailor:</span> <b>${escapeHtml(sendTo.name || "—")}</b>${sendTo.address ? ` — ${escapeHtml(sendTo.address)}`
             : open ? ` <span class="muted">(their address appears once the customer's deposit is confirmed)</span>` : ""}</div>
           ${o.status === "sent" ? `<div class="small-text">🚚 ${escapeHtml(o.courier || "Courier")} · tracking <b>${escapeHtml(o.tracking_number)}</b>${o.dispatch_note ? ` · ${escapeHtml(o.dispatch_note)}` : ""}</div>
@@ -547,6 +549,8 @@ function sellerDispatch(event, lineId) {
       dispatchOpen = null;
       sellerForm = null;
       toast(`${row.ref || row.id} dispatched. The tailor can see the tracking number.`);
+      // Dispatching releases the seller's 70%: send it once the save has gone through
+      if (row.order_uuid) setTimeout(() => Cloud.settlePayouts({ order_id: row.order_uuid }), 50);
       renderAll();
     })
     .catch(error => {

@@ -256,14 +256,15 @@ function renderOrderDetail(orderId) {
             ${fabricOrderRow.status === "sent" ? `<div class="kv"><span>Tracking</span><b>${escapeHtml(fabricOrderRow.courier || "Courier")} · ${escapeHtml(fabricOrderRow.tracking_number || "—")}</b></div>
               ${fabricOrderRow.dispatch_note ? `<div class="kv"><span>Seller's note</span><b>${escapeHtml(fabricOrderRow.dispatch_note)}</b></div>` : ""}
               ${fabricOrderRow.dispatch_photo ? `<img class="dispatch-photo" src="${photoUrl(fabricOrderRow.dispatch_photo)}" alt="The seller's dispatch photo">` : ""}
-              ${sellerQualityHeld > 0 && typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE ? `<div class="notice soft"><b>Fabric balance protected:</b> ${money(sellerQualityHeld, cur)}<br><small>Release it only after you receive the fabric and are happy with the quality.</small></div><button class="small gold" onclick="confirmFabricQualityFor('${order.id}')">Confirm fabric received &amp; quality accepted</button>` : ""}` : ""}` : ""}
+              ${sellerQualityHeld > 0 && payInFullMode() ? `<div class="notice soft"><b>Fabric balance protected:</b> ${money(sellerQualityHeld, cur)}<br><small>Release it only after you receive the fabric and are happy with the quality.</small></div><button class="small gold" onclick="confirmFabricQualityFor('${order.id}')">Confirm fabric received &amp; quality accepted</button>` : ""}` : ""}` : ""}
           ${order.quoted_at ? `<div class="kv"><span>Quote</span><b>Accepted ${formatDate(order.accepted_at)}</b></div>` : ""}
-          ${testAllocations.length ? `<div class="kv"><span>🧪 Test payment</span><b>Customer paid 100% upfront</b></div>
+          ${testAllocations.length ? `<div class="kv"><span>${testAllocations.some(a => a.real) ? "💳 Payment" : "🧪 Test payment"}</span><b>Customer paid 100% upfront</b></div>
           <div class="kv"><span>NebedaHub commission</span><b>${money(platformTestCommission, cur)}</b></div>
           <div class="kv"><span>Fabric seller released</span><b>${money(sellerTestReleased, cur)}</b></div>
           <div class="kv"><span>Fabric seller protected</span><b>${money(sellerTestSecured, cur)}</b></div>
           <div class="kv"><span>Tailor released</span><b>${money(tailorTestReleased, cur)}</b></div>
-          <div class="kv"><span>Tailor protected</span><b>${money(tailorTestSecured, cur)}</b></div>` : ""}`)}
+          <div class="kv"><span>Tailor protected</span><b>${money(tailorTestSecured, cur)}</b></div>
+          ${payoutWaitingNote(testAllocations.filter(a => a.recipient_type === "tailor"))}` : ""}`)}
         ${measurementsCard(order)}
         <div class="card">${deliveryBoxHtml(order, "team")}</div>
       </div>
@@ -358,10 +359,13 @@ function advanceDeliveryFor(orderId) {
 function confirmFabricQualityFor(orderId) {
   const order = findOrder(orderId);
   if (!order) return;
-  if (!confirm("Confirm that you received the fabric and are happy with its quality? This releases the protected fabric seller balance in TEST mode.")) return;
+  const real = realPaymentsOn();
+  if (!confirm(real ? "Confirm that you received the fabric and are happy with its quality? This pays the fabric seller their final protected 30%."
+                    : "Confirm that you received the fabric and are happy with its quality? This releases the protected fabric seller balance in TEST mode.")) return;
   Cloud.confirmFabricQuality(order)
     .then(result => {
-      toast("TEST mode: " + money(result.released, result.currency) + " fabric seller balance released. No real payout was sent.");
+      toast(real ? money(result.released, result.currency) + " released to the fabric seller."
+                 : "TEST mode: " + money(result.released, result.currency) + " fabric seller balance released. No real payout was sent.");
       renderAll();
     })
     .catch(error => toast(error.message || "Could not release the fabric seller balance."));

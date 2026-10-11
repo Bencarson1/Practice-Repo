@@ -246,7 +246,7 @@ const Cloud = (() => {
   async function load() {
     const tables = ["fabrics", "measurement_profiles", "orders", "fabric_recommendations", "payments",
       "invoices", "deliveries", "fabric_order_lines", "tailors", "wedding_orders", "wedding_order_members",
-      "ready_to_wear_items", "ready_to_wear_sales", "order_messages", "order_chat_reads", "test_payment_allocations", "countries", "specialities", "designer_customer_notes",
+      "ready_to_wear_items", "ready_to_wear_sales", "order_messages", "order_chat_reads", "test_payment_allocations", "payment_payouts", "countries", "specialities", "designer_customer_notes",
       "currencies", "exchange_rates", "homepage_settings"];
     const sortBy = { order_chat_reads: "last_read_at", countries: "sort_order", specialities: "sort_order", designer_customer_notes: "updated_at",
       currencies: "sort_order", exchange_rates: "currency_code", homepage_settings: "key" };
@@ -462,7 +462,18 @@ const Cloud = (() => {
         currency_code: a.currency_code || "GBP", recipient_amount: num(a.recipient_amount),
         recipient_currency_code: a.recipient_currency_code || a.currency_code || "GBP",
         status: a.status || "secured", created_at: iso(a.created_at)
-      })),
+      })).concat((r.payment_payouts || []).filter(a => numberOf.has(a.order_id)).map(a => ({
+        // Real Stripe payouts (supabase/stripe-payments.sql), in the same shape as the
+        // test allocations so every screen shows them the same way. "released" here
+        // means due or already sent; "paid" says Stripe has sent it.
+        id: a.id, payment_id: a.payment_id, order_id: numberOf.get(a.order_id), real: true,
+        recipient_type: a.recipient_type, recipient_id: a.recipient_id, release_stage: a.release_stage,
+        amount: num(a.amount), currency_code: a.currency_code || "GBP",
+        recipient_amount: num(a.amount), recipient_currency_code: a.currency_code || "GBP",
+        status: a.status === "secured" ? "secured" : a.status === "cancelled" ? "cancelled" : "released",
+        paid: a.status === "paid" || a.status === "refunded", last_error: a.last_error || "",
+        created_at: iso(a.created_at)
+      }))),
 
       invoices: r.invoices.filter(i => numberOf.has(i.order_id)).map(i => ({
         id: i.invoice_number || "INV-" + String(numberOf.get(i.order_id)).replace(/^\D+/, ""), order_id: numberOf.get(i.order_id),
@@ -481,7 +492,7 @@ const Cloud = (() => {
         deliver_to: l.deliver_to || "", status: l.status, created_at: day(l.created_at), sent_at: day(l.sent_at), currency_code: l.currency_code || "GBP",
         confirmed_at: day(l.confirmed_at), courier: l.courier || "", tracking_number: l.tracking_number || "",
         dispatch_photo: l.dispatch_photo ? `sb:${SELLER_FILES}/${l.dispatch_photo}` : null, dispatch_note: l.dispatch_note || "",
-        ship_to: l.ship_to || "tailor",
+        ship_to: l.ship_to || "tailor", order_uuid: l.order_id || null,
         // Where to send it: the customer's tailor, whose address comes once the deposit is confirmed
         unlocked: !!(sendTo.get(l.id) || {}).unlocked, send_to_name: (sendTo.get(l.id) || {}).send_to_name || "",
         send_to_address: (sendTo.get(l.id) || {}).send_to_address || ""
@@ -637,6 +648,13 @@ const Cloud = (() => {
   function confirmFabricQuality(order) {
     return run(async () => {
       if (!order || !order._uuid) throw new Error("Order not found.");
+      if (realPaymentsOn()) {
+        const { data, error } = await state.client.rpc("wearvia_release_fabric_balance", { p_order_id: order._uuid });
+        if (error) throw new Error(friendly(error));
+        await callFunction("stripe-settle", { order_id: order._uuid }).catch(e => console.warn("Payout will be retried:", e.message));
+        await load();
+        return data;
+      }
       const { data, error } = await state.client.rpc("wearvia_test_confirm_fabric_quality", { p_order_id: order._uuid });
       if (error) throw new Error(friendly(error));
       await load();
@@ -647,6 +665,13 @@ const Cloud = (() => {
   function customerOutfitResult(order, happy) {
     return run(async () => {
       if (!order || !order._uuid) throw new Error("Order not found.");
+      if (realPaymentsOn()) {
+        const { data, error } = await state.client.rpc("wearvia_outfit_received", { p_order_id: order._uuid, p_happy: !!happy });
+        if (error) throw new Error(friendly(error));
+        await callFunction("stripe-settle", { order_id: order._uuid }).catch(e => console.warn("Payout will be retried:", e.message));
+        await load();
+        return data;
+      }
       const { data, error } = await state.client.rpc("wearvia_test_customer_outfit_result", {
         p_order_id: order._uuid,
         p_happy: !!happy
@@ -1296,6 +1321,26 @@ const Cloud = (() => {
     return data || {};
   }
 
+  // ---- Real payments (Stripe, Stages 2–3) ----
+
+  // Stripe Checkout for the full order amount; returns the page to send the customer to.
+  // The amount comes from the database, not from here.
+  async function startCheckout(order) {
+    if (!order || !order._uuid) throw new Error("Order not found.");
+    const data = await callFunction("stripe-checkout", { order_id: order._uuid });
+    if (!data || !data.url) throw new Error((data && data.error) || "Couldn't open secure payment.");
+    return data.url;
+  }
+
+  // Ask the server to send any payouts/refunds that are due. Safe to call any
+  // time: it only sends money the database has already released.
+  // args: { order_id } or { scope: "mine" }
+  function settlePayouts(args) {
+    if (!state.live || !realPaymentsOn()) return Promise.resolve(null);
+    return run(() => callFunction("stripe-settle", args || { scope: "mine" }))
+      .catch(e => { console.warn("Payouts will be retried:", e.message); return null; });
+  }
+
   // Current payout readiness for the signed-in tailor and/or fabric seller.
   async function payoutStatus() {
     return await callFunction("stripe-connect-status", {});
@@ -1453,7 +1498,7 @@ const Cloud = (() => {
     start, afterSignIn, signIn, signUp, signOut, sendPasswordReset, setNewPassword,
     newId, isTeam, isOwner, homeRoute, becomeCustomer,
     save, flush, refresh, refreshIfStale, placeOrder, deleteOrder,
-    requestQuote, sendQuote, acceptQuote, recommendFabrics, chooseRecommendedFabric, generateStyleVariations, sendMessage, markChatRead, refreshChat, testPayment, confirmFabricQuality, customerOutfitResult,
+    requestQuote, sendQuote, acceptQuote, recommendFabrics, chooseRecommendedFabric, generateStyleVariations, sendMessage, markChatRead, refreshChat, testPayment, confirmFabricQuality, customerOutfitResult, startCheckout, settlePayouts,
     uploadPhoto, uploadVerificationFile, removePhoto, photoUrl,
     loadTeamLogins, addTeamLogin, removeTeamLogin,
     registerDesigner, acceptTailorTerms, setDeliveryAddress, saveDesignerProfile, saveDesignerVerification,

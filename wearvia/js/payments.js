@@ -4,9 +4,23 @@
 // (step 14) is due after quality control.
 // ============================================================
 
+// With real Stripe payments on, app customers pay only through Stripe, so a
+// tailor can't record or confirm their payments by hand (that would unlock the
+// fabric seller's dispatch with no money in). Walk-in shop customers on orders
+// with no fabric seller can still be recorded.
+function manualPaymentAllowed(order) {
+  if (!realPaymentsOn()) return true;
+  if (!order || order.fabric_supplier_id) return false;
+  const customer = findCustomer(order.customer_id);
+  return !!(customer && customer.added_by_designer_id);
+}
+
 // Status of a payment, with Confirm / Reject buttons while it's waiting
 function paymentStatusCell(p) {
   if (p.is_test) return `<span class="badge status-approved">🧪 TEST · Confirmed</span>`;
+  if (p.status === "awaiting_confirmation" && !manualPaymentAllowed(findOrder(p.order_id))) {
+    return `<span class="badge status-pending">Being checked by NebedaHub</span>`;
+  }
   if (p.status === "awaiting_confirmation") {
     return `<span class="badge status-pending">Awaiting confirmation</span>
       <span class="nowrap"><button class="small gold" onclick="confirmPaymentFromList('${p.id}', true)">✓ Confirm</button>
@@ -19,6 +33,7 @@ function confirmPaymentFromList(paymentId, accept) {
   if (Cloud.live && !businessPaymentsOpen()) { alert("Protected payments are not open yet."); return; }
   const p = db.payments.find(x => x.id === paymentId);
   if (!p) return;
+  if (!manualPaymentAllowed(findOrder(p.order_id))) { alert("This customer pays through NebedaHub's secure checkout, so the payment is confirmed automatically."); return; }
   if (!accept && !confirm(`Reject this ${money(p.amount, paymentCurrency(p))} payment for ${p.order_id}? Only do this if the money never arrived.`)) return;
   confirmPayment(paymentId, accept);
   saveData();
@@ -43,7 +58,7 @@ function renderPayments() {
       </div>`;
   }
   // Only orders that still have money owed can take a payment
-  const orderOptions = placedOrders().filter(o => balanceOwed(o) > 0).map(o =>
+  const orderOptions = placedOrders().filter(o => balanceOwed(o) > 0 && manualPaymentAllowed(o)).map(o =>
     `<option value="${o.id}">${o.id} — ${escapeHtml(customerName(o.customer_id))} (owes ${money(balanceOwed(o), orderCurrency(o))})</option>`).join("");
 
   // Owed per currency, never added together
@@ -90,12 +105,12 @@ function renderPayments() {
   }).join("");
 
   return `
-    ${bizHeader("Payments", (typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE) ? "🧪 Customer pays 100% upfront in test mode. No real money moves." : `Deposit (${Math.round(DEPOSIT_RATE * 100)}%) when the order is placed; balance after quality control.`)}
+    ${bizHeader("Payments", (typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE) ? "🧪 Customer pays 100% upfront in test mode. No real money moves." : realPaymentsOn() ? "Customers pay 100% upfront through NebedaHub's secure checkout." : `Deposit (${Math.round(DEPOSIT_RATE * 100)}%) when the order is placed; balance after quality control.`)}
     ${(typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE) ? `<div class="card attention"><h2>🧪 TEST MODE</h2><p class="hint">Customer test payments are 100% upfront. NebedaHub deducts 10% commission from each tailor and fabric seller portion. The remaining net payout follows the 70% release and 30% protected balance rules. No card is charged and no real payout is sent.</p></div>` : ""}
 
     <div class="card ${waiting.length ? "attention" : ""}">
       <h2>Awaiting confirmation <span class="total">${waiting.length}</span></h2>
-      <p class="hint">Checkout is a demo, so no money has moved. Confirm a payment once you've actually received it (for example by bank transfer). Production can't start until the deposit is confirmed.</p>
+      <p class="hint">${realPaymentsOn() ? "Customers who pay in the app are confirmed automatically by Stripe. Only confirm a walk-in customer's payment once you've actually received it." : "Checkout is a demo, so no money has moved. Confirm a payment once you've actually received it (for example by bank transfer). Production can't start until the deposit is confirmed."}</p>
       ${waiting.length ? `<div class="table-wrap"><table>
         <thead><tr><th>Date</th><th>Order</th><th>Customer</th><th>Type</th><th>Method</th><th>Amount</th><th></th></tr></thead>
         <tbody>${waitingRows}</tbody></table></div>` : "<p class='empty'>Nothing waiting.</p>"}
@@ -136,6 +151,7 @@ function recordPayment(event) {
   if (Cloud.live && !businessPaymentsOpen()) { alert("Protected payments are not open yet."); return false; }
   const form = event.target;
   const order = findOrder(form.order.value);
+  if (!manualPaymentAllowed(order)) { alert("This customer pays through NebedaHub's secure checkout."); return false; }
   const amount = Number(form.amount.value);
   const balance = balanceOwed(order);
 
@@ -148,4 +164,14 @@ function recordPayment(event) {
   toast(`${money(amount, orderCurrency(order))} recorded for ${order.id}.`);
   renderAll();
   return false;
+}
+
+// Under a real (Stripe) payout: say when money is due but couldn't be sent yet,
+// usually because the business hasn't finished "Set up payouts".
+function payoutWaitingNote(allocations) {
+  const stuck = (allocations || []).filter(a => a.real && a.status === "released" && !a.paid && a.recipient_type !== "platform");
+  if (!stuck.length) return "";
+  const why = stuck.find(a => a.last_error) ? stuck.find(a => a.last_error).last_error : "";
+  return `<div class="hint owed">⏳ ${money(stuck.reduce((n, a) => n + (a.amount || 0), 0), stuck[0].currency_code)} is due and waiting to be sent${
+    /payouts aren't set up|capabilit|destination/i.test(why) ? " — finish <b>Set up payouts</b> in your profile and it will be sent" : ""}.</div>`;
 }

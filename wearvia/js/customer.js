@@ -32,6 +32,19 @@ let depositMethod = "Card";
 let reviewStars = 5;
 let flashMessage = "";
 
+// Back from Stripe Checkout: nebedahub.com/?checkout=success#/tracking/<order>
+// Returning here is not proof of payment — Stripe's webhook records it, so
+// check again a few times until it shows.
+(function checkoutReturn() {
+  if (APP_KIND !== "customer") return;
+  const result = new URLSearchParams(location.search).get("checkout");
+  if (!result) return;
+  history.replaceState(null, "", location.pathname + location.hash);
+  if (result === "cancelled") { flashMessage = "Payment cancelled — nothing was charged."; return; }
+  flashMessage = "Thank you — your payment went through. It can take a few seconds to show on your order.";
+  [4000, 10000, 20000].forEach(ms => setTimeout(() => { if (Cloud.live) Cloud.refresh().catch(() => {}); }, ms));
+})();
+
 function newDraft() {
   return {
     outfit: "Agbada", colour: "#1e2a44", embroidery: "Gold", sleeve: "Wide", neck: "Round",
@@ -858,7 +871,7 @@ function quoteLinesHtml(order) {
   return `${order.line_items.map(l => `<div class="qline"><span>${escapeHtml(l.label)}</span><span>${money(l.amount, cur)}</span></div>`).join("")}
     <div class="qtotal"><span>Total</span><span>${money(order.quote_total, cur)}${approxMoney(order.quote_total, cur)}</span></div>
     ${exchangeRateHtml(order)}
-    <div class="meta">${typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE ? `Customer pays the full ${money(order.quote_total, cur)} upfront in transaction test mode.` : `Deposit ${money(deposit, cur)} (${Math.round(DEPOSIT_RATE * 100)}%) · balance ${money(order.quote_total - deposit, cur)} after quality control.`}</div>
+    <div class="meta">${typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE ? `Customer pays the full ${money(order.quote_total, cur)} upfront in transaction test mode.` : realPaymentsOn() ? `You pay the full ${money(order.quote_total, cur)} upfront. NebedaHub protects it and pays the tailor and fabric seller step by step.` : `Deposit ${money(deposit, cur)} (${Math.round(DEPOSIT_RATE * 100)}%) · balance ${money(order.quote_total - deposit, cur)} after quality control.`}</div>
     ${approxNote(cur)}`;
 }
 
@@ -991,7 +1004,7 @@ function quoteBlock(order) {
       ${quoteLinesHtml(order)}
       <button id="accept-quote" class="cta" onclick="acceptQuoteFromApp('${order.id}')">Accept quote</button>
       <button class="btn-outline" onclick="go('chat/${order.id}')">Ask a question</button>
-      <div class="meta">${typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE ? "When you accept, you will test-pay the full order amount upfront. No real money moves." : `When you accept, the fabric is bought for your outfit and you pay the ${Math.round(DEPOSIT_RATE * 100)}% deposit.`}</div>
+      <div class="meta">${typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE ? "When you accept, you will test-pay the full order amount upfront. No real money moves." : realPaymentsOn() ? "When you accept, you pay the full amount securely by card. NebedaHub holds it and only pays the tailor and fabric seller as each step is done." : `When you accept, the fabric is bought for your outfit and you pay the ${Math.round(DEPOSIT_RATE * 100)}% deposit.`}</div>
       ${payProtectionLine()}
     </div>`;
   }
@@ -1005,6 +1018,7 @@ function acceptQuoteFromApp(orderId) {
   const testMode = typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE;
   const confirmText = testMode
     ? `Accept the quote of ${money(order.quote_total, orderCurrency(order))}? In transaction test mode you will test-pay the full amount upfront. No real money will move.`
+    : realPaymentsOn() ? `Accept the quote of ${money(order.quote_total, orderCurrency(order))}? Next you'll pay the full amount securely by card.`
     : `Accept the quote of ${money(order.quote_total, orderCurrency(order))}? The fabric is bought for your outfit and you\'ll pay a deposit of ${money(order.deposit_amount, orderCurrency(order))}.`;
   if (!confirm(confirmText)) return;
   acceptingQuote = true;
@@ -1020,7 +1034,7 @@ function acceptQuoteFromApp(orderId) {
     .then(outcome => {
       if (!Cloud.live) saveData();
       if (outcome && outcome.ok) {
-        flashMessage = typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE ? "Quote accepted. Now test-pay the full order amount upfront." : "Quote accepted. Now pay your deposit and we will start making your outfit.";
+        flashMessage = typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE ? "Quote accepted. Now test-pay the full order amount upfront." : realPaymentsOn() ? "Quote accepted. Now pay securely to start your outfit." : "Quote accepted. Now pay your deposit and we will start making your outfit.";
         go("pay/" + orderId);
       } else {
         flashMessage = (outcome && outcome.message) || "That quote can't be accepted any more.";
@@ -1060,6 +1074,14 @@ function screenPay(orderId) {
           <div class="qline"><span>Fabric seller payout</span><span>70% after dispatch · 30% after tailor quality approval</span></div>
           <p class="hint">Commission is calculated separately from each seller's or tailor's portion.</p>
         </div>`
+        : realPaymentsOn()
+          ? `<div class="card">
+          <h3>How NebedaHub protects your money</h3>
+          <p class="hint">You pay the full amount by card through Stripe. NebedaHub holds it and pays out step by step:</p>
+          <div class="qline"><span>Tailor</span><span>70% now · 30% when you confirm your outfit</span></div>
+          <div class="qline"><span>Fabric seller</span><span>70% when the fabric is sent · 30% when your tailor approves it</span></div>
+          <p class="hint">Card details go straight to Stripe — NebedaHub never sees them.</p>
+        </div>`
         : ONLINE_PAYMENTS_ENABLED
           ? `<div class="meta"><b>Payment methods:</b> Secure payment methods will be shown at checkout.</div>`
           : `<div class="card attention"><b>Online payments are not open yet.</b><p class="hint">Do not send money directly to a tailor or fabric seller.</p></div>`}
@@ -1069,7 +1091,7 @@ function screenPay(orderId) {
       <div class="meta">${testMode ? "Test only. No money moves." : ONLINE_PAYMENTS_ENABLED ? "Secure checkout is handled by the approved payment provider." : "Payments are currently disabled while NebedaHub completes payment setup."}</div>
       ${testMode
         ? `<button id="pay-deposit" class="cta" onclick="payDeposit('${order.id}')">🧪 Test Pay ${money(fullAmount, cur)} in Full</button>`
-        : !ONLINE_PAYMENTS_ENABLED ? "" : `<button id="pay-deposit" class="cta" onclick="payDeposit('${order.id}')">Continue to secure payment</button>`}
+        : !ONLINE_PAYMENTS_ENABLED ? "" : `<button id="pay-deposit" class="cta" onclick="payDeposit('${order.id}')">${realPaymentsOn() ? "Pay " + money(fullAmount, cur) + " securely" : "Continue to secure payment"}</button>`}
     </div>`;
 }
 
@@ -1102,6 +1124,19 @@ function payDeposit(orderId) {
     return;
   }
   if (!ONLINE_PAYMENTS_ENABLED) { toast("Online payments are not open yet. Please do not pay outside NebedaHub."); return; }
+  if (realPaymentsOn() && Cloud.live) {
+    const button = document.getElementById("pay-deposit");
+    if (button) { button.disabled = true; button.textContent = "Opening secure payment…"; }
+    const saveAddress = address ? Cloud.setDeliveryAddress(order, address) : Promise.resolve();
+    Promise.resolve(saveAddress)
+      .then(() => Cloud.startCheckout(order))
+      .then(url => { window.location.href = url; })
+      .catch(error => {
+        toast(error.message || "Couldn't open secure payment. Please try again.");
+        if (button) { button.disabled = false; button.textContent = "Pay " + money(order.quote_total, orderCurrency(order)) + " securely"; }
+      });
+    return;
+  }
   toast("Protected checkout will be enabled after the payment provider is connected.");
 }
 
@@ -1128,14 +1163,14 @@ function screenChat(orderId) {
         ${fabric ? `<div class="meta">Fabric: <b>${escapeHtml(fabric.name)}</b> · ${fabricPriceText(fabric, unit)}${isPlaced(order) || status === "quoted" ? ` · ${lengthText(order.fabric_yards, unit)}` : ""}</div>` : ""}
         ${profile ? `<div class="chat-measure">${MEASUREMENT_FIELDS.filter(f => profile[f.key] != null).map(f => `<span>${f.label} <b>${bodyText(profile[f.key], customerBodyUnit(customer))}</b></span>`).join("")}</div>` : ""}
       </details>
-      ${status === "quoted" ? `<div class="chat-quote-bar"><span>Quote: <b>${money(order.quote_total, cur)}</b>${typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE ? " · full payment upfront" : " · deposit " + money(order.deposit_amount, cur)}</span>
+      ${status === "quoted" ? `<div class="chat-quote-bar"><span>Quote: <b>${money(order.quote_total, cur)}</b>${payInFullMode() ? " · full payment upfront" : " · deposit " + money(order.deposit_amount, cur)}</span>
         <button class="optbtn sel" onclick="go('tracking/${order.id}')">View &amp; accept</button></div>` : ""}
       ${isPlaced(order) && !depositStarted(order) ? (
         Cloud.live && !ONLINE_PAYMENTS_ENABLED && !(typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE)
           ? `<div class="chat-quote-bar"><span><b>Quote accepted.</b> Protected payment is not open yet.</span>
               <button class="optbtn sel" onclick="go('tracking/${order.id}')">View order</button></div>`
-          : `<div class="chat-quote-bar"><span><b>Payment due:</b> ${typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE ? money(order.quote_total, cur) + " test payment in full" : money(order.deposit_amount, cur) + " deposit"}</span>
-              <button class="optbtn sel" onclick="go('pay/${order.id}')">${typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE ? "Test payment" : "Pay deposit"}</button></div>`
+          : `<div class="chat-quote-bar"><span><b>Payment due:</b> ${typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE ? money(order.quote_total, cur) + " test payment in full" : realPaymentsOn() ? money(order.quote_total, cur) + " in full" : money(order.deposit_amount, cur) + " deposit"}</span>
+              <button class="optbtn sel" onclick="go('pay/${order.id}')">${typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE ? "Test payment" : realPaymentsOn() ? "Pay now" : "Pay deposit"}</button></div>`
       ) : ""}
       ${chatLogHtml(order, "customer", false)}
     </div>
@@ -1194,10 +1229,10 @@ function screenTracking(orderId) {
   } else if (!depositStarted(order)) {
     action = Cloud.live && !ONLINE_PAYMENTS_ENABLED && !(typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE)
       ? `<div class="card attention"><b>Payment not open yet</b><p class="hint">Your quote is accepted. NebedaHub will notify you when protected in-app payment is enabled. Do not pay the seller outside NebedaHub.</p></div>`
-      : `<button class="cta" onclick="go('pay/${order.id}')">${typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE ? "🧪 Test Pay " + money(order.quote_total, cur) + " in Full" : "Pay " + money(order.deposit_amount, cur) + " Deposit"} →</button>`;
+      : `<button class="cta" onclick="go('pay/${order.id}')">${typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE ? "🧪 Test Pay " + money(order.quote_total, cur) + " in Full" : realPaymentsOn() ? "Pay " + money(order.quote_total, cur) + " in Full" : "Pay " + money(order.deposit_amount, cur) + " Deposit"} →</button>`;
   } else if (order.stage === "delivered" && !order.review_rating) {
     const heldTailor = (db.test_allocations || []).filter(a => a.order_id === order.id && a.recipient_type === "tailor" && a.release_stage === "tailor_customer_acceptance" && a.status === "secured").reduce((n,a) => n + (a.amount || 0), 0);
-    action = heldTailor > 0 && typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE
+    action = heldTailor > 0 && payInFullMode()
       ? `<div class="card attention"><b>Final tailor payment is protected</b><p class="hint">The tailor has confirmed delivery. Please confirm whether you received the outfit and are happy with it.</p></div>
          <button class="cta" onclick="confirmCustomerOutfit('${order.id}', true)">I received it and I am happy</button>
          <button class="btn-outline" onclick="confirmCustomerOutfit('${order.id}', false)">I have a problem with the outfit</button>`
@@ -1273,12 +1308,15 @@ function confirmCustomerOutfit(orderId, happy) {
   const order = findOrder(orderId);
   if (!order) return;
   const message = happy
-    ? "Confirm you received the outfit and are happy? This releases the protected 30% to the tailor in TEST mode."
-    : "Report a problem with the outfit? In TEST mode, the protected 30% is split using the current rule: 20% refund to you and 10% to the tailor.";
+    ? (realPaymentsOn() ? "Confirm you received the outfit and are happy? This pays the tailor their final protected 30%." : "Confirm you received the outfit and are happy? This releases the protected 30% to the tailor in TEST mode.")
+    : (realPaymentsOn() ? "Report a problem with the outfit? The protected 30% is split: 20% is refunded to your card and 10% goes to the tailor." : "Report a problem with the outfit? In TEST mode, the protected 30% is split using the current rule: 20% refund to you and 10% to the tailor.");
   if (!confirm(message)) return;
   Cloud.customerOutfitResult(order, happy)
     .then(result => {
-      flashMessage = happy
+      flashMessage = realPaymentsOn()
+        ? (happy ? "Thank you! The tailor's final payment has been released."
+                 : money(result.customer_refund, result.currency) + " is being refunded to your card (it can take 5–10 days to show). " + money(result.tailor_release, result.currency) + " goes to the tailor.")
+        : happy
         ? "TEST mode: final tailor balance released. No real money moved."
         : "TEST mode: " + money(result.customer_refund, result.currency) + " simulated refund to customer and " + money(result.tailor_release, result.currency) + " released to tailor. No real money moved.";
       renderAll();

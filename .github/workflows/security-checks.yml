@@ -25,13 +25,23 @@ jobs:
             exit 1
           fi
 
-      - name: Keep real online payments off until server payment flow is deployed
+      - name: Real online payments need the server payment flow
         shell: bash
         run: |
           set -euo pipefail
           if grep -Eq 'ONLINE_PAYMENTS_ENABLED[[:space:]]*=[[:space:]]*true' wearvia/js/config.js; then
-            echo "ONLINE_PAYMENTS_ENABLED must stay false until the Stripe server/webhook flow is reviewed."
-            exit 1
+            # Payments may only be switched on with the server-side Stripe flow in place:
+            # amounts from the database, a signature-checked webhook and the payout ledger.
+            for f in wearvia/supabase/stripe-payments.sql \
+                     wearvia/supabase/functions/stripe-checkout/index.ts \
+                     wearvia/supabase/functions/stripe-webhook/index.ts \
+                     wearvia/supabase/functions/stripe-settle/index.ts; do
+              [ -f "$f" ] || { echo "ONLINE_PAYMENTS_ENABLED is true but $f is missing."; exit 1; }
+            done
+            grep -q 'verifySignature' wearvia/supabase/functions/stripe-webhook/index.ts \
+              || { echo "The Stripe webhook must verify signatures."; exit 1; }
+            grep -q 'wv_stripe_checkout_order' wearvia/supabase/functions/stripe-checkout/index.ts \
+              || { echo "Checkout must take the amount from the database."; exit 1; }
           fi
 
       - name: Check public frontend does not reference service role keys

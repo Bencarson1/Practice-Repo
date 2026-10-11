@@ -17,6 +17,7 @@
 
 let payoutStatusCache = null;      // last { tailor:{...}, seller:{...} } from the server
 let payoutStatusLoading = false;
+let payoutsSettledThisVisit = false; // send due payouts at most once per visit
 
 function payoutsOnboardingOn() {
   return typeof PAYOUTS_ONBOARDING_ENABLED !== "undefined" && PAYOUTS_ONBOARDING_ENABLED
@@ -39,7 +40,7 @@ function payoutCardHtml(role) {
       <button class="gold" id="payout-setup-btn" onclick="startPayoutSetup('${role}', this)">Set up / manage payouts</button>
       <button type="button" class="ghost small" onclick="refreshPayoutStatus('${role}')">Refresh status</button>
     </div>
-    <p class="hint">🔒 Your bank details go straight to Stripe — NebedaHub never sees or stores them. Customer payments aren't switched on yet; this only prepares your payouts.</p>
+    <p class="hint">🔒 Your bank details go straight to Stripe — NebedaHub never sees or stores them.${realPaymentsOn() ? "" : " Customer payments aren't switched on yet; this only prepares your payouts."}</p>
   </div>`;
 }
 
@@ -85,6 +86,11 @@ function paintPayoutStatus(role) {
   } else if (s.payouts_enabled && s.details_submitted) {
     box.innerHTML = `<span class="paid">● Payouts connected.</span> You're ready to be paid for your ${sales}.`;
     if (btn) btn.textContent = "Manage payout details";
+    // Anything that became due before payouts were connected is sent now
+    if (!payoutsSettledThisVisit && typeof Cloud.settlePayouts === "function") {
+      payoutsSettledThisVisit = true;
+      Cloud.settlePayouts({ scope: "mine" });
+    }
   } else {
     box.innerHTML = `<span class="owed">● Almost there.</span> Stripe still needs a few details before you can be paid. Press “Finish payout setup”.`;
     if (btn) btn.textContent = "Finish payout setup";

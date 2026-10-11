@@ -10,7 +10,10 @@
 const SUPABASE_URL = "https://ylngxdwywqteanpelsqb.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_79DT7izyjA7R_VsIPlfkTQ_z14fm6Kr";
 
-// Payments are intentionally disabled until NebedaHub finishes its payment-provider setup.
+// Real customer payments through Stripe (Stages 2–3, see supabase/STRIPE-SETUP.md).
+// To switch them on: set ONLINE_PAYMENTS_ENABLED = true AND TRANSACTION_TEST_MODE = false
+// below — only after stripe-payments.sql is run and the Stripe functions + webhook
+// are set up. With a sk_test_ key in Supabase, Stripe takes test cards only.
 const ONLINE_PAYMENTS_ENABLED = false;
 
 // Payout onboarding (Stage 1): lets tailors and fabric sellers connect their
@@ -26,3 +29,11 @@ const TRANSACTION_TEST_MODE = true;
 const NEBEDAHUB_COMMISSION_RATE = 0.10;
 const PAYOUT_INITIAL_RATE = 0.70;
 const PAYOUT_HELD_RATE = 0.30;
+
+// Which payment mode the app is in (used by the customer, tailor and seller screens):
+//   test mode  → the safe simulation, no money moves
+//   real mode  → Stripe Checkout, transfers and refunds
+// Both take the full amount upfront and protect the final 30%.
+function paymentsTestMode() { return typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE; }
+function realPaymentsOn() { return typeof ONLINE_PAYMENTS_ENABLED !== "undefined" && ONLINE_PAYMENTS_ENABLED && !paymentsTestMode(); }
+function payInFullMode() { return paymentsTestMode() || realPaymentsOn(); }
