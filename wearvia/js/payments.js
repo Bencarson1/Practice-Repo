@@ -166,12 +166,16 @@ function recordPayment(event) {
   return false;
 }
 
-// Under a real (Stripe) payout: say when money is due but couldn't be sent yet,
+// Under a real (Stripe or Paystack) payout: say when money is due but couldn't be sent yet,
 // usually because the business hasn't finished "Set up payouts".
 function payoutWaitingNote(allocations) {
-  const stuck = (allocations || []).filter(a => a.real && a.status === "released" && !a.paid && a.recipient_type !== "platform");
-  if (!stuck.length) return "";
+  const all = (allocations || []).filter(a => a.real && a.status === "released" && !a.paid && a.recipient_type !== "platform");
+  const stuck = all.filter(a => !a.sending);
+  const sending = all.filter(a => a.sending);
+  if (!stuck.length) {
+    return sending.length ? `<div class="hint">🏦 ${money(sending.reduce((n, a) => n + (a.amount || 0), 0), sending[0].currency_code)} is on its way to the bank.</div>` : "";
+  }
   const why = stuck.find(a => a.last_error) ? stuck.find(a => a.last_error).last_error : "";
   return `<div class="hint owed">⏳ ${money(stuck.reduce((n, a) => n + (a.amount || 0), 0), stuck[0].currency_code)} is due and waiting to be sent${
-    /payouts aren't set up|capabilit|destination/i.test(why) ? " — finish <b>Set up payouts</b> in your profile and it will be sent" : ""}.</div>`;
+    /payouts aren't set up|capabilit|destination|bank account/i.test(why) ? " — finish <b>Set up payouts</b> in your profile and it will be sent" : ""}.</div>`;
 }

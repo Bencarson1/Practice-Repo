@@ -32,14 +32,19 @@ let depositMethod = "Card";
 let reviewStars = 5;
 let flashMessage = "";
 
-// Back from Stripe Checkout: nebedahub.com/?checkout=success#/tracking/<order>
-// Returning here is not proof of payment — Stripe's webhook records it, so
-// check again a few times until it shows.
+// Back from checkout:
+//   Stripe   nebedahub.com/?checkout=success#/tracking/<order>
+//   Paystack nebedahub.com/?checkout=success&order=<order>&trxref=…&reference=…
+// Returning here is not proof of payment — the provider's webhook records it,
+// so check again a few times until it shows.
 (function checkoutReturn() {
   if (APP_KIND !== "customer") return;
-  const result = new URLSearchParams(location.search).get("checkout");
+  const params = new URLSearchParams(location.search);
+  const result = params.get("checkout");
   if (!result) return;
-  history.replaceState(null, "", location.pathname + location.hash);
+  const orderRef = (params.get("order") || "").split("?")[0].replace(/[^A-Za-z0-9_-]/g, "");
+  const hash = orderRef ? `#/${result === "cancelled" ? "pay" : "tracking"}/${orderRef}` : location.hash;
+  history.replaceState(null, "", location.pathname + hash);
   if (result === "cancelled") { flashMessage = "Payment cancelled — nothing was charged."; return; }
   flashMessage = "Thank you — your payment went through. It can take a few seconds to show on your order.";
   [4000, 10000, 20000].forEach(ms => setTimeout(() => { if (Cloud.live) Cloud.refresh().catch(() => {}); }, ms));
@@ -1077,10 +1082,10 @@ function screenPay(orderId) {
         : realPaymentsOn()
           ? `<div class="card">
           <h3>How NebedaHub protects your money</h3>
-          <p class="hint">You pay the full amount by card through Stripe. NebedaHub holds it and pays out step by step:</p>
+          <p class="hint">You pay the full amount by card through ${paymentProviderName(cur)}. NebedaHub holds it and pays out step by step:</p>
           <div class="qline"><span>Tailor</span><span>70% now · 30% when you confirm your outfit</span></div>
           <div class="qline"><span>Fabric seller</span><span>70% when the fabric is sent · 30% when your tailor approves it</span></div>
-          <p class="hint">Card details go straight to Stripe — NebedaHub never sees them.</p>
+          <p class="hint">Card details go straight to ${paymentProviderName(cur)} — NebedaHub never sees them.${paymentProviderFor(cur) === "paystack" ? " Cards from any country are accepted; your bank converts the naira amount." : ""}</p>
         </div>`
         : ONLINE_PAYMENTS_ENABLED
           ? `<div class="meta"><b>Payment methods:</b> Secure payment methods will be shown at checkout.</div>`

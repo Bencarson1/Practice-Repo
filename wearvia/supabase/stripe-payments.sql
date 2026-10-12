@@ -31,14 +31,15 @@
 alter table public.payments
   add column if not exists stripe_payment_intent_id   text,
   add column if not exists stripe_charge_id           text,
-  add column if not exists stripe_checkout_session_id text;
+  add column if not exists stripe_checkout_session_id text,
+  add column if not exists provider                   text;   -- 'stripe' / 'paystack' for online card payments
 
 create unique index if not exists payments_stripe_pi_key
   on public.payments (stripe_payment_intent_id) where stripe_payment_intent_id is not null;
 
 -- Only the server (service role) writes the Stripe ids
-revoke insert (stripe_payment_intent_id, stripe_charge_id, stripe_checkout_session_id) on public.payments from anon, authenticated;
-revoke update (stripe_payment_intent_id, stripe_charge_id, stripe_checkout_session_id) on public.payments from anon, authenticated;
+revoke insert (stripe_payment_intent_id, stripe_charge_id, stripe_checkout_session_id, provider) on public.payments from anon, authenticated;
+revoke update (stripe_payment_intent_id, stripe_charge_id, stripe_checkout_session_id, provider) on public.payments from anon, authenticated;
 
 -- ---- 2. The payout ledger: one row per slice of a customer's payment ----
 create table if not exists public.payment_payouts (
@@ -130,16 +131,15 @@ begin
     'currency', upper(coalesce(v_order.currency_code, 'GBP')));
 end $$;
 
--- ---- 4. The webhook records a paid checkout and splits the money ----
-create or replace function public.wv_stripe_record_payment(
-  p_order_id uuid, p_amount numeric, p_currency text,
-  p_payment_intent text, p_charge text, p_session text)
+-- ---- 4. A confirmed card payment is split (shared by Stripe and Paystack) ----
+-- Called right after the payment row is inserted. Only splits a payment that
+-- exactly matches the accepted quote, and only once per order.
+create or replace function public.wv_split_payment(
+  p_order_id uuid, p_pay_id uuid, p_amount numeric, p_currency text, p_provider text)
 returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
   v_order       public.orders%rowtype;
-  v_existing    uuid;
-  v_pay_id      uuid := gen_random_uuid();
   v_total       numeric;
   v_cur         text;
   v_seller_id   uuid;
@@ -152,39 +152,21 @@ declare
   c_commission  constant numeric := 0.10;
   c_first       constant numeric := 0.70;
 begin
-  -- Stripe can send the same event twice: record it once
-  select id into v_existing from public.payments where stripe_payment_intent_id = p_payment_intent;
-  if found then return jsonb_build_object('ok', true, 'duplicate', true, 'payment_id', v_existing); end if;
-
   select * into v_order from public.orders where id = p_order_id for update;
   if not found then raise exception 'Order % not found', p_order_id; end if;
   v_total := round(coalesce(v_order.quote_total, 0), 2);
   v_cur   := upper(coalesce(v_order.currency_code, 'GBP'));
 
-  -- Record the payment (kind 'Full payment' if the database allows it, else 'Deposit')
-  begin
-    insert into public.payments (id, order_id, amount, method, kind, status, paid_on, note,
-                                 stripe_payment_intent_id, stripe_charge_id, stripe_checkout_session_id)
-    values (v_pay_id, p_order_id, round(p_amount, 2), 'Card', 'Full payment', 'awaiting_confirmation', current_date,
-            'Paid online with Stripe', p_payment_intent, p_charge, p_session);
-  exception when check_violation then
-    insert into public.payments (id, order_id, amount, method, kind, status, paid_on, note,
-                                 stripe_payment_intent_id, stripe_charge_id, stripe_checkout_session_id)
-    values (v_pay_id, p_order_id, round(p_amount, 2), 'Card', 'Deposit', 'awaiting_confirmation', current_date,
-            'Paid online with Stripe (full payment)', p_payment_intent, p_charge, p_session);
-  end;
-
-  -- Safety: only split a payment that exactly matches the accepted quote,
-  -- and only once per order. Anything else waits for the admin in Stripe.
+  -- Safety: anything that doesn't match waits for the admin in the provider's dashboard
   if abs(round(p_amount, 2) - v_total) >= 0.01 or upper(p_currency) <> v_cur
      or exists (select 1 from public.payment_payouts where order_id = p_order_id and status <> 'cancelled') then
-    update public.payments set note = 'Stripe payment did not match the quote — check it in Stripe before confirming.'
-     where id = v_pay_id;
-    return jsonb_build_object('ok', false, 'payment_id', v_pay_id, 'reason', 'amount_mismatch_or_already_split');
+    update public.payments set note = p_provider || ' payment did not match the quote — check it in ' || p_provider || ' before confirming.'
+     where id = p_pay_id;
+    return jsonb_build_object('ok', false, 'payment_id', p_pay_id, 'reason', 'amount_mismatch_or_already_split');
   end if;
 
   -- Confirming the payment marks the order paid (the payments trigger does that)
-  update public.payments set status = 'confirmed' where id = v_pay_id;
+  update public.payments set status = 'confirmed' where id = p_pay_id;
 
   -- Who supplies the fabric, and has it already been sent?
   v_seller_id := v_order.fabric_supplier_id;
@@ -210,7 +192,7 @@ begin
   v_t_held  := v_t_net - v_t_first;
 
   insert into public.payment_payouts (order_id, payment_id, recipient_type, recipient_id, release_stage, amount, currency_code, status, released_at)
-  select p_order_id, v_pay_id, x.rtype, x.rid, x.stage, x.amt, v_cur, x.st, case when x.st in ('released', 'kept') then now() end
+  select p_order_id, p_pay_id, x.rtype, x.rid, x.stage, x.amt, v_cur, x.st, case when x.st in ('released', 'kept') then now() end
     from (values
       ('platform', null::uuid,          'commission',                 v_s_comm + v_t_comm, 'kept'),
       ('tailor',   v_order.designer_id, 'on_payment',                 v_t_first,           'released'),
@@ -221,10 +203,43 @@ begin
    where x.amt > 0 and (x.rtype = 'platform' or x.rid is not null);
 
   return jsonb_build_object(
-    'ok', true, 'payment_id', v_pay_id, 'currency', v_cur, 'amount', v_total,
+    'ok', true, 'payment_id', p_pay_id, 'currency', v_cur, 'amount', v_total,
     'platform_commission', v_s_comm + v_t_comm,
     'tailor_initial', v_t_first, 'tailor_held', v_t_held,
     'seller_on_dispatch', v_s_first, 'seller_held', v_s_held);
+end $$;
+
+-- ---- 4b. The Stripe webhook records a paid checkout ----
+create or replace function public.wv_stripe_record_payment(
+  p_order_id uuid, p_amount numeric, p_currency text,
+  p_payment_intent text, p_charge text, p_session text)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_existing    uuid;
+  v_pay_id      uuid := gen_random_uuid();
+begin
+  -- Stripe can send the same event twice: record it once
+  select id into v_existing from public.payments where stripe_payment_intent_id = p_payment_intent;
+  if found then return jsonb_build_object('ok', true, 'duplicate', true, 'payment_id', v_existing); end if;
+
+  perform 1 from public.orders where id = p_order_id for update;
+  if not found then raise exception 'Order % not found', p_order_id; end if;
+
+  -- Record the payment (kind 'Full payment' if the database allows it, else 'Deposit')
+  begin
+    insert into public.payments (id, order_id, amount, method, kind, status, paid_on, note, provider,
+                                 stripe_payment_intent_id, stripe_charge_id, stripe_checkout_session_id)
+    values (v_pay_id, p_order_id, round(p_amount, 2), 'Card', 'Full payment', 'awaiting_confirmation', current_date,
+            'Paid online with Stripe', 'stripe', p_payment_intent, p_charge, p_session);
+  exception when check_violation then
+    insert into public.payments (id, order_id, amount, method, kind, status, paid_on, note, provider,
+                                 stripe_payment_intent_id, stripe_charge_id, stripe_checkout_session_id)
+    values (v_pay_id, p_order_id, round(p_amount, 2), 'Card', 'Deposit', 'awaiting_confirmation', current_date,
+            'Paid online with Stripe (full payment)', 'stripe', p_payment_intent, p_charge, p_session);
+  end;
+
+  return public.wv_split_payment(p_order_id, v_pay_id, p_amount, p_currency, 'Stripe');
 end $$;
 
 -- ---- 5. Stage 3 releases ----
@@ -456,6 +471,7 @@ language sql stable security definer set search_path = public as $$
     left join public.suppliers s on pp.recipient_type = 'seller' and s.id = pp.recipient_id
    where pp.status = 'released' and pp.amount > 0
      and pp.recipient_type in ('tailor', 'seller', 'customer')
+     and coalesce(p.provider, 'stripe') = 'stripe'          -- Paystack payments are paid out by paystack-settle
      and (p_order_id is null or pp.order_id = p_order_id)
      and (p_owner is null or d.owner_user_id = p_owner or s.owner_user_id = p_owner)
    order by pp.created_at
@@ -478,11 +494,13 @@ $$;
 
 -- ---- 7. Who may call what ----
 revoke execute on function public.wv_stripe_checkout_order(uuid, uuid) from public, anon, authenticated;
+revoke execute on function public.wv_split_payment(uuid, uuid, numeric, text, text) from public, anon, authenticated;
 revoke execute on function public.wv_stripe_record_payment(uuid, numeric, text, text, text, text) from public, anon, authenticated;
 revoke execute on function public.wv_stripe_due_payouts(uuid, uuid) from public, anon, authenticated;
 revoke execute on function public.wv_stripe_mark_payout(uuid, text, text, text) from public, anon, authenticated;
 revoke execute on function public.wv_payouts_on_fabric_sent() from public, anon, authenticated;
 grant execute on function public.wv_stripe_checkout_order(uuid, uuid) to service_role;
+grant execute on function public.wv_split_payment(uuid, uuid, numeric, text, text) to service_role;
 grant execute on function public.wv_stripe_record_payment(uuid, numeric, text, text, text, text) to service_role;
 grant execute on function public.wv_stripe_due_payouts(uuid, uuid) to service_role;
 grant execute on function public.wv_stripe_mark_payout(uuid, text, text, text) to service_role;

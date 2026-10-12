@@ -479,7 +479,7 @@ const Cloud = (() => {
         amount: num(a.amount), currency_code: a.currency_code || "GBP",
         recipient_amount: num(a.amount), recipient_currency_code: a.currency_code || "GBP",
         status: a.status === "secured" ? "secured" : a.status === "cancelled" ? "cancelled" : "released",
-        paid: a.status === "paid" || a.status === "refunded", last_error: a.last_error || "",
+        paid: a.status === "paid" || a.status === "refunded", sending: a.status === "sending", last_error: a.last_error || "",
         created_at: iso(a.created_at)
       }))),
 
@@ -660,7 +660,7 @@ const Cloud = (() => {
       if (realPaymentsOn()) {
         const { data, error } = await state.client.rpc("wearvia_release_fabric_balance", { p_order_id: order._uuid });
         if (error) throw new Error(friendly(error));
-        await callFunction("stripe-settle", { order_id: order._uuid }).catch(e => console.warn("Payout will be retried:", e.message));
+        await settleOrder(order._uuid);
         await load();
         return data;
       }
@@ -677,7 +677,7 @@ const Cloud = (() => {
       if (realPaymentsOn()) {
         const { data, error } = await state.client.rpc("wearvia_outfit_received", { p_order_id: order._uuid, p_happy: !!happy });
         if (error) throw new Error(friendly(error));
-        await callFunction("stripe-settle", { order_id: order._uuid }).catch(e => console.warn("Payout will be retried:", e.message));
+        await settleOrder(order._uuid);
         await load();
         return data;
       }
@@ -1334,9 +1334,11 @@ const Cloud = (() => {
 
   // Stripe Checkout for the full order amount; returns the page to send the customer to.
   // The amount comes from the database, not from here.
+  // Naira orders (Nigerian tailors) pay through Paystack, the rest through Stripe.
   async function startCheckout(order) {
     if (!order || !order._uuid) throw new Error("Order not found.");
-    const data = await callFunction("stripe-checkout", { order_id: order._uuid });
+    const fn = paymentProviderFor(order.currency_code) === "paystack" ? "paystack-checkout" : "stripe-checkout";
+    const data = await callFunction(fn, { order_id: order._uuid });
     if (!data || !data.url) throw new Error((data && data.error) || "Couldn't open secure payment.");
     return data.url;
   }
@@ -1366,7 +1368,7 @@ const Cloud = (() => {
         p_dispute_id: dispute.id, p_decision: decision, p_note: note
       });
       if (error) throw new Error(friendly(error));
-      await callFunction("stripe-settle", { order_id: dispute.order_uuid }).catch(e => console.warn("Payout will be retried:", e.message));
+      await settleOrder(dispute.order_uuid);
       await load();
       return data;
     });
@@ -1375,10 +1377,28 @@ const Cloud = (() => {
   // Ask the server to send any payouts/refunds that are due. Safe to call any
   // time: it only sends money the database has already released.
   // args: { order_id } or { scope: "mine" }
+  // Both payment companies are asked: each only sends the payouts of its own payments.
   function settlePayouts(args) {
     if (!state.live || !realPaymentsOn()) return Promise.resolve(null);
-    return run(() => callFunction("stripe-settle", args || { scope: "mine" }))
-      .catch(e => { console.warn("Payouts will be retried:", e.message); return null; });
+    return run(() => settleBoth(args || { scope: "mine" }));
+  }
+  function settleBoth(args) {
+    return Promise.all(["stripe-settle", "paystack-settle"].map(fn =>
+      callFunction(fn, args).catch(e => { console.warn(`Payouts will be retried (${fn}):`, e.message); return null; })));
+  }
+  function settleOrder(orderUuid) {
+    return orderUuid ? settleBoth({ order_id: orderUuid }) : Promise.resolve(null);
+  }
+
+  // Nigerian bank payouts (Paystack): the signed-in owner's set-up, the bank
+  // list, checking an account number, and saving it.
+  async function paystackStatus() {
+    const { data, error } = await state.client.rpc("wv_my_paystack_status");
+    if (error) throw new Error(friendly(error));
+    return data || {};
+  }
+  function paystackBank(action, details) {
+    return callFunction("paystack-bank", Object.assign({ action }, details || {}));
   }
 
   // Current payout readiness for the signed-in tailor and/or fabric seller.
@@ -1538,7 +1558,7 @@ const Cloud = (() => {
     start, afterSignIn, signIn, signUp, signOut, sendPasswordReset, setNewPassword,
     newId, isTeam, isOwner, homeRoute, becomeCustomer,
     save, flush, refresh, refreshIfStale, placeOrder, deleteOrder,
-    requestQuote, sendQuote, acceptQuote, recommendFabrics, chooseRecommendedFabric, generateStyleVariations, sendMessage, markChatRead, refreshChat, testPayment, confirmFabricQuality, customerOutfitResult, startCheckout, settlePayouts, reportOutfitProblem, resolveOutfitDispute,
+    requestQuote, sendQuote, acceptQuote, recommendFabrics, chooseRecommendedFabric, generateStyleVariations, sendMessage, markChatRead, refreshChat, testPayment, confirmFabricQuality, customerOutfitResult, startCheckout, settlePayouts, reportOutfitProblem, resolveOutfitDispute, paystackStatus, paystackBank,
     uploadPhoto, uploadVerificationFile, removePhoto, photoUrl,
     loadTeamLogins, addTeamLogin, removeTeamLogin,
     registerDesigner, acceptTailorTerms, setDeliveryAddress, saveDesignerProfile, saveDesignerVerification,

@@ -10,11 +10,19 @@
 const SUPABASE_URL = "https://ylngxdwywqteanpelsqb.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_79DT7izyjA7R_VsIPlfkTQ_z14fm6Kr";
 
-// Real customer payments through Stripe (Stages 2–3, see supabase/STRIPE-SETUP.md).
+// Real customer payments through Stripe and, for naira orders, Paystack
+// (see supabase/STRIPE-SETUP.md and supabase/PAYSTACK-SETUP.md).
 // To switch them on: set ONLINE_PAYMENTS_ENABLED = true AND TRANSACTION_TEST_MODE = false
 // below — only after stripe-payments.sql is run and the Stripe functions + webhook
-// are set up. With a sk_test_ key in Supabase, Stripe takes test cards only.
+// are set up (and paystack-payments.sql + the Paystack functions for naira orders).
+// With sk_test_ keys in Supabase, only test cards work.
 const ONLINE_PAYMENTS_ENABLED = false;
+
+// Which payment company handles an order, by the order's currency (the tailor's).
+// Naira orders (Nigerian tailors) go through Paystack: it takes international
+// cards and pays tailors and sellers into Nigerian banks. Everything else goes
+// through Stripe. See supabase/PAYSTACK-SETUP.md.
+const PAYSTACK_CURRENCIES = ["NGN"];
 
 // Payout onboarding (Stage 1): lets tailors and fabric sellers connect their
 // bank through Stripe. Turn on ONLY after the Stripe Edge Functions are
@@ -37,3 +45,7 @@ const PAYOUT_HELD_RATE = 0.30;
 function paymentsTestMode() { return typeof TRANSACTION_TEST_MODE !== "undefined" && TRANSACTION_TEST_MODE; }
 function realPaymentsOn() { return typeof ONLINE_PAYMENTS_ENABLED !== "undefined" && ONLINE_PAYMENTS_ENABLED && !paymentsTestMode(); }
 function payInFullMode() { return paymentsTestMode() || realPaymentsOn(); }
+function paymentProviderFor(currency) {
+  return PAYSTACK_CURRENCIES.includes(String(currency || "").toUpperCase()) ? "paystack" : "stripe";
+}
+function paymentProviderName(currency) { return paymentProviderFor(currency) === "paystack" ? "Paystack" : "Stripe"; }

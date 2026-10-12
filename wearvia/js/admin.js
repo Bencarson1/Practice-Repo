@@ -388,7 +388,7 @@ function disputeReviewCard(d) {
       <div class="form-error" id="dispute-error-${d.id}"></div>
       <div class="form-actions"><button type="submit" class="gold">Confirm decision</button></div>
     </form>
-    <p class="hint">Only the held ${money(held, cur)} is decided here. Anything larger (e.g. a full refund) is done in the Stripe dashboard.</p>
+    <p class="hint">Only the held ${money(held, cur)} is decided here. Anything larger (e.g. a full refund) is done in the ${paymentProviderName(cur)} dashboard.</p>
   </div>`;
 }
 

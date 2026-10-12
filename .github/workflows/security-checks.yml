@@ -42,6 +42,20 @@ jobs:
               || { echo "The Stripe webhook must verify signatures."; exit 1; }
             grep -q 'wv_stripe_checkout_order' wearvia/supabase/functions/stripe-checkout/index.ts \
               || { echo "Checkout must take the amount from the database."; exit 1; }
+            # The Paystack (naira) rail follows the same rules
+            for f in wearvia/supabase/paystack-payments.sql \
+                     wearvia/supabase/functions/paystack-checkout/index.ts \
+                     wearvia/supabase/functions/paystack-webhook/index.ts \
+                     wearvia/supabase/functions/paystack-settle/index.ts \
+                     wearvia/supabase/functions/paystack-bank/index.ts; do
+              [ -f "$f" ] || { echo "ONLINE_PAYMENTS_ENABLED is true but $f is missing."; exit 1; }
+            done
+            grep -q 'x-paystack-signature' wearvia/supabase/functions/paystack-webhook/index.ts \
+              || { echo "The Paystack webhook must verify signatures."; exit 1; }
+            grep -q 'transaction/verify' wearvia/supabase/functions/paystack-webhook/index.ts \
+              || { echo "The Paystack webhook must re-check each charge with Paystack."; exit 1; }
+            grep -q 'wv_stripe_checkout_order' wearvia/supabase/functions/paystack-checkout/index.ts \
+              || { echo "Paystack checkout must take the amount from the database."; exit 1; }
           fi
 
       - name: Check public frontend does not reference service role keys

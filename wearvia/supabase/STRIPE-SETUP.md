@@ -22,10 +22,10 @@ Stripe Connect can only pay out to businesses in **countries Stripe supports**.
 The **UK is fully supported**. **Nigeria and Ghana are NOT currently supported
 by Stripe for receiving payouts.**
 
-So Stage 1 works today for **UK** tailors and sellers. Tailors/sellers in
-Nigeria or Ghana will need a **different payout provider** (such as Paystack or
-Flutterwave), which is separate work we can add later. Nothing here breaks for
-them — they just won't be able to finish Stripe onboarding until then.
+So Stripe is used for **UK / Europe / US** tailors and sellers. **Nigerian**
+tailors and sellers (orders priced in naira) are paid through **Paystack**
+instead — see `PAYSTACK-SETUP.md`. The app picks the right one by the order's
+currency. Ghana is not set up yet.
 
 ---
 
