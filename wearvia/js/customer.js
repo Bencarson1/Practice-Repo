@@ -165,9 +165,9 @@ function screenHome() {
 
   const home = db.homepage || {};
   const categoryPhotos = {
-    Agbada: home.category_agbada || "https://images.unsplash.com/photo-1782566208081-6b5135fddf23?auto=format&fit=crop&w=700&q=82",
-    Kaftan: home.category_kaftan || "https://images.unsplash.com/photo-1776880470534-2e19345ab02b?auto=format&fit=crop&w=700&q=82",
-    Senator: home.category_senator || "https://images.unsplash.com/photo-1775754787083-238dd19e1545?auto=format&fit=crop&w=700&q=82",
+    Agbada: home.category_agbada || "assets/category-agbada.jpg",
+    Kaftan: home.category_kaftan || "assets/category-kaftan.jpg",
+    Senator: home.category_senator || "assets/category-senator.jpg",
     Bubu: home.category_bubu || "https://images.unsplash.com/photo-1663044022557-7d5d4c1d5318?auto=format&fit=crop&w=700&q=82",
     "Two Piece": home.category_two_piece || "assets/category-two-piece.jpg",
     Dress: home.category_dress || "https://images.unsplash.com/photo-1648328414427-fc902f51808c?auto=format&fit=crop&w=700&q=82",
@@ -179,7 +179,7 @@ function screenHome() {
   const outfitByName = new Map(OUTFITS.map(o => [o.name, o]));
   const categories = orderNames.map(name => outfitByName.get(name)).filter(Boolean).filter(o => !hiddenCategories.has(o.name)).slice(0, 8);
 
-  const heroImage = home.hero_image || "https://images.unsplash.com/photo-1648328414427-fc902f51808c?auto=format&fit=crop&w=1600&q=88";
+  const heroImage = home.hero_image || "assets/hero-nebeda.jpg";
   const heroTitle = home.hero_title || "Everything Fashion, All in One Place.";
   const heroText = home.hero_text || "Discover trusted tailors, shop fabrics, explore ready-to-wear and manage your custom order in one marketplace.";
 
