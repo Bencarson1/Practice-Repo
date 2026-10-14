@@ -169,7 +169,7 @@ function screenHome() {
     Kaftan: home.category_kaftan || "https://images.unsplash.com/photo-1776880470534-2e19345ab02b?auto=format&fit=crop&w=700&q=82",
     Senator: home.category_senator || "https://images.unsplash.com/photo-1775754787083-238dd19e1545?auto=format&fit=crop&w=700&q=82",
     Bubu: home.category_bubu || "https://images.unsplash.com/photo-1663044022557-7d5d4c1d5318?auto=format&fit=crop&w=700&q=82",
-    "Two Piece": home.category_two_piece || "https://images.unsplash.com/photo-1663043994777-7ed4b4e6cba3?auto=format&fit=crop&w=700&q=82",
+    "Two Piece": home.category_two_piece || "assets/category-two-piece.jpg",
     Dress: home.category_dress || "https://images.unsplash.com/photo-1648328414427-fc902f51808c?auto=format&fit=crop&w=700&q=82",
     Wedding: home.category_wedding || "https://images.unsplash.com/photo-1648328414427-fc902f51808c?auto=format&fit=crop&w=700&q=82",
     Suit: home.category_suit || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=700&q=82"
