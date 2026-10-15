@@ -230,6 +230,7 @@ wearvia/
 │   ├── prices.sql       Run after yards.sql: the price list, and orders priced by the database
 │   ├── tailor-quote.sql Run after prices.sql: quote requests, the tailor's quote, and the order chat
 │   ├── tailors-near-me.sql Run after tailor-quote.sql: many tailors, profiles, approvals, the distance search
+│   ├── auto-release.sql Run after stripe-payments.sql: releases the tailor's held 30% 7 days after delivery if the customer says nothing
 │   ├── no-leakage.sql   Run after tailors-near-me.sql: hides contact details, delivery details after the deposit, tailor terms
 │   ├── worldwide.sql    Currencies, daily exchange rates, yards or metres, inches or centimetres
 │   └── sellers.sql      Run last: seller applications, private seller details, seller orders and dispatch

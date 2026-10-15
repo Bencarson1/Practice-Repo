@@ -1244,7 +1244,7 @@ function screenTracking(orderId) {
            <p class="hint">The tailor's final payment is on hold until NebedaHub decides. You can add more photos or explain more in the order chat.</p></div>
          <button class="btn-outline" onclick="confirmCustomerOutfit('${order.id}', true)">It's fine now — I'm happy with the outfit</button>`
       : heldTailor > 0 && payInFullMode()
-      ? `<div class="card attention"><b>Final tailor payment is protected</b><p class="hint">The tailor has confirmed delivery. Please confirm whether you received the outfit and are happy with it.</p></div>
+      ? `<div class="card attention"><b>Final tailor payment is protected</b><p class="hint">The tailor has confirmed delivery. Please confirm whether you received the outfit and are happy with it. If you don\'t confirm or report a problem within 7 days of delivery, the final payment is released to the tailor automatically.</p></div>
          <button class="cta" onclick="confirmCustomerOutfit('${order.id}', true)">I received it and I am happy</button>
          <button class="btn-outline" onclick="${realPaymentsOn() ? `go('problem/${order.id}')` : `confirmCustomerOutfit('${order.id}', false)`}">I have a problem with the outfit</button>`
       : `${disputeResultHtml(dispute)}<button class="cta" onclick="go('review/${order.id}')">Leave a Review →</button>`;

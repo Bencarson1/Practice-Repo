@@ -83,6 +83,9 @@ function transferState(status: unknown) {
 }
 
 async function settle(orderId: string | null, owner: string | null) {
+  // Held tailor balances whose 7 days after delivery are up become due first
+  // (supabase/auto-release.sql). Older databases without it simply skip this.
+  await admin.rpc("wv_auto_release_held", { p_order_id: orderId }).then(() => {}, () => {});
   const { data, error } = await admin.rpc("wv_paystack_due_payouts", { p_order_id: orderId, p_owner: owner });
   if (error) throw new Error(error.message);
   const rows = (data ?? []) as Due[];

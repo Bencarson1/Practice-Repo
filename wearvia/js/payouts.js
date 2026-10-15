@@ -10,8 +10,9 @@
 // is switched on (see supabase/STRIPE-SETUP.md).
 //
 // Money model (Option 1): NebedaHub keeps 10%. The seller/tailor gets 70%
-// when the customer pays and the final 30% once the order passes quality
-// control. That split is enforced on the server (Stage 2/3), never here.
+// when the customer pays and the final 30% when the customer confirms the
+// outfit, or automatically 7 days after delivery (supabase/auto-release.sql).
+// That split is enforced on the server (Stage 2/3), never here.
 // Bank details go straight to Stripe — NebedaHub never sees or stores them.
 // ============================================================
 
@@ -144,7 +145,7 @@ function paintPaystackCard(role, editing) {
   const bank = s.bank;
   const top = `<h2>Payments & payouts</h2>
     <p>Add the Nigerian bank account NebedaHub pays you into for your ${sales}. Customers in Nigeria and abroad pay by card through Paystack; you receive naira.</p>
-    <p class="hint">NebedaHub keeps <b>10%</b>. You receive <b>70% ${role === "seller" ? "when you send the fabric" : "when the customer pays"}</b>, and the final <b>30% ${role === "seller" ? "when the tailor approves the fabric" : "when the customer confirms the outfit"}</b>.</p>`;
+    <p class="hint">NebedaHub keeps <b>10%</b>. You receive <b>70% ${role === "seller" ? "when you send the fabric" : "when the customer pays"}</b>, and the final <b>30% ${role === "seller" ? "when the tailor approves the fabric" : "when the customer confirms the outfit"}</b>${role === "seller" ? "" : " — or automatically 7 days after delivery if the customer doesn't respond"}.</p>`;
   if (bank && !editing) {
     card.innerHTML = top + `<div id="payout-status" class="payout-status" data-role="${role}">
         <span class="paid">● Payouts connected.</span> ${escapeHtml(bank.bank_name)} ••••${escapeHtml(bank.last4)} — ${escapeHtml(bank.account_name)}</div>
