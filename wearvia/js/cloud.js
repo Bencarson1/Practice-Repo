@@ -68,7 +68,7 @@ const Cloud = (() => {
     });
     state.client.auth.onAuthStateChange((event) => {
       if (event === "PASSWORD_RECOVERY") setTimeout(() => Auth.show("newPassword"), 0);
-      if (event === "SIGNED_OUT") { state.me = null; db = null; state.snapshot = null; Auth.show("signIn"); }
+      if (event === "SIGNED_OUT") { if (typeof applyPaymentTester === "function") applyPaymentTester(null); state.me = null; db = null; state.snapshot = null; Auth.show("signIn"); }
     });
     let session = null;
     try {
@@ -88,6 +88,11 @@ const Cloud = (() => {
   }
 
   async function afterSignIn() {
+    // Payment testers get real (test-key) payments; everyone else the simulation
+    try {
+      const { data: s } = await state.client.auth.getSession();
+      if (typeof applyPaymentTester === "function") applyPaymentTester(s && s.session && s.session.user && s.session.user.email);
+    } catch (_e) { /* keep the defaults */ }
     const { data, error } = await state.client.rpc("wearvia_bootstrap");
     if (error) throw new Error(friendly(error));
     state.me = data;

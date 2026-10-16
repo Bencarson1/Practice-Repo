@@ -16,7 +16,7 @@ const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_79DT7izyjA7R_VsIPlfkTQ_z14fm6Kr
 // below — only after stripe-payments.sql is run and the Stripe functions + webhook
 // are set up (and paystack-payments.sql + the Paystack functions for naira orders).
 // With sk_test_ keys in Supabase, only test cards work.
-const ONLINE_PAYMENTS_ENABLED = false;
+let ONLINE_PAYMENTS_ENABLED = false;
 
 // Which payment company handles an order, by the order's currency (the tailor's).
 // Naira orders (Nigerian tailors) go through Paystack: it takes international
@@ -31,7 +31,19 @@ const PAYSTACK_CURRENCIES = ["NGN"];
 const PAYOUTS_ONBOARDING_ENABLED = true;
 
 // Safe transaction simulation. No real money moves while this is true.
-const TRANSACTION_TEST_MODE = true;
+let TRANSACTION_TEST_MODE = true;
+
+// Payment testers: real payments (with the TEST keys in Supabase, so test cards
+// only) switch on just for these logins. Everyone else keeps the safe simulation
+// above until NebedaHub goes live. Remove an email to stop it.
+const PAYMENT_TESTERS = ["oyekanbenjamen@gmail.com", "nebeda33@gmail.com"];
+const PAYMENT_DEFAULTS = { online: ONLINE_PAYMENTS_ENABLED, test: TRANSACTION_TEST_MODE };
+function applyPaymentTester(email) {
+  const tester = PAYMENT_TESTERS.includes(String(email || "").trim().toLowerCase());
+  ONLINE_PAYMENTS_ENABLED = tester ? true : PAYMENT_DEFAULTS.online;
+  TRANSACTION_TEST_MODE = tester ? false : PAYMENT_DEFAULTS.test;
+  return tester;
+}
 
 // Protected transaction rules used by transaction test mode.
 const NEBEDAHUB_COMMISSION_RATE = 0.10;
