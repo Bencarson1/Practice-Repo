@@ -103,8 +103,33 @@ const Cloud = (() => {
 
   // ---- Signing in and out ----
 
+  // Sign-in goes through the secure-sign-in Edge Function, which applies the
+  // account lockout and per-IP limits (supabase/login-lockout.sql), then the
+  // session it returns is handed to the Supabase client as usual.
   async function signIn(email, password) {
-    const { error } = await state.client.auth.signInWithPassword({ email, password });
+    let res;
+    try {
+      res = await fetch(`${SUPABASE_URL}/functions/v1/secure-sign-in`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": String(SUPABASE_PUBLISHABLE_KEY).replace(/[^\x21-\x7E]/g, ""),
+        },
+        body: JSON.stringify({ email, password }),
+      });
+    } catch (_e) {
+      throw new Error(friendly({ message: "Failed to fetch" }));
+    }
+    // Function not deployed yet: fall back to signing in directly.
+    if (res.status === 404) {
+      const { error } = await state.client.auth.signInWithPassword({ email, password });
+      if (error) throw new Error(friendly(error));
+      return afterSignIn();
+    }
+    let data = null;
+    try { data = await res.json(); } catch (_e) { /* no JSON body */ }
+    if (!res.ok) throw new Error(friendly({ message: (data && data.error) || `Something went wrong (${res.status}). Please try again.` }));
+    const { error } = await state.client.auth.setSession({ access_token: data.access_token, refresh_token: data.refresh_token });
     if (error) throw new Error(friendly(error));
     return afterSignIn();
   }
