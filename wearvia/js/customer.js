@@ -246,22 +246,25 @@ function screenHome() {
         </section>
       </div>
 
+      ${tailors.length ? `
       <section class="nh-section soft">
         <div class="nh-wrap" style="display: flex; flex-direction: column; gap: 12px">
           <div class="nh-section-head"><h2>Tailors near you</h2><button class="nh-more" onclick="go('tailors')">See all →</button></div>
-          ${tailors.length ? `<div class="nh-row">
+          <div class="nh-row">
             ${tailors.map(t => `<a class="nh-shop" href="#/tailor/${encodeURIComponent(t.slug || t.id)}">
               <img src="${escapeHtml(photoUrl(t.profile_image) || photoUrl(`logo:${initialsOf(t.business_name)}:4a1d3f`))}" alt="">
               <span class="nh-shop-copy"><b>${escapeHtml(t.business_name)}</b><small>${escapeHtml(tailorAreaText(t) || t.location || "Tailor")}</small><small>${tailorRatingText(t)}</small></span>
             </a>`).join("")}
-          </div>` : `<div class="nh-empty"><b>More tailors are joining.</b><span>Search your area to see who's taking orders.</span><button onclick="go('tailors')">Find tailors</button></div>`}
+          </div>
         </div>
       </section>
+      ` : ""}
 
       <div class="nh-wrap">
+        ${fabrics.length ? `
         <section class="nh-section">
           <div class="nh-section-head"><h2>Fabrics</h2><button class="nh-more" onclick="go('market')">Browse all →</button></div>
-          ${fabrics.length ? `<div class="nh-row">
+          <div class="nh-row">
             ${fabrics.map(f => {
               const seller = findSupplier(f.supplier_id);
               return `<button class="nh-product" onclick="go('fabricView/${f.id}')">
@@ -271,14 +274,16 @@ function screenHome() {
                 <small>${escapeHtml(seller ? seller.name : "Fabric seller")}</small>
               </button>`;
             }).join("")}
-          </div>` : `<div class="nh-empty"><b>Fabric sellers are joining NebedaHub.</b><span>You can still start an order and let your tailor help with fabric.</span><button onclick="startOrder()">Start an order</button></div>`}
+          </div>
         </section>
+        ` : ""}
 
+        ${readyToWear.length ? `
         <section class="nh-section">
           <div class="nh-section-head"><h2>Ready-made</h2><button class="nh-more" onclick="go('rtw')">Open the shop →</button></div>
-          ${readyToWear.length ? `<div class="rtw-product-grid home-rtw-grid">${readyToWear.map(rtwProductCard).join("")}</div>`
-            : `<div class="nh-empty"><b>Ready-made shops are opening.</b><span>Designers will list finished pieces here.</span><button onclick="go('tailors')">Browse designers</button></div>`}
+          <div class="rtw-product-grid home-rtw-grid">${readyToWear.map(rtwProductCard).join("")}</div>
         </section>
+        ` : ""}
 
         <div class="nh-promise">
           ${icon('<path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"></path><path d="M9 12l2 2 4-4"></path>').replace('stroke="currentColor"', 'stroke="#4A1D3F"')}
