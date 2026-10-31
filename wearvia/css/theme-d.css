@@ -73,7 +73,8 @@ html[data-app] .bottomnav .plus { background: var(--lime); color: var(--nh-ink);
 .nh-wrap { width: 100%; max-width: 1200px; margin: 0 auto; box-sizing: border-box; }
 
 .nh-head { display: flex; align-items: center; gap: 4px; padding: 10px 16px; }
-.nh-wordmark { font-family: "Big Shoulders Display", sans-serif; font-weight: 900; font-size: 30px; line-height: 1; letter-spacing: .02em; color: var(--aubergine) !important; text-decoration: none; margin-right: auto; }
+.nh-wordmark { display: inline-flex; align-items: center; text-decoration: none; margin-right: auto; }
+.nh-wordmark img { height: 44px; width: auto; display: block; }
 .nh-iconbtn { width: 44px; height: 44px; border: 0; background: transparent; color: var(--nh-ink); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; position: relative; }
 .nh-iconbtn svg { width: 22px; height: 22px; }
 
@@ -160,7 +161,8 @@ html[data-app] .appbar .chip-button:hover { border-color: var(--aubergine); colo
 html[data-app] .appbar .who { color: var(--nh-ink); }
 
 /* Top bar on the other screens: the new wordmark instead of the old logo */
-html[data-app] .nh-appbar-mark { font-family: "Big Shoulders Display", sans-serif; font-weight: 900; font-size: 26px; letter-spacing: .02em; color: var(--aubergine); text-decoration: none; line-height: 1; }
+html[data-app] .nh-appbar-mark { display: inline-flex; align-items: center; text-decoration: none; line-height: 1; }
+html[data-app] .nh-appbar-mark img { height: 38px; width: auto; display: block; }
 html[data-app] .shop-pill { display: none; }
 html[data-app] .nh-app-word { font-family: "Schibsted Grotesk", Arial, sans-serif; font-weight: 700; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--nh-ink); background: var(--lime); padding: 3px 6px; margin-left: 8px; vertical-align: 5px; }
 
