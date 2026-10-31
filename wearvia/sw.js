@@ -3,7 +3,7 @@
 // screen and open without a connection. The work is in js/sw-core.js,
 // shared with NebedaHub Business, Seller and Admin (each has its own sw.js).
 //
-// The app used to live at /wearvia/ (cache "wearvia-shell-v2"); that old
+// The app used to live at /wearvia/ (cache "wearvia-shell-v1"); that old
 // copy is deleted when this version starts.
 // ============================================================
 
