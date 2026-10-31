@@ -13,7 +13,7 @@ const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_79DT7izyjA7R_VsIPlfkTQ_z14fm6Kr
 // Cloudflare Turnstile (anti-bot check on sign-in, sign-up and password reset).
 // Paste the SITE key here (it's public; the SECRET key goes only in Supabase).
 // Leave empty to keep it off. See supabase/LOGIN-LOCKOUT-SETUP.md.
-const TURNSTILE_SITE_KEY = "";
+const TURNSTILE_SITE_KEY = "0x4AAAAAAFt3oJ13b4fCdORp";
 
 // Real customer payments through Stripe and, for naira orders, Paystack
 // (see supabase/STRIPE-SETUP.md and supabase/PAYSTACK-SETUP.md).
