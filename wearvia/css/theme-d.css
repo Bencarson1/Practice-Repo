@@ -1,0 +1,179 @@
+/* ============================================================
+   NebedaHub look "D" — customer app
+   Aubergine + lime, Big Shoulders Display headings, Schibsted
+   Grotesk text, sharper corners. Loaded after style.css on the
+   customer app only (html[data-app="customer"]), so the business,
+   sellers and admin apps keep their current look for now.
+   ============================================================ */
+
+html[data-app="customer"] {
+  --aubergine: #4A1D3F;
+  --aubergine-dark: #2E1027;
+  --plum: #7A2E66;          /* text-safe accent on white (7:1) */
+  --lime: #C5E84B;
+  --nh-ink: #1B1418;
+  --nh-muted: #5C5058;
+  --nh-soft: #F4F0F3;
+  --nh-line: #E4DDE2;
+
+  /* the shared tokens style.css is built on */
+  --navy: var(--aubergine);
+  --navy-2: var(--aubergine-dark);
+  --gold: var(--plum);
+  --gold-ink: #FFFFFF;
+  --cream: #FFFFFF;
+  --card: #FFFFFF;
+  --soft: var(--nh-soft);
+  --line: var(--nh-line);
+  --ink: var(--nh-ink);
+  --muted: var(--nh-muted);
+  --on-navy: #FFFFFF;
+  --serif: "Big Shoulders Display", "Arial Narrow", sans-serif;
+  --sans: "Schibsted Grotesk", Arial, sans-serif;
+}
+
+html[data-app="customer"] body { background: #FFFFFF; color: var(--nh-ink); }
+
+/* On the dark (aubergine) screens the accent is lime, not plum */
+html[data-app="customer"] .hero .brand,
+html[data-app="customer"] .hero .featured b,
+html[data-app="customer"] .capp.is-hero .bottomnav .item.on { color: var(--lime); }
+
+/* Sharper shapes everywhere instead of the soft, rounded "template" look */
+html[data-app="customer"] .card,
+html[data-app="customer"] .cta,
+html[data-app="customer"] button.cta,
+html[data-app="customer"] .btn-outline,
+html[data-app="customer"] .chip,
+html[data-app="customer"] .optbtn,
+html[data-app="customer"] .field input,
+html[data-app="customer"] .field select,
+html[data-app="customer"] .field textarea,
+html[data-app="customer"] .auth-card,
+html[data-app="customer"] .tailor-card,
+html[data-app="customer"] .market-empty-card,
+html[data-app="customer"] .notice { border-radius: 4px; }
+
+html[data-app="customer"] .cta,
+html[data-app="customer"] button.cta { background: var(--aubergine); color: #FFFFFF; font-weight: 700; }
+
+html[data-app="customer"] h1,
+html[data-app="customer"] h2,
+html[data-app="customer"] .c-title { font-family: var(--serif); font-weight: 800; letter-spacing: .01em; }
+
+/* Bottom menu: drawn icons instead of emoji */
+html[data-app="customer"] .bottomnav .item svg { width: 22px; height: 22px; display: block; margin: 0 auto 2px; }
+html[data-app="customer"] .bottomnav .item.on { color: var(--aubergine); }
+html[data-app="customer"] .bottomnav .plus { background: var(--lime); color: var(--nh-ink); border-radius: 4px; }
+
+/* ---------------- Home screen ---------------- */
+
+.nh-home { display: flex; flex-direction: column; background: #FFFFFF; color: var(--nh-ink); font-family: var(--sans); padding-bottom: 12px; }
+.nh-home a { color: var(--aubergine); }
+.nh-wrap { width: 100%; max-width: 1200px; margin: 0 auto; box-sizing: border-box; }
+
+.nh-head { display: flex; align-items: center; gap: 4px; padding: 10px 16px; }
+.nh-wordmark { font-family: "Big Shoulders Display", sans-serif; font-weight: 900; font-size: 30px; line-height: 1; letter-spacing: .02em; color: var(--aubergine) !important; text-decoration: none; margin-right: auto; }
+.nh-iconbtn { width: 44px; height: 44px; border: 0; background: transparent; color: var(--nh-ink); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; position: relative; }
+.nh-iconbtn svg { width: 22px; height: 22px; }
+
+.nh-search { display: flex; padding: 0 16px 12px; }
+.nh-search input { flex: 1; min-width: 0; height: 48px; border: 2px solid var(--nh-ink); border-right: 0; border-radius: 0; padding: 0 12px; font: 500 15px var(--sans); color: var(--nh-ink); background: #FFFFFF; }
+.nh-search input:focus { outline: 3px solid var(--lime); outline-offset: 0; }
+.nh-search button { width: 52px; height: 48px; border: 2px solid var(--nh-ink); border-radius: 0; background: var(--lime); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+
+.nh-hero { position: relative; background: var(--aubergine); color: #FFFFFF; display: flex; flex-direction: column; }
+.nh-hero img { width: 100%; height: 330px; object-fit: cover; display: block; }
+.nh-hero-copy { padding: 18px 16px 22px; display: flex; flex-direction: column; gap: 14px; }
+.nh-hero h1 { margin: 0; font-family: "Big Shoulders Display", sans-serif; font-weight: 900; font-size: 46px; line-height: .92; text-transform: uppercase; color: #FFFFFF; }
+.nh-hero h1 span { color: var(--lime); }
+.nh-hero p { margin: 0; font-size: 15px; line-height: 1.45; color: #F3E9F0; max-width: 560px; }
+.nh-hero-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.nh-btn-lime, .nh-btn-line { height: 48px; padding: 0 18px; display: inline-flex; align-items: center; font: 700 15px var(--sans); cursor: pointer; border-radius: 0; text-decoration: none; }
+.nh-btn-lime { background: var(--lime); color: var(--nh-ink); border: 2px solid var(--lime); }
+.nh-btn-line { background: transparent; color: #FFFFFF; border: 2px solid #FFFFFF; }
+.nh-resume { align-self: flex-start; background: transparent; border: 0; padding: 0; color: var(--lime); font: 700 15px var(--sans); text-decoration: underline; cursor: pointer; }
+
+.nh-tabs { display: flex; border-bottom: 2px solid var(--nh-ink); overflow-x: auto; }
+.nh-tabs button { flex: 1 0 auto; background: transparent; border: 0; border-bottom: 4px solid transparent; margin-bottom: -2px; padding: 14px 12px; font: 600 14px var(--sans); color: var(--nh-muted); cursor: pointer; white-space: nowrap; }
+.nh-tabs button.on { color: var(--nh-ink); font-weight: 700; border-bottom-color: var(--aubergine); }
+
+.nh-section { padding: 22px 16px 6px; display: flex; flex-direction: column; gap: 12px; }
+.nh-section.soft { background: var(--nh-soft); padding-bottom: 18px; margin-top: 16px; }
+.nh-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.nh-section h2 { margin: 0; font-family: "Big Shoulders Display", sans-serif; font-weight: 800; font-size: 28px; text-transform: uppercase; color: var(--nh-ink); }
+.nh-more { background: transparent; border: 0; padding: 8px 0; font: 700 15px var(--sans); color: var(--aubergine); cursor: pointer; white-space: nowrap; }
+
+/* "What people are ordering": one big photo, the rest small */
+.nh-styles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.nh-style { background: transparent; border: 0; padding: 0; text-align: left; color: var(--nh-ink); cursor: pointer; display: flex; flex-direction: column; gap: 6px; font-family: var(--sans); }
+.nh-style img { width: 100%; height: 118px; object-fit: cover; display: block; }
+.nh-style.big { grid-row: span 2; }
+.nh-style.big img { height: 300px; }
+.nh-style b { font-size: 15px; }
+.nh-style small { font-size: 13px; color: var(--nh-muted); }
+
+/* sideways-scrolling rows (tailors, fabrics) */
+.nh-row { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 4px; }
+.nh-shop { flex: none; width: 240px; scroll-snap-align: start; background: #FFFFFF; color: var(--nh-ink) !important; text-decoration: none; display: flex; flex-direction: column; }
+.nh-shop img { width: 240px; height: 140px; object-fit: cover; display: block; }
+.nh-shop-copy { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 4px; }
+.nh-shop-copy b { font-size: 16px; }
+.nh-shop-copy small { font-size: 13px; color: var(--nh-muted); }
+.nh-product { flex: none; width: 160px; scroll-snap-align: start; background: transparent; border: 0; padding: 0; text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 5px; font-family: var(--sans); color: var(--nh-ink); }
+.nh-product img { width: 160px; height: 160px; object-fit: cover; display: block; }
+.nh-product b { font-size: 14px; }
+.nh-product .nh-price { font-size: 15px; font-weight: 700; }
+.nh-product small { font-size: 12px; color: var(--nh-muted); }
+
+.nh-empty { border: 2px solid var(--nh-ink); padding: 16px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.nh-empty span { color: var(--nh-muted); font-size: 14px; }
+.nh-empty button { margin-top: 6px; background: var(--aubergine); color: #FFFFFF; border: 0; height: 44px; padding: 0 16px; font: 700 14px var(--sans); cursor: pointer; }
+
+.nh-promise { margin: 18px 16px 0; padding: 16px; border: 2px solid var(--nh-ink); display: flex; gap: 14px; align-items: center; }
+.nh-promise svg { flex: none; width: 32px; height: 32px; }
+.nh-promise p { margin: 0; font-size: 14px; line-height: 1.45; }
+
+.nh-join { margin: 18px 16px 0; padding: 18px 16px; background: var(--aubergine); color: #FFFFFF; display: flex; flex-direction: column; gap: 12px; }
+.nh-join h2 { margin: 0; font-family: "Big Shoulders Display", sans-serif; font-weight: 800; font-size: 28px; text-transform: uppercase; color: #FFFFFF; }
+.nh-join p { margin: 0; color: #F3E9F0; font-size: 14px; }
+.nh-join-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.nh-join-actions a { color: var(--nh-ink) !important; background: var(--lime); padding: 12px 14px; font-weight: 700; font-size: 14px; text-decoration: none; }
+.nh-join-actions a + a { background: transparent; color: #FFFFFF !important; border: 2px solid #FFFFFF; }
+
+.nh-foot { margin: 18px 16px 0; padding: 14px 0; border-top: 2px solid var(--nh-ink); display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--nh-muted); }
+.nh-foot a { color: var(--nh-ink); }
+
+/* Top bar on the other screens: the new wordmark instead of the old logo */
+html[data-app="customer"] .nh-appbar-mark { font-family: "Big Shoulders Display", sans-serif; font-weight: 900; font-size: 26px; letter-spacing: .02em; color: var(--aubergine); text-decoration: none; line-height: 1; }
+html[data-app="customer"] .shop-pill { display: none; }
+
+/* The home screen has its own header, so it fills the screen without the top bar or frame */
+body:has(#customer-app .nh-home) > .appbar { display: none; }
+body:has(#customer-app .nh-home) .customer-view { padding: 0; }
+#customer-app:has(.nh-home) { border: 0; border-radius: 0; box-shadow: none; background: #FFFFFF; max-width: none; width: 100%; height: auto; min-height: 100vh; overflow: visible; }
+
+/* Bigger screens: wider, more columns, no phone menu (same as before) */
+@media (min-width: 900px) {
+  #customer-app:has(.nh-home) .bottomnav { display: none; }
+  .nh-head { padding: 14px 24px; }
+  .nh-search { padding: 0 24px 16px; max-width: 760px; }
+  .nh-hero { flex-direction: row-reverse; min-height: 460px; }
+  .nh-hero img { width: 50%; height: auto; min-height: 460px; }
+  .nh-hero-copy { width: 50%; justify-content: center; padding: 40px 48px; box-sizing: border-box; }
+  .nh-hero h1 { font-size: 76px; }
+  .nh-section, .nh-promise, .nh-join, .nh-foot { padding-left: 24px; padding-right: 24px; }
+  .nh-promise, .nh-join, .nh-foot { margin-left: 24px; margin-right: 24px; }
+  .nh-styles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .nh-tabs { margin: 0 24px; }
+  .nh-section.soft > .nh-wrap { padding: 0 24px; }
+  .nh-style img { height: 200px; }
+  .nh-style.big img { height: 420px; }
+}
+
+@media (prefers-reduced-motion: reduce) { .nh-row { scroll-snap-type: none; } }
+
+/* Home keeps a white bottom menu, so its labels stay dark (lime text on white is unreadable) */
+#customer-app:has(.nh-home) .bottomnav { background: #FFFFFF; border-top: 2px solid var(--nh-ink); }
+#customer-app:has(.nh-home) .bottomnav .item { color: var(--nh-muted); }
+#customer-app:has(.nh-home) .bottomnav .item.on { color: var(--aubergine); font-weight: 700; }
