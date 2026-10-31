@@ -1,12 +1,12 @@
 /* ============================================================
-   NebedaHub look "D" — customer app
+   NebedaHub look "D" — all four apps
    Aubergine + lime, Big Shoulders Display headings, Schibsted
    Grotesk text, sharper corners. Loaded after style.css on the
-   customer app only (html[data-app="customer"]), so the business,
-   sellers and admin apps keep their current look for now.
+   customer, business, sellers and admin apps (html[data-app]).
+   The home-screen parts (.nh-*) are only used by the customer app.
    ============================================================ */
 
-html[data-app="customer"] {
+html[data-app] {
   --aubergine: #4A1D3F;
   --aubergine-dark: #2E1027;
   --plum: #7A2E66;          /* text-safe accent on white (7:1) */
@@ -32,39 +32,39 @@ html[data-app="customer"] {
   --sans: "Schibsted Grotesk", Arial, sans-serif;
 }
 
-html[data-app="customer"] body { background: #FFFFFF; color: var(--nh-ink); }
+html[data-app] body { background: #FFFFFF; color: var(--nh-ink); }
 
 /* On the dark (aubergine) screens the accent is lime, not plum */
-html[data-app="customer"] .hero .brand,
-html[data-app="customer"] .hero .featured b,
-html[data-app="customer"] .capp.is-hero .bottomnav .item.on { color: var(--lime); }
+html[data-app] .hero .brand,
+html[data-app] .hero .featured b,
+html[data-app] .capp.is-hero .bottomnav .item.on { color: var(--lime); }
 
 /* Sharper shapes everywhere instead of the soft, rounded "template" look */
-html[data-app="customer"] .card,
-html[data-app="customer"] .cta,
-html[data-app="customer"] button.cta,
-html[data-app="customer"] .btn-outline,
-html[data-app="customer"] .chip,
-html[data-app="customer"] .optbtn,
-html[data-app="customer"] .field input,
-html[data-app="customer"] .field select,
-html[data-app="customer"] .field textarea,
-html[data-app="customer"] .auth-card,
-html[data-app="customer"] .tailor-card,
-html[data-app="customer"] .market-empty-card,
-html[data-app="customer"] .notice { border-radius: 4px; }
+html[data-app] .card,
+html[data-app] .cta,
+html[data-app] button.cta,
+html[data-app] .btn-outline,
+html[data-app] .chip,
+html[data-app] .optbtn,
+html[data-app] .field input,
+html[data-app] .field select,
+html[data-app] .field textarea,
+html[data-app] .auth-card,
+html[data-app] .tailor-card,
+html[data-app] .market-empty-card,
+html[data-app] .notice { border-radius: 4px; }
 
-html[data-app="customer"] .cta,
-html[data-app="customer"] button.cta { background: var(--aubergine); color: #FFFFFF; font-weight: 700; }
+html[data-app] .cta,
+html[data-app] button.cta { background: var(--aubergine); color: #FFFFFF; font-weight: 700; }
 
-html[data-app="customer"] h1,
-html[data-app="customer"] h2,
-html[data-app="customer"] .c-title { font-family: var(--serif); font-weight: 800; letter-spacing: .01em; }
+html[data-app] h1,
+html[data-app] h2,
+html[data-app] .c-title { font-family: var(--serif); font-weight: 800; letter-spacing: .01em; }
 
 /* Bottom menu: drawn icons instead of emoji */
-html[data-app="customer"] .bottomnav .item svg { width: 22px; height: 22px; display: block; margin: 0 auto 2px; }
-html[data-app="customer"] .bottomnav .item.on { color: var(--aubergine); }
-html[data-app="customer"] .bottomnav .plus { background: var(--lime); color: var(--nh-ink); border-radius: 4px; }
+html[data-app] .bottomnav .item svg { width: 22px; height: 22px; display: block; margin: 0 auto 2px; }
+html[data-app] .bottomnav .item.on { color: var(--aubergine); }
+html[data-app] .bottomnav .plus { background: var(--lime); color: var(--nh-ink); border-radius: 4px; }
 
 /* ---------------- Home screen ---------------- */
 
@@ -120,6 +120,9 @@ html[data-app="customer"] .bottomnav .plus { background: var(--lime); color: var
 .nh-shop-copy { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 4px; }
 .nh-shop-copy b { font-size: 16px; }
 .nh-shop-copy small { font-size: 13px; color: var(--nh-muted); }
+.nh-shop-meta { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; margin-top: 2px; }
+.nh-rating { font-size: 13px; font-weight: 700; color: var(--nh-ink); }
+.nh-from { font-size: 14px; font-weight: 700; color: var(--aubergine); white-space: nowrap; }
 .nh-product { flex: none; width: 160px; scroll-snap-align: start; background: transparent; border: 0; padding: 0; text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 5px; font-family: var(--sans); color: var(--nh-ink); }
 .nh-product img { width: 160px; height: 160px; object-fit: cover; display: block; }
 .nh-product b { font-size: 14px; }
@@ -144,9 +147,22 @@ html[data-app="customer"] .bottomnav .plus { background: var(--lime); color: var
 .nh-foot { margin: 18px 16px 0; padding: 14px 0; border-top: 2px solid var(--nh-ink); display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--nh-muted); }
 .nh-foot a { color: var(--nh-ink); }
 
+/* Light top bar and section tabs in every app, so the wordmark always reads */
+html[data-app] .appbar { background: #FFFFFF; color: var(--nh-ink); border-bottom: 2px solid var(--nh-ink); box-shadow: none; }
+html[data-app] .appbar .wordmark { background: transparent; }
+html[data-app] .biz-tabs { background: #FFFFFF; border-bottom: 1px solid var(--nh-line); }
+html[data-app] .biz-tabs .tab { color: var(--nh-muted); opacity: 1; }
+html[data-app] .biz-tabs .tab:hover { color: var(--nh-ink); }
+html[data-app] .biz-tabs .tab.active { color: var(--aubergine); border-bottom-color: var(--aubergine); font-weight: 700; }
+html[data-app] .chip-button { border-radius: 4px; }
+html[data-app] .appbar .chip-button { background: #FFFFFF; color: var(--nh-ink); border: 1.5px solid var(--nh-ink); }
+html[data-app] .appbar .chip-button:hover { border-color: var(--aubergine); color: var(--aubergine); }
+html[data-app] .appbar .who { color: var(--nh-ink); }
+
 /* Top bar on the other screens: the new wordmark instead of the old logo */
-html[data-app="customer"] .nh-appbar-mark { font-family: "Big Shoulders Display", sans-serif; font-weight: 900; font-size: 26px; letter-spacing: .02em; color: var(--aubergine); text-decoration: none; line-height: 1; }
-html[data-app="customer"] .shop-pill { display: none; }
+html[data-app] .nh-appbar-mark { font-family: "Big Shoulders Display", sans-serif; font-weight: 900; font-size: 26px; letter-spacing: .02em; color: var(--aubergine); text-decoration: none; line-height: 1; }
+html[data-app] .shop-pill { display: none; }
+html[data-app] .nh-app-word { font-family: "Schibsted Grotesk", Arial, sans-serif; font-weight: 700; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--nh-ink); background: var(--lime); padding: 3px 6px; margin-left: 8px; vertical-align: 5px; }
 
 /* The home screen has its own header, so it fills the screen without the top bar or frame */
 body:has(#customer-app .nh-home) > .appbar { display: none; }
