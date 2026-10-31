@@ -35,10 +35,21 @@ Merge the pull request so the NebedaHub apps sign in through `secure-sign-in`.
 
 Sign in with a wrong password 3 times: the 3rd attempt shows "Too many failed sign-in attempts… paused for about 15 minutes". Reset the password to unlock straight away.
 
+## 5. Turn on the anti-bot check (Cloudflare Turnstile)
+
+Do this after step 4 is live. Usually invisible to real people; it stops scripts.
+
+1. **Cloudflare dashboard → Turnstile → Add widget.** Name it NebedaHub, add the hostname `nebedahub.com`, widget mode **Managed**. You get a **Site key** and a **Secret key**.
+2. **Site key → the app:** paste it into `wearvia/js/config.js` as `TURNSTILE_SITE_KEY = "..."`, commit, and wait for GitHub Pages to update (a few minutes).
+3. **Check:** open nebedahub.com and sign in once; it should work as normal.
+4. **Secret key → Supabase:** Authentication → **Attack Protection** → enable **CAPTCHA protection**, provider **Turnstile**, paste the Secret key → Save.
+
+Do 2 before 4: once Supabase's CAPTCHA protection is on, sign-in, sign-up and password reset fail without the check. To undo, turn CAPTCHA protection off in Supabase.
+
 ## Optional: Supabase's own IP limit
 
 Because sign-in now goes through the function, Supabase's built-in per-IP limit sees the function rather than each visitor. To pass the real visitor's IP through, create a secret API key (Settings → API Keys, starts with `sb_secret_`), save it as an Edge Function secret named `SIGN_IN_SECRET_KEY`, and turn on **IP Address Forwarding** in Authentication → Rate Limits. NebedaHub's own IP limit (step above) works either way.
 
 ## Known limit (Free plan)
 
-Wrong passwords are counted when people sign in through NebedaHub. Someone scripting Supabase's sign-in API directly isn't counted, only slowed by Supabase's IP limit, though a lock that's already in place still blocks them. Counting every attempt needs Supabase's Password Verification hook, which is Team plan only.
+Wrong passwords are counted when people sign in through NebedaHub. Someone calling Supabase's sign-in API directly isn't counted, though a lock already in place still blocks them. With step 5 done, those direct calls also need a valid Turnstile token, which stops automated guessing. Counting every attempt needs Supabase's Password Verification hook (Team plan only).

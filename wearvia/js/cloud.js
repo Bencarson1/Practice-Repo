@@ -106,7 +106,7 @@ const Cloud = (() => {
   // Sign-in goes through the secure-sign-in Edge Function, which applies the
   // account lockout and per-IP limits (supabase/login-lockout.sql), then the
   // session it returns is handed to the Supabase client as usual.
-  async function signIn(email, password) {
+  async function signIn(email, password, captchaToken) {
     let res;
     try {
       res = await fetch(`${SUPABASE_URL}/functions/v1/secure-sign-in`, {
@@ -115,14 +115,14 @@ const Cloud = (() => {
           "Content-Type": "application/json",
           "apikey": String(SUPABASE_PUBLISHABLE_KEY).replace(/[^\x21-\x7E]/g, ""),
         },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, captcha_token: captchaToken || undefined }),
       });
     } catch (_e) {
       throw new Error(friendly({ message: "Failed to fetch" }));
     }
     // Function not deployed yet: fall back to signing in directly.
     if (res.status === 404) {
-      const { error } = await state.client.auth.signInWithPassword({ email, password });
+      const { error } = await state.client.auth.signInWithPassword({ email, password, options: captchaToken ? { captchaToken } : undefined });
       if (error) throw new Error(friendly(error));
       return afterSignIn();
     }
@@ -143,7 +143,8 @@ const Cloud = (() => {
         data: { full_name: details.name, phone: details.phone || "", account_type: details.accountType, measurement_unit: details.unit || "",
                 business_name: details.businessName || "", country_code: details.country || "", city: details.city || "",
                 tailor_terms: details.accountType === "designer" && details.acceptTerms ? TAILOR_TERMS_VERSION : "" },
-        emailRedirectTo: location.origin + location.pathname
+        emailRedirectTo: location.origin + location.pathname,
+        ...(details.captchaToken ? { captchaToken: details.captchaToken } : {})
       }
     });
     if (error) throw new Error(friendly(error));
@@ -158,8 +159,8 @@ const Cloud = (() => {
     return { needsConfirmation: false };
   }
 
-  async function sendPasswordReset(email) {
-    const { error } = await state.client.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+  async function sendPasswordReset(email, captchaToken) {
+    const { error } = await state.client.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname, ...(captchaToken ? { captchaToken } : {}) });
     if (error) throw new Error(friendly(error));
   }
 
@@ -177,6 +178,7 @@ const Cloud = (() => {
   function friendly(error) {
     const text = (error && (error.message || error.details || error.hint)) || String(error);
     if (/Invalid login credentials/i.test(text)) return "That email and password don't match. Check them and try again.";
+    if (/captcha/i.test(text)) return "We couldn't confirm you're not a robot. Please try again.";
     if (/Email not confirmed/i.test(text)) return "Please confirm your email first — open the link we sent you, then sign in.";
     if (/row-level security|permission denied|42501/i.test(text)) return "You don't have permission to do that.";
     if (/Failed to fetch|NetworkError|Load failed/i.test(text)) return "Couldn't reach the server. Check your internet connection and try again.";

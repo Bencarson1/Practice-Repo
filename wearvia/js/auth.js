@@ -92,6 +92,7 @@ const Auth = (() => {
         <form class="stack" onsubmit="return Auth.submit(event)">
           ${field("Email", "email", "email", 'required autocomplete="email"')}
           ${field("Password", "password", "password", 'required autocomplete="current-password"')}
+          ${Captcha.html()}
           ${notes()}
           <button class="cta" type="submit" ${busy ? "disabled" : ""}>${busy ? "Signing in…" : "Sign in"}</button>
         </form>
@@ -121,6 +122,7 @@ const Auth = (() => {
           ${field("Email", "email", "email", 'required autocomplete="email"')}
           ${field("Password <small>(at least 12 characters)</small>", "password", "password", 'required minlength="12" autocomplete="new-password"')}
           ${tailor ? tailorTermsHtml(false) + tailorTermsCheckbox() : ""}
+          ${Captcha.html()}
           ${notes()}
           <button class="cta" type="submit" ${busy ? "disabled" : ""}>${busy ? "Creating your account…" : "Create account"}</button>
         </form>
@@ -132,6 +134,7 @@ const Auth = (() => {
         <form class="stack" onsubmit="return Auth.submit(event)">
           <p class="meta">We'll email you a link to choose a new password.</p>
           ${field("Email", "email", "email", 'required autocomplete="email"')}
+          ${Captcha.html()}
           ${notes()}
           <button class="cta" type="submit" ${busy ? "disabled" : ""}>${busy ? "Sending…" : "Send the link"}</button>
         </form>
@@ -155,6 +158,7 @@ const Auth = (() => {
         : APP_KIND !== "admin" ? `<button type="button" class="btn-outline find-tailors-link" onclick="Auth.browseWelcome()">How ${APP.name} works</button>` : ""}
 `;
     document.title = `${title} · ${APP.name}`;
+    if (screen !== "newPassword") Captcha.mount("#auth-captcha");
   }
 
   function startSignUp() {
@@ -205,6 +209,11 @@ const Auth = (() => {
       setError("Use at least 12 characters for your password.");
       return false;
     }
+    const captchaToken = Captcha.get();
+    if (screen !== "newPassword" && Captcha.enabled() && !captchaToken) {
+      setError("Just a moment — we're checking you're not a robot. Try again in a few seconds.");
+      return false;
+    }
     busy = true;
     error = "";
     message = "";
@@ -213,7 +222,7 @@ const Auth = (() => {
 
     let work;
     if (screen === "signIn") {
-      work = Cloud.signIn(values.email, values.password).then(() => enterApp());
+      work = Cloud.signIn(values.email, values.password, captchaToken).then(() => enterApp());
     } else if (screen === "signUp") {
       const type = accountType === "designer" && staffSignUp ? "customer" : accountType;   // staff are added to their tailor when they confirm
       if (type === "designer" && (!values.businessName || !values.country || !values.city)) {
@@ -231,7 +240,7 @@ const Auth = (() => {
       }
       work = Cloud.signUp({ email: values.email, password: values.password, name: values.name, phone: values.phone, accountType: type,
                             businessName: values.businessName, country: values.country, city: values.city, acceptTerms: !!values.acceptTerms,
-                            unit: customerBodyUnit({ country_code: values.country }) })
+                            unit: customerBodyUnit({ country_code: values.country }), captchaToken })
         .then(result => {
           if (result.needsConfirmation) {
             message = type === "designer"
@@ -245,7 +254,7 @@ const Auth = (() => {
           }
         });
     } else if (screen === "forgot") {
-      work = Cloud.sendPasswordReset(values.email).then(() => {
+      work = Cloud.sendPasswordReset(values.email, captchaToken).then(() => {
         message = `If there's an account for ${values.email}, a reset link is on its way. Open it on this device.`;
         show("signIn");
       });
@@ -257,6 +266,7 @@ const Auth = (() => {
     }
     work.catch(problem => {
       busy = false;
+      Captcha.reset();
       error = problem.message || String(problem);
       draw();
       const again = document.querySelector("#auth-view form");

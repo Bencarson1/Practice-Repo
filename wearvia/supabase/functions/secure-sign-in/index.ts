@@ -2,7 +2,7 @@
 // secure-sign-in — email + password sign-in with account lockout and
 // per-IP rate limiting (rules in supabase/login-lockout.sql).
 //
-//   POST { email, password }
+//   POST { email, password, captcha_token? }
 //   200  { access_token, refresh_token, expires_in, expires_at, token_type, user }
 //   401  { error, code: "bad_credentials" }        wrong email or password
 //   429  { error, code: "account_locked" | "ip_limited", retry_after }
@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed." }, 405);
 
-  let body: { email?: unknown; password?: unknown };
+  let body: { email?: unknown; password?: unknown; captcha_token?: unknown };
   try { body = await req.json(); } catch { return json({ error: "Invalid request." }, 400); }
   const email = String(body.email ?? "").trim().toLowerCase();
   const password = typeof body.password === "string" ? body.password : "";
@@ -83,7 +83,12 @@ Deno.serve(async (req) => {
   const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ email, password }),
+    // Turnstile token from the app, checked by Supabase when CAPTCHA protection is on
+    body: JSON.stringify({
+      email,
+      password,
+      ...(typeof body.captcha_token === "string" && body.captcha_token ? { gotrue_meta_security: { captcha_token: body.captcha_token } } : {}),
+    }),
   });
   const data = await res.json().catch(() => ({})) as Record<string, unknown>;
 
