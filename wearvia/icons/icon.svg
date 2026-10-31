@@ -1,6 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" fill="#0c1220"/>
-  <circle cx="256" cy="256" r="178" fill="none" stroke="#c9a24a" stroke-width="10" opacity=".55"/>
-  <text x="256" y="330" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="230" font-weight="700" fill="#c9a24a">N</text>
-  <path d="M166 372 Q256 404 346 372" fill="none" stroke="#c9a24a" stroke-width="8" stroke-linecap="round" stroke-dasharray="4 18"/>
+<rect width="512" height="512" fill="#4A1D3F"/>
+<g transform="translate(44.8 44.8) scale(3.300)"><path d="M25 96V38c0-10 7-17 16-17 7 0 12 3 16 8l42 53V31h17v64c0 9-6 16-15 16-6 0-11-3-15-8L42 46v50z" fill="#FFFFFF"/>
+<path d="M34 33c16 6 25 16 34 28 10 13 21 27 41 36" fill="none" stroke="#4A1D3F" stroke-width="4" stroke-linecap="round"/>
+<path d="M34 39c15 6 23 15 32 27 10 13 20 25 38 33" fill="none" stroke="#C5E84B" stroke-width="2" stroke-linecap="round" stroke-dasharray="6 6"/>
+<path d="M12 108c23-7 36-21 47-38 10-16 21-34 40-42" fill="none" stroke="#C5E84B" stroke-width="4" stroke-linecap="round"/>
+<circle cx="105" cy="23" r="6" fill="#C5E84B"/></g>
+
 </svg>
