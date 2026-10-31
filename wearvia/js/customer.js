@@ -150,6 +150,35 @@ function startOver() {
 
 // ---- Screen 1: Home ----
 
+// "From" prices for the home screen, from tailors' own price lists, in the viewer's currency
+function homeOutfitFromPrice(outfitName) {
+  const cur = viewerCurrency();
+  const approved = new Set((db.designers || []).filter(t => (t.admin_status || "approved") === "approved").map(t => t.id));
+  const amounts = (db.prices || [])
+    .filter(p => p.kind === "outfit" && p.name === outfitName && approved.has(p.designer_id) && Number(p.price) > 0)
+    .map(p => {
+      const t = designerById(p.designer_id);
+      const from = p.currency_code || (t ? designerCurrency(t) : cur);
+      return { from, price: Number(p.price), shown: convertMoney(Number(p.price), from, cur) };
+    });
+  if (!amounts.length) return null;
+  const converted = amounts.filter(a => a.shown != null);
+  if (converted.length) return formatMoney(Math.min(...converted.map(a => a.shown)), cur, { whole: true });
+  // No exchange rates yet: show the lowest price in the first tailor's own currency
+  const same = amounts.filter(a => a.from === amounts[0].from);
+  return formatMoney(Math.min(...same.map(a => a.price)), amounts[0].from, { whole: true });
+}
+
+function homeTailorFromPrice(t) {
+  const own = designerCurrency(t);
+  const listed = pricesOf(t.id).filter(p => p.kind === "outfit" && Number(p.price) > 0 && (p.currency_code || own) === own).map(p => Number(p.price));
+  const from = listed.length ? Math.min(...listed) : (t.from_price != null ? t.from_price : t.starting_price);
+  if (from == null || !(Number(from) > 0)) return null;
+  const cur = viewerCurrency();
+  const shown = convertMoney(Number(from), own, cur);
+  return shown != null ? formatMoney(shown, cur, { whole: true }) : formatMoney(Number(from), own, { whole: true });
+}
+
 function screenHome() {
   const d = db.draft;
   const inProgress = d && d.designDone;
@@ -238,7 +267,7 @@ function screenHome() {
               const photo = categoryPhotos[o.name] || categoryPhotos.Dress;
               return `<button class="nh-style${i === 0 ? " big" : ""}" onclick="startHomeOutfit('${escapeHtml(o.name)}')">
                 <img src="${escapeHtml(photo)}" alt="" loading="lazy">
-                <b>${escapeHtml(o.name)}</b><small>Get a tailor's quote</small>
+                <b>${escapeHtml(o.name)}</b><small>${(() => { const f = homeOutfitFromPrice(o.name); return f ? `From ${escapeHtml(f)}` : "Get a tailor's quote"; })()}</small>
               </button>`;
             }).join("")}
           </div>
@@ -253,7 +282,7 @@ function screenHome() {
           <div class="nh-row">
             ${tailors.map(t => `<a class="nh-shop" href="#/tailor/${encodeURIComponent(t.slug || t.id)}">
               <img src="${escapeHtml(photoUrl(t.profile_image) || photoUrl(`logo:${initialsOf(t.business_name)}:4a1d3f`))}" alt="">
-              <span class="nh-shop-copy"><b>${escapeHtml(t.business_name)}</b><small>${escapeHtml(tailorAreaText(t) || t.location || "Tailor")}</small><small>${tailorRatingText(t)}</small></span>
+              <span class="nh-shop-copy"><b>${escapeHtml(t.business_name)}</b><small>${escapeHtml(tailorAreaText(t) || t.location || "Tailor")}</small><span class="nh-shop-meta"><span class="nh-rating">${tailorRatingText(t)}</span>${(() => { const f = homeTailorFromPrice(t); return f ? `<span class="nh-from">From ${escapeHtml(f)}</span>` : ""; })()}</span></span>
             </a>`).join("")}
           </div>
         </div>

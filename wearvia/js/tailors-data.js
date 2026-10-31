@@ -273,7 +273,7 @@ function tailorAreaText(d) {
 }
 
 function tailorRatingText(d) {
-  return d.review_count > 0 && d.rating ? `⭐ ${Number(d.rating).toFixed(1)} (${d.review_count} review${d.review_count === 1 ? "" : "s"})` : "New on NebedaHub";
+  return d.review_count > 0 && d.rating ? `★ ${Number(d.rating).toFixed(1)} (${d.review_count} review${d.review_count === 1 ? "" : "s"})` : "New on NebedaHub";
 }
 
 // ---- Countries and specialities (from the database in live mode) ----
