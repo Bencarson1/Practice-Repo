@@ -1,9 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" fill="#1b1024"/>
-  <g transform="translate(0 0) scale(1)">
-    <circle cx="256" cy="232" r="170" fill="none" stroke="#c9a24a" stroke-width="10" opacity=".55"/>
-    <text x="256" y="305" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="220" font-weight="700" fill="#c9a24a">N</text>
-    <rect x="96" y="392" width="320" height="74" rx="16" fill="#c9a24a"/>
-    <text x="256" y="444" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="44" font-weight="700" letter-spacing="6" fill="#1b1024">BUSINESS</text>
-  </g>
+<rect width="512" height="512" fill="#4A1D3F"/>
+<g transform="translate(89.6 48.6) scale(2.600)"><path d="M25 96V38c0-10 7-17 16-17 7 0 12 3 16 8l42 53V31h17v64c0 9-6 16-15 16-6 0-11-3-15-8L42 46v50z" fill="#FFFFFF"/>
+<path d="M34 33c16 6 25 16 34 28 10 13 21 27 41 36" fill="none" stroke="#4A1D3F" stroke-width="4" stroke-linecap="round"/>
+<path d="M34 39c15 6 23 15 32 27 10 13 20 25 38 33" fill="none" stroke="#C5E84B" stroke-width="2" stroke-linecap="round" stroke-dasharray="6 6"/>
+<path d="M12 108c23-7 36-21 47-38 10-16 21-34 40-42" fill="none" stroke="#C5E84B" stroke-width="4" stroke-linecap="round"/>
+<circle cx="105" cy="23" r="6" fill="#C5E84B"/></g>
+<rect x="106.0" y="400.0" width="300.0" height="68.0" fill="#C5E84B"/>
+<text x="256" y="447.0" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="40.0" font-weight="800" letter-spacing="5.0" fill="#4A1D3F">BUSINESS</text>
 </svg>
