@@ -3125,3 +3125,4 @@ tr.clickable:hover td {
 /* Admin problem reports: one decision per line */
 .radio-row { display: flex; gap: 10px; align-items: flex-start; font-weight: normal; line-height: 1.4; }
 .radio-row input { margin-top: 3px; flex: none; width: auto; }
+.captcha { margin: 6px 0 2px; min-height: 0; }
