@@ -202,13 +202,30 @@ const Cloud = (() => {
     const rtwDesigners = rtwDesignerIds.length
       ? await client.from("designers").select(DESIGNER_PUBLIC).in("id", rtwDesignerIds).then(r => r.data || []).catch(() => [])
       : [];
+    // The home screen's tailors (with their prices) and fabrics, so visitors see a full marketplace
+    const featured = await client.from("designers").select(DESIGNER_PUBLIC).eq("admin_status", "approved")
+      .order("rating", { ascending: false, nullsFirst: false }).limit(12).then(r => r.data || []).catch(() => []);
+    const guestDesigners = rtwDesigners.concat(featured.filter(d => !rtwDesigners.some(x => x.id === d.id)));
+    const guestDesignerIds = guestDesigners.map(d => d.id);
+    const guestPrices = guestDesignerIds.length
+      ? await client.from("price_list").select("*").in("designer_id", guestDesignerIds).order("sort_order").then(r => r.data || []).catch(() => [])
+      : [];
+    const guestFabrics = await client.from("fabrics").select("*").eq("status", "approved").is("deleted_at", null)
+      .order("created_at", { ascending: false }).limit(12).then(r => r.data || []).catch(() => []);
+    const guestSupplierIds = Array.from(new Set(guestFabrics.map(f => f.supplier_id).filter(Boolean)));
+    const guestSuppliers = guestSupplierIds.length
+      ? await client.from("suppliers").select(SUPPLIER_PUBLIC).in("id", guestSupplierIds).then(r => r.data || []).catch(() => [])
+      : [];
     const empty = {};
     ["suppliers", "fabrics", "customers", "measurement_profiles", "orders", "payments", "invoices", "deliveries", "fabric_order_lines",
      "tailors", "wedding_orders", "wedding_order_members", "ready_to_wear_items", "ready_to_wear_sales", "reviews", "price_list",
      "order_messages", "order_chat_reads", "designers", "my_designers", "designer_portfolio_items", "designer_customer_notes", "homepage_settings"].forEach(t => { empty[t] = []; });
     empty.homepage_settings = homepage;
     empty.ready_to_wear_items = rtwItems;
-    empty.designers = rtwDesigners;
+    empty.designers = guestDesigners;
+    empty.price_list = guestPrices;
+    empty.fabrics = guestFabrics;
+    empty.suppliers = guestSuppliers;
     empty.countries = lists.countries;
     empty.specialities = lists.specialities;
     empty.currencies = lists.currencies;
@@ -329,6 +346,12 @@ const Cloud = (() => {
     if (state.me && state.me.main_designer_id) ids.add(state.me.main_designer_id);
     const draftTailor = (db && db.draft && db.draft.designerId) || (loadDraft() || {}).designerId;
     if (draftTailor) ids.add(draftTailor);
+    // Customers also see the top approved tailors on the home screen
+    if (APP_KIND === "customer") {
+      const top = await state.client.from("designers").select("id").eq("admin_status", "approved")
+        .order("rating", { ascending: false, nullsFirst: false }).limit(12).then(r => r.data || []).catch(() => []);
+      top.forEach(d => ids.add(d.id));
+    }
     const list = Array.from(ids).filter(Boolean);
     const inList = q => q.in(list.length ? "designer_id" : "id", list.length ? list : ["00000000-0000-0000-0000-000000000000"]);
     const [designers, prices, reviews, portfolio] = await Promise.all([
