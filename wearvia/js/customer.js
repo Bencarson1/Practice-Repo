@@ -228,7 +228,7 @@ function screenHome() {
     <div class="nh-home">
       <div class="nh-wrap">
         <header class="nh-head">
-          <a class="nh-wordmark" href="#/" aria-label="NebedaHub home">NEBEDAHUB</a>
+          <a class="nh-wordmark" href="#/" aria-label="NebedaHub home"><img src="assets/nebedahub-logo.svg" alt="NebedaHub"></a>
           <button class="nh-iconbtn" onclick="go('orders')" aria-label="Your orders and messages">${icon('<path d="M4 5h16v11H9l-5 4z"></path>')}</button>
           <button class="nh-iconbtn" onclick="go('account')" aria-label="Your account">${icon('<circle cx="12" cy="8" r="4"></circle><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"></path>')}</button>
         </header>
