@@ -189,7 +189,7 @@ body:has(#customer-app .nh-home) .customer-view { padding: 0; }
   .nh-hero img { width: 50%; height: auto; min-height: 460px; }
   .nh-hero-copy { width: 50%; justify-content: center; padding: 40px 48px; box-sizing: border-box; }
   .nh-hero h1 { font-size: 76px; }
-  .nh-hero-3d { top: auto; bottom: 30px; right: auto; left: calc(50% - 84px); width: 168px; height: 168px; }
+  .nh-hero-3d { top: 26px; right: 28px; width: 150px; height: 150px; }
   .nh-section, .nh-promise, .nh-join, .nh-foot { padding-left: 24px; padding-right: 24px; }
   .nh-promise, .nh-join, .nh-foot { margin-left: 24px; margin-right: 24px; }
   .nh-styles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
