@@ -241,6 +241,7 @@ function screenHome() {
 
       <section class="nh-hero">
         <img src="${escapeHtml(heroImage)}" alt="An outfit made by a NebedaHub tailor">
+        <div class="nh-hero-3d" aria-hidden="true" title="NebedaHub"><img src="assets/nebedahub-3d-front.webp" alt="" width="200" height="200" decoding="async"></div>
         <div class="nh-hero-copy">
           <h1>${heroTitleHtml}</h1>
           <p>${escapeHtml(heroText)}</p>

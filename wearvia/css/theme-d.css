@@ -90,6 +90,15 @@ html[data-app] .bottomnav .plus { background: var(--lime); color: var(--nh-ink);
 .nh-hero h1 span { color: var(--lime); }
 .nh-hero p { margin: 0; font-size: 15px; line-height: 1.45; color: #F3E9F0; max-width: 560px; }
 .nh-hero-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* 3D NebedaHub "N" floating in the hero (animated by js/hero-3d.js) */
+.nh-hero-3d { position: absolute; z-index: 2; right: 12px; top: 222px; width: 108px; height: 108px; cursor: pointer; -webkit-tap-highlight-color: transparent; animation: nh-float 5s ease-in-out infinite; filter: drop-shadow(0 14px 18px rgba(20, 6, 18, .45)); }
+.nh-hero-3d::before { content: ""; position: absolute; inset: 12% 8% 0; border-radius: 50%; background: radial-gradient(closest-side, rgba(197, 232, 75, .28), rgba(197, 232, 75, 0)); z-index: -1; }
+.nh-hero .nh-hero-3d img, .nh-hero-3d-face { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; object-fit: contain; }
+.nh-hero-3d-face { background-repeat: no-repeat; }
+.nh-hero-3d.is-live img { visibility: hidden; }
+@keyframes nh-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
+@media (prefers-reduced-motion: reduce) { .nh-hero-3d { animation: none; } }
 .nh-btn-lime, .nh-btn-line { height: 48px; padding: 0 18px; display: inline-flex; align-items: center; font: 700 15px var(--sans); cursor: pointer; border-radius: 0; text-decoration: none; }
 .nh-btn-lime { background: var(--lime); color: var(--nh-ink); border: 2px solid var(--lime); }
 .nh-btn-line { background: transparent; color: #FFFFFF; border: 2px solid #FFFFFF; }
@@ -180,6 +189,7 @@ body:has(#customer-app .nh-home) .customer-view { padding: 0; }
   .nh-hero img { width: 50%; height: auto; min-height: 460px; }
   .nh-hero-copy { width: 50%; justify-content: center; padding: 40px 48px; box-sizing: border-box; }
   .nh-hero h1 { font-size: 76px; }
+  .nh-hero-3d { top: auto; bottom: 30px; right: auto; left: calc(50% - 84px); width: 168px; height: 168px; }
   .nh-section, .nh-promise, .nh-join, .nh-foot { padding-left: 24px; padding-right: 24px; }
   .nh-promise, .nh-join, .nh-foot { margin-left: 24px; margin-right: 24px; }
   .nh-styles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
