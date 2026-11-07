@@ -36,6 +36,9 @@ const PAYSTACK_CURRENCIES = ["NGN"];
 const PAYOUTS_ONBOARDING_ENABLED = true;
 
 // Safe transaction simulation. No real money moves while this is true.
+// At launch, also switch test payments off in the database, so nobody can
+// call them directly (see supabase/test-payments-switch.sql):
+//   update public.wv_payment_switches set test_payments_enabled = false;
 let TRANSACTION_TEST_MODE = true;
 
 // Payment testers: real payments (with the TEST keys in Supabase, so test cards
